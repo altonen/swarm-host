@@ -4,4 +4,5 @@
 
 # TODO
 
-- create PoC in Python
+- create PoC
+- start using some logging framework
