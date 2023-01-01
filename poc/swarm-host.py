@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
-import socket
+# import socket
 
-HOST = "127.0.0.1" # Standard loopback interface address (localhost)
-PORT = 55555       # Port to listen on (non-privileged ports are > 1023)
+# HOST = "127.0.0.1" # Standard loopback interface address (localhost)
+# PORT = 55555       # Port to listen on (non-privileged ports are > 1023)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind((HOST, PORT))
@@ -17,3 +17,7 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 break
             print(data)
             conn.sendall(data)
+
+# TODO: spawn three sockets for clients
+# TODO: listen to these 3 sockets
+# TODO: 
