@@ -1,25 +1,44 @@
 #![allow(unused)]
 
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::AsyncReadExt,
     net::TcpListener,
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use std::{error::Error, pin::Pin};
-
-// TODO: inform `swarm-host` when node connects to one of the Sybil interfaces
-// TODO: start listening to data from this interface
+use std::{error::Error, pin::Pin, time::Duration};
 
 const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
+
+// TODO: create dummy sybil node which just receives data and generates random data back
 
 /// Peer ID.
 type PeerId = u64;
 
 enum Event {
+    /// Peer connected.
+    Connected(PeerId),
+
+    /// Peer disconnected.
+    Disconnected(PeerId),
+
     /// Message received from peer.
-    Message(Vec<u8>),
+    Message(PeerId, Vec<u8>),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum Message {
+    /// Handshake message containing peer information.
+    Handshake {
+        /// Peer ID.
+        peer: PeerId,
+
+        /// Supported protocols
+        protocols: Vec<String>,
+    },
 }
 
 /// Sybil interface.
@@ -71,6 +90,38 @@ impl Sybil {
     }
 }
 
+struct SybilNode {
+    rx: Receiver<Event>,
+    id: u8,
+    timeout: Duration,
+}
+
+impl SybilNode {
+    pub fn new(rx: Receiver<Event>, timeout: Duration) -> Self {
+        let id = rand::thread_rng().gen::<u8>();
+
+        println!("starting sybil node {id}");
+
+        Self { rx, timeout, id }
+    }
+
+    pub async fn run(mut self) {
+        loop {
+            tokio::select! {
+                event = self.rx.recv() => match event {
+                    Some(event) => match event {
+                        _ => todo!(),
+                    }
+                    None => break,
+                },
+                _ = tokio::time::sleep(self.timeout) => {
+                    println!("sybil node {} generates random message", self.id);
+                }
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (tx, mut rx) = mpsc::channel(32);
@@ -86,7 +137,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match rx.recv().await.unwrap() {
-            Event::Message(msg) => {
+            Event::Connected(_peer) => {}
+            Event::Disconnected(_peer) => {
+                todo!();
+            }
+            Event::Message(_peer, _msg) => {
                 todo!();
             }
         }
