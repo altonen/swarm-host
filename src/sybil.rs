@@ -10,14 +10,19 @@ use tokio::{
 
 use std::{error::Error, pin::Pin, time::Duration};
 
-// TODO: implement handshake as a state machine
 // TODO: does peer really need a task?
 
 /// TODO: documentation
 #[derive(Debug)]
 pub enum Event {
     /// Peer connected.
-    Connected(PeerId),
+    Connected {
+        /// Peer ID.
+        peer: PeerId,
+
+        /// Supported protocols.
+        protocols: Vec<String>,
+    },
 
     /// Peer disconnected.
     Disconnected(PeerId),
@@ -54,7 +59,6 @@ enum PeerState {
         protocols: Vec<String>,
     },
 }
-
 #[derive(Debug)]
 struct Peer {
     /// Socket of the peer.
@@ -97,6 +101,7 @@ impl Peer {
                 Ok(nread) => {
                     match self.state {
                         PeerState::Uninitialized => {
+                            // TODO: remove unwraps
                             // the first message read is the handshake which contains peer information
                             // such as peer ID and supported protocols.
                             //
@@ -116,7 +121,10 @@ impl Peer {
                             println!("peer with id {peer:?} connected, supported protocols: {protocols:#?}");
 
                             self.tx
-                                .send(Event::Connected(peer))
+                                .send(Event::Connected {
+                                    peer,
+                                    protocols: protocols.clone(),
+                                })
                                 .await
                                 .expect("channel to stay open");
                             self.state = PeerState::Initialized { peer, protocols };

@@ -68,9 +68,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     loop {
-        match rx.recv().await.unwrap() {
-            sybil::Event::Connected(_peer) => {
-                println!("peer connected");
+        match rx.recv().await.expect("channel to stay open") {
+            sybil::Event::Connected { peer, protocols } => {
+                println!("peer {peer:?} connected, supported protocols {protocols:#?}");
             }
             sybil::Event::Disconnected(_peer) => {
                 println!("peer disconnected");
