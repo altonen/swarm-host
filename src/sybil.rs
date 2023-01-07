@@ -42,12 +42,13 @@ pub enum Message {
 pub struct Interface {
     listener: TcpListener,
     tx: Sender<Event>,
+    rx: Receiver<Event>,
 }
 
 impl Interface {
     /// Create new [`Sybil`] interface.
-    pub fn new(listener: TcpListener, tx: Sender<Event>) -> Self {
-        Self { listener, tx }
+    pub fn new(listener: TcpListener, rx: Receiver<Event>, tx: Sender<Event>) -> Self {
+        Self { listener, rx, tx }
     }
 
     /// Start running the [`Sybil`] interface event loop.
@@ -87,18 +88,24 @@ impl Interface {
 /// TODO: documentation
 pub struct Node {
     rx: Receiver<Event>,
+    tx: Sender<Event>,
     id: u8,
     timeout: Duration,
 }
 
 impl Node {
     /// Create a new Sybil node.
-    pub fn new(rx: Receiver<Event>, timeout: Duration) -> Self {
+    pub fn new(rx: Receiver<Event>, tx: Sender<Event>, timeout: Duration) -> Self {
         let id = rand::thread_rng().gen::<u8>();
 
         println!("starting sybil node {id}");
 
-        Self { rx, timeout, id }
+        Self {
+            rx,
+            tx,
+            timeout,
+            id,
+        }
     }
 
     /// Start event loop for the sybil node.
