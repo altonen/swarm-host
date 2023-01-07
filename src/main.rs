@@ -13,7 +13,7 @@ use tokio::{
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
 // TODO: create PoC where comm with between sybil iface and sybil node work
-// TODO: finish reading the taxonomy PDF
+// TODO: start using logging library
 // TODO: convert `sybil.rs` into a directory
 // TODO: create sybil/dummy.rs
 
@@ -69,12 +69,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match rx.recv().await.unwrap() {
-            sybil::Event::Connected(_peer) => {}
+            sybil::Event::Connected(_peer) => {
+                println!("peer connected");
+            }
             sybil::Event::Disconnected(_peer) => {
-                todo!();
+                println!("peer disconnected");
             }
             sybil::Event::Message(_peer, _msg) => {
-                todo!();
+                println!("peer sent a message");
             }
         }
     }
