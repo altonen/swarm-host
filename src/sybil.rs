@@ -28,7 +28,16 @@ pub enum Event {
     Disconnected(PeerId),
 
     /// Message received from peer.
-    Message(PeerId, Vec<u8>),
+    Message {
+        /// Peer ID.
+        peer: PeerId,
+
+        /// Protocol of the message.
+        protocol: String,
+
+        /// Received message.
+        message: String,
+    },
 }
 
 /// TODO: documentation
@@ -129,8 +138,28 @@ impl Peer {
                                 .expect("channel to stay open");
                             self.state = PeerState::Initialized { peer, protocols };
                         }
-                        PeerState::Initialized { .. } => {
-                            // TODO: relay message to swarm host?
+                        PeerState::Initialized {
+                            peer,
+                            ref protocols,
+                        } => {
+                            let payload =
+                                std::str::from_utf8(&buf[..nread - 1]).expect("valid utf-8 string");
+                            let message = payload.split(",").collect::<Vec<&str>>();
+                            let protocol = message.get(0).expect("protocol to exist").to_string();
+                            let message = message.get(1).expect("message to exist");
+
+                            if protocols.iter().any(|proto| proto == &protocol) {
+                                self.tx
+                                    .send(Event::Message {
+                                        peer,
+                                        protocol,
+                                        message: message.to_string(),
+                                    })
+                                    .await
+                                    .expect("channel to stay open");
+                            } else {
+                                println!("received message from unknown protocol. peer {peer:?}, protocol {protocol:?}");
+                            }
                         }
                     }
                 }

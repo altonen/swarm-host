@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             sybil::Event::Disconnected(_peer) => {
                 println!("peer disconnected");
             }
-            sybil::Event::Message(_peer, _msg) => {
+            sybil::Event::Message { .. } => {
                 println!("peer sent a message");
             }
         }
