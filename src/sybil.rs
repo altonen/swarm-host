@@ -243,6 +243,7 @@ impl Interface {
 /// TODO: documentation
 pub struct Node {
     rx: Receiver<Event>,
+    rx_msg: Receiver<(String, String)>,
     tx: Sender<Event>,
     id: PeerId,
     timeout: Duration,
@@ -250,13 +251,19 @@ pub struct Node {
 
 impl Node {
     /// Create a new Sybil node.
-    pub fn new(rx: Receiver<Event>, tx: Sender<Event>, timeout: Duration) -> Self {
+    pub fn new(
+        rx: Receiver<Event>,
+        rx_msg: Receiver<(String, String)>,
+        tx: Sender<Event>,
+        timeout: Duration,
+    ) -> Self {
         let id = rand::thread_rng().gen::<PeerId>();
 
         println!("starting sybil node {id}");
 
         Self {
             rx,
+            rx_msg,
             tx,
             timeout,
             id,
@@ -273,6 +280,12 @@ impl Node {
                     }
                     None => break,
                 },
+                result = self.rx_msg.recv() => match result {
+                    Some((protocol, message)) => {
+                        println!("sybil node received message from protocol {protocol}: {message}");
+                    }
+                    None => panic!("expect channel to stay open"),
+                },
                 _ = tokio::time::sleep(self.timeout) => {
                     self.tx.send(Event::SybilMessage {
                         peer: self.id,
@@ -281,7 +294,6 @@ impl Node {
                     })
                     .await
                     .expect("channel to stay to open");
-                    // println!("sybil node {} generates random message", self.id);
                 }
             }
         }

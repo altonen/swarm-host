@@ -12,7 +12,6 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
-// TODO: create PoC where comm with between sybil iface and sybil node work
 // TODO: start using logging library
 // TODO: document code
 // TODO: convert `sybil.rs` into a directory
@@ -33,6 +32,7 @@ struct SybilEntry {
     id: u8,
     tx_iface: Sender<sybil::Event>,
     tx_node: Sender<sybil::Event>,
+    tx_msg: Sender<(String, String)>,
 }
 
 // TODO: documentation
@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for i in 0..1 {
         let (itx, irx) = mpsc::channel(64);
         let (ntx, nrx) = mpsc::channel(64);
+        let (mtx, mrx) = mpsc::channel(64);
 
         let mut interface = sybil::Interface::new(
             TcpListener::bind(format!("127.0.0.1:{}", TCP_START + i)).await?,
@@ -60,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             tx.clone(),
         );
 
-        let mut node = sybil::Node::new(nrx, tx.clone(), Duration::from_secs(5));
+        let mut node = sybil::Node::new(nrx, mrx, tx.clone(), Duration::from_secs(5));
 
         tokio::spawn(async move { interface.run().await });
         tokio::spawn(async move { node.run().await });
@@ -74,6 +75,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 id,
                 tx_iface: itx,
                 tx_node: ntx,
+                tx_msg: mtx,
             },
         );
     }
@@ -101,10 +103,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 nodes.remove(&peer);
             }
-            sybil::Event::Message { .. } => {
-                println!("node sent a message");
+            sybil::Event::Message {
+                protocol, message, ..
+            } => {
+                println!("node sent a message, relay it forward");
 
-                // TODO: send message to sybil nodes
+                for (id, node) in &mut entries {
+                    node.tx_msg
+                        .send((protocol.clone(), message.clone()))
+                        .await
+                        .unwrap();
+                }
             }
             sybil::Event::SybilMessage {
                 message,
