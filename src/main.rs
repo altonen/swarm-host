@@ -12,15 +12,18 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
-// TODO: start using logging library
-// TODO: document code
 // TODO: convert `sybil.rs` into a directory
 // TODO: create sybil/dummy.rs
+// TODO: add prometheus metrics
+// TODO: fix warnings
+// TODO: run clippy
 // TODO: unitfy naming
+// TODO: document code
 // TODO: create vision of the project's future
 
 const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
+const LOG_TARGET: &'static str = "swarm-host";
 
 mod sybil;
 mod types;
@@ -44,6 +47,10 @@ struct NodeEntry {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+
     // TODO: clean this code
     let (tx, mut rx) = mpsc::channel(32);
     let mut id = 1;
@@ -87,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 protocols,
                 tx,
             } => {
-                println!("peer {peer:?} connected, supported protocols {protocols:#?}");
+                tracing::info!(target: LOG_TARGET, id = peer, protocols = ?protocols, "peer connected");
 
                 nodes.insert(
                     peer,
@@ -99,14 +106,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
             sybil::Event::Disconnected(peer) => {
-                println!("peer disconnected");
+                tracing::info!(target: LOG_TARGET, peer = peer, "peer disconnected");
 
                 nodes.remove(&peer);
             }
             sybil::Event::Message {
-                protocol, message, ..
+                protocol,
+                message,
+                peer,
             } => {
-                println!("node sent a message, relay it forward");
+                tracing::trace!(
+                    target: LOG_TARGET,
+                    id = peer,
+                    protocol = protocol,
+                    "received message from node"
+                );
 
                 for (id, node) in &mut entries {
                     node.tx_msg
@@ -120,8 +134,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 protocol,
                 peer,
             } => {
-                println!(
-                    "sybil node {peer:?} sent a message over protocol '{protocol}': {message}"
+                tracing::trace!(
+                    target: LOG_TARGET,
+                    id = peer,
+                    protocol = protocol,
+                    "received message from sybil node"
                 );
 
                 for (id, node) in &mut nodes {

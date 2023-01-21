@@ -10,6 +10,8 @@ use tokio::{
 
 use std::{error::Error, pin::Pin, time::Duration};
 
+const LOG_TARGET: &'static str = "sybil";
+
 // TODO: does peer really need a task?
 
 /// TODO: documentation
@@ -121,10 +123,11 @@ impl Peer {
             tokio::select! {
                 result = self.socket.read(&mut buf) => match result {
                     Ok(nread) if nread == 0 => {
-                        println!("close socket");
+                        tracing::trace!(target: LOG_TARGET, "node closed socket");
 
                         if let PeerState::Initialized { peer, .. } = self.state {
-                            println!("peer {peer:?} disconnected, inform `swarm-host`");
+                            tracing::debug!(target: LOG_TARGET, id = peer, "node disconnected, inform `swarm-host`");
+
                             self.tx
                                 .send(Event::Disconnected(peer))
                                 .await
@@ -153,7 +156,7 @@ impl Peer {
                                 let protocols: Vec<String> =
                                     handshake[1..].into_iter().map(|&x| x.into()).collect();
 
-                                println!("peer with id {peer:?} connected, supported protocols: {protocols:#?}");
+                                tracing::debug!(target: LOG_TARGET, id = peer, protocols = ?protocols, "node connected");
 
                                 self.tx
                                     .send(Event::Connected {
@@ -185,18 +188,19 @@ impl Peer {
                                         .await
                                         .expect("channel to stay open");
                                 } else {
-                                    println!("received message from unknown protocol. peer {peer:?}, protocol {protocol:?}");
+                                    tracing::warn!(target: LOG_TARGET, id = peer, protocol = protocol, "received message from uknown protocol from node");
                                 }
                             }
                         }
                     }
                     Err(err) => {
-                        println!("failed to read from opened stream: {err:?}");
+                        tracing::error!(target: LOG_TARGET, err = ?err, "falied to read from opened stream");
                     }
                 },
                 result = self.rx_msg.recv() => match result {
                     Some((protocol, message)) => {
-                        println!("send message to peer");
+                        // TODO: match on state before sending
+                        tracing::trace!(target: LOG_TARGET, protocol = protocol, "send message to node");
                         self.socket.write(message.as_bytes()).await.unwrap();
                     }
                     None => panic!("should not fail"),
@@ -227,9 +231,9 @@ impl Interface {
         loop {
             tokio::select! {
                 result = self.listener.accept() => match result {
-                    Err(err) => println!("failed to accept connection: {err:?}"),
+                    Err(err) => tracing::error!(target: LOG_TARGET, err = ?err, "failed to accept connection"),
                     Ok((stream, address)) => {
-                        println!("accepted connection from remote peer, address {address:?}");
+                        tracing::debug!(target: LOG_TARGET, address = ?address, "accepted connection from remote node");
 
                         let tx = self.tx.clone();
                         tokio::spawn(async move { Peer::new(stream, tx).run().await });
@@ -259,7 +263,7 @@ impl Node {
     ) -> Self {
         let id = rand::thread_rng().gen::<PeerId>();
 
-        println!("starting sybil node {id}");
+        tracing::info!(target: "sybil", id = id, "starting sybil node");
 
         Self {
             rx,
@@ -282,7 +286,7 @@ impl Node {
                 },
                 result = self.rx_msg.recv() => match result {
                     Some((protocol, message)) => {
-                        println!("sybil node received message from protocol {protocol}: {message}");
+                        tracing::trace!(target: LOG_TARGET, protocol = protocol, "sybil node received a message");
                     }
                     None => panic!("expect channel to stay open"),
                 },
