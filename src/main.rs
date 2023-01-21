@@ -14,8 +14,11 @@ use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
 // TODO: create PoC where comm with between sybil iface and sybil node work
 // TODO: start using logging library
+// TODO: document code
 // TODO: convert `sybil.rs` into a directory
 // TODO: create sybil/dummy.rs
+// TODO: unitfy naming
+// TODO: create vision of the project's future
 
 const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
@@ -32,14 +35,22 @@ struct SybilEntry {
     tx_node: Sender<sybil::Event>,
 }
 
+// TODO: documentation
+struct NodeEntry {
+    id: PeerId,
+    protocols: Vec<String>,
+    tx: Sender<(String, String)>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // TODO: clean this code
     let (tx, mut rx) = mpsc::channel(32);
     let mut id = 1;
     let mut entries = HashMap::new();
+    let mut nodes = HashMap::new();
 
-    for i in 0..3 {
+    for i in 0..1 {
         let (itx, irx) = mpsc::channel(64);
         let (ntx, nrx) = mpsc::channel(64);
 
@@ -69,14 +80,47 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match rx.recv().await.expect("channel to stay open") {
-            sybil::Event::Connected { peer, protocols } => {
+            sybil::Event::Connected {
+                peer,
+                protocols,
+                tx,
+            } => {
                 println!("peer {peer:?} connected, supported protocols {protocols:#?}");
+
+                nodes.insert(
+                    peer,
+                    NodeEntry {
+                        id: peer,
+                        protocols,
+                        tx,
+                    },
+                );
             }
-            sybil::Event::Disconnected(_peer) => {
+            sybil::Event::Disconnected(peer) => {
                 println!("peer disconnected");
+
+                nodes.remove(&peer);
             }
             sybil::Event::Message { .. } => {
-                println!("peer sent a message");
+                println!("node sent a message");
+
+                // TODO: send message to sybil nodes
+            }
+            sybil::Event::SybilMessage {
+                message,
+                protocol,
+                peer,
+            } => {
+                println!(
+                    "sybil node {peer:?} sent a message over protocol '{protocol}': {message}"
+                );
+
+                for (id, node) in &mut nodes {
+                    node.tx
+                        .send((protocol.clone(), message.clone()))
+                        .await
+                        .unwrap();
+                }
             }
         }
     }
