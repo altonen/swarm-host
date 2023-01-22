@@ -12,14 +12,13 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
-// TODO: convert `sybil.rs` into a directory
 // TODO: create sybil/dummy.rs
+// TODO: create vision of the project's future
 // TODO: add prometheus metrics
 // TODO: fix warnings
 // TODO: run clippy
 // TODO: unitfy naming
 // TODO: document code
-// TODO: create vision of the project's future
 
 const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
@@ -33,8 +32,8 @@ mod types;
 struct SybilEntry {
     // TODO: better type
     id: u8,
-    tx_iface: Sender<sybil::Event>,
-    tx_node: Sender<sybil::Event>,
+    tx_iface: Sender<sybil::types::Event>,
+    tx_node: Sender<sybil::types::Event>,
     tx_msg: Sender<(String, String)>,
 }
 
@@ -62,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (ntx, nrx) = mpsc::channel(64);
         let (mtx, mrx) = mpsc::channel(64);
 
-        let mut interface = sybil::Interface::new(
+        let mut interface = sybil::interface::Interface::new(
             TcpListener::bind(format!("127.0.0.1:{}", TCP_START + i)).await?,
             irx,
             tx.clone(),
@@ -89,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match rx.recv().await.expect("channel to stay open") {
-            sybil::Event::Connected {
+            sybil::types::Event::Connected {
                 peer,
                 protocols,
                 tx,
@@ -105,12 +104,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     },
                 );
             }
-            sybil::Event::Disconnected(peer) => {
+            sybil::types::Event::Disconnected(peer) => {
                 tracing::info!(target: LOG_TARGET, peer = peer, "peer disconnected");
 
                 nodes.remove(&peer);
             }
-            sybil::Event::Message {
+            sybil::types::Event::Message {
                 protocol,
                 message,
                 peer,
@@ -129,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .unwrap();
                 }
             }
-            sybil::Event::SybilMessage {
+            sybil::types::Event::SybilMessage {
                 message,
                 protocol,
                 peer,
