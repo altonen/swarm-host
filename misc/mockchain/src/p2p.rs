@@ -1,16 +1,35 @@
+use crate::types::{Command, PeerId};
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::mpsc::{self, Sender, Receiver},
+    sync::mpsc::{self, Receiver, Sender},
 };
 
 const LOG_TARGET: &'static str = "p2p";
 
-pub type PeerId = u64;
-
 // TODO: spawn task for each peer
 //        - listen for incoming blocks and transations
 //        - publish blocks and transations
+
+/// Events sent by the [`Peer`] to [`P2p`].
+#[derive(Debug)]
+enum PeerEvent {
+    /// Peer disconnected.
+    Disconnected { peer: PeerId },
+
+    /// Peer connected.
+    Connected {
+        peer: PeerId,
+        protocols: Vec<String>,
+    },
+
+    Message {
+        peer: PeerId,
+        protocol: String,
+        message: Vec<u8>,
+    },
+}
 
 // TODO: document
 #[derive(Debug)]
@@ -33,13 +52,13 @@ struct Peer {
     /// Socket of the peer.
     socket: TcpStream,
 
-    // /// TX channel for communication with `swarm-host`.
-    // tx: Sender<types::Event>,
+    /// TX channel for communication.
+    tx: Sender<PeerEvent>,
 
-    /// TX channel for sender messages from `swarm-host`.
+    /// TX channel for sender messages.
     tx_msg: Sender<(String, String)>,
 
-    /// RX channel for receiving messages from `swarm-host`.
+    /// RX channel for receiving messages
     rx_msg: Receiver<(String, String)>,
 
     /// Peer state.
@@ -47,12 +66,12 @@ struct Peer {
 }
 
 impl Peer {
-    pub fn new(socket: TcpStream) -> Self {
+    pub fn new(socket: TcpStream, tx: Sender<PeerEvent>) -> Self {
         let (tx_msg, rx_msg) = mpsc::channel(64);
 
         Self {
             socket,
-            // tx,
+            tx,
             tx_msg,
             rx_msg,
             state: PeerState::Uninitialized,
@@ -71,10 +90,10 @@ impl Peer {
                         if let PeerState::Initialized { peer, .. } = self.state {
                             tracing::debug!(target: LOG_TARGET, id = peer, "node disconnected, inform `swarm-host`");
 
-                            // self.tx
-                            //     .send(types::Event::Disconnected(peer))
-                            //     .await
-                            //     .expect("channel to stay open");
+                            self.tx
+                                .send(PeerEvent::Disconnected { peer })
+                                .await
+                                .expect("channel to stay open");
                         }
 
                         break;
@@ -101,38 +120,40 @@ impl Peer {
 
                                 tracing::debug!(target: LOG_TARGET, id = peer, protocols = ?protocols, "node connected");
 
-                                // self.tx
-                                //     .send(types::Event::Connected {
-                                //         peer,
-                                //         tx: self.tx_msg.clone(),
-                                //         protocols: protocols.clone(),
-                                //     })
-                                //     .await
-                                //     .expect("channel to stay open");
+                                self.tx
+                                    .send(PeerEvent::Connected {
+                                        peer,
+                                        protocols: protocols.clone(),
+                                    })
+                                    .await
+                                    .expect("channel to stay open");
                                 self.state = PeerState::Initialized { peer, protocols };
                             }
                             PeerState::Initialized {
-                                peer,
-                                ref protocols,
+                                peer: _,
+                                ref _protocols: _,
                             } => {
-                                let payload =
-                                    std::str::from_utf8(&buf[..nread - 1]).expect("valid utf-8 string");
-                                let message = payload.split(",").collect::<Vec<&str>>();
-                                let protocol = message.get(0).expect("protocol to exist").to_string();
-                                let message = message.get(1).expect("message to exist");
+                                // TODO: fix this
+                                todo!("implement Vec<u8> messages");
 
-                                if protocols.iter().any(|proto| proto == &protocol) {
-                                    // self.tx
-                                    //     .send(types::Event::Message {
-                                    //         peer,
-                                    //         protocol,
-                                    //         message: message.to_string(),
-                                    //     })
-                                    //     .await
-                                    //     .expect("channel to stay open");
-                                } else {
-                                    tracing::warn!(target: LOG_TARGET, id = peer, protocol = protocol, "received message from uknown protocol from node");
-                                }
+                                // let payload =
+                                //     std::str::from_utf8(&buf[..nread - 1]).expect("valid utf-8 string");
+                                // let message = payload.split(",").collect::<Vec<&str>>();
+                                // let protocol = message.get(0).expect("protocol to exist").to_string();
+                                // let message = message.get(1).expect("message to exist");
+
+                                // if protocols.iter().any(|proto| proto == &protocol) {
+                                //     self.tx
+                                //         .send(PeerEvent::Message {
+                                //             peer,
+                                //             protocol,
+                                //             message: message.to_string(),
+                                //         })
+                                //         .await
+                                //         .expect("channel to stay open");
+                                // } else {
+                                //     tracing::warn!(target: LOG_TARGET, id = peer, protocol = protocol, "received message from uknown protocol from node");
+                                // }
                             }
                         }
                     }
@@ -146,8 +167,13 @@ impl Peer {
                         tracing::trace!(target: LOG_TARGET, protocol = protocol, "send message to node");
                         self.socket.write(message.as_bytes()).await.unwrap();
                     }
-                    None => panic!("should not fail"),
-                }
+                    None => panic!("channel should stay open"),
+                },
+                // result = self.rx_cmd.recv() => match result {
+                //     Some(cmd) => match cmd {
+                //     }
+                //     None => panic!("channel should stay open"),
+                // }
             }
         }
     }
@@ -155,17 +181,20 @@ impl Peer {
 
 pub struct P2p {
     listener: TcpListener,
-    // tx: Sender<types::Event>,
-    // rx: Receiver<types::Event>,
+    cmd_rx: Receiver<Command>,
+    peer_tx: Sender<PeerEvent>,
+    peer_rx: Receiver<PeerEvent>,
 }
 
 impl P2p {
-    pub fn new(
-        listener: TcpListener,
-        // rx: Receiver<types::Event>,
-        // tx: Sender<types::Event>,
-    ) -> Self {
-        Self { listener }
+    pub fn new(listener: TcpListener, cmd_rx: Receiver<Command>) -> Self {
+        let (peer_tx, peer_rx) = mpsc::channel(64);
+        Self {
+            listener,
+            cmd_rx,
+            peer_rx,
+            peer_tx,
+        }
     }
 
     pub async fn run(mut self) {
@@ -176,9 +205,53 @@ impl P2p {
                     Ok((stream, address)) => {
                         tracing::debug!(target: LOG_TARGET, address = ?address, "node connected");
 
-                        // let tx = self.tx.clone();
-                        tokio::spawn(async move { Peer::new(stream).run().await });
+                        let tx = self.peer_tx.clone();
+                        tokio::spawn(async move { Peer::new(stream, tx).run().await });
                     }
+                },
+                result = self.cmd_rx.recv() => match result {
+                    Some(cmd) => match cmd {
+                        Command::PublishBlock(block) => {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                block = ?block,
+                                "publish block on the network",
+                            );
+
+                            todo!();
+                        },
+                        Command::PublishTransaction(transaction) => {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                transaction = ?transaction,
+                                "publish transaction on the network",
+                            );
+
+                            todo!();
+                        },
+                        Command::DisconnectPeer(peer) => {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                id = ?peer,
+                                "disconnect peer",
+                            );
+
+                            todo!();
+                        },
+                        Command::ConnectToPeer((addr, port)) => {
+                            tracing::debug!(
+                                target: LOG_TARGET,
+                                address = ?addr,
+                                port = port,
+                                "attempt to connect to peer",
+                            );
+                        }
+                    }
+                    None => panic!("channel should stay open"),
+                },
+                result = self.peer_rx.recv() => match result {
+                    Some(_message) => todo!("decide on format"),
+                    None => panic!("channel should stay open"),
                 }
             }
         }

@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+use std::net::IpAddr;
+
 /// Unique account ID.
 pub type AccountId = u64;
 
 /// Transaction.
 #[derive(Debug, Serialize, Deserialize)]
-struct Transaction {
+pub struct Transaction {
     sender: AccountId,
     receiver: AccountId,
     amount: u64,
@@ -23,7 +25,7 @@ impl Transaction {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Block {
+pub struct Block {
     time: u64,
     transactions: Vec<Transaction>,
 }
@@ -38,7 +40,27 @@ impl Block {
     pub fn from_transactions(transactions: impl Into<Vec<Transaction>>) -> Self {
         Self {
             transactions: transactions.into(),
+            // TODO: unix timestamp
             time: 1337u64,
         }
     }
+}
+
+/// Unique peer ID.
+pub type PeerId = u64;
+
+/// Commands send to P2P.
+pub enum Command {
+    /// Publish transaction on the network.
+    PublishTransaction(Transaction),
+
+    /// Publish block on the network.
+    PublishBlock(Block),
+
+    /// Disconnect peer.
+    DisconnectPeer(PeerId),
+
+    /// Attempt to establish connection with a peer.
+    // TODO: `oneshot::Sender` for result?
+    ConnectToPeer((IpAddr, u16)),
 }
