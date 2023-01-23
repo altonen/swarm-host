@@ -12,6 +12,8 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
+// TODO: create very simple mock blockchain
+// TODO: implement compat layer for swarm-host for this blockchain
 // TODO: create sybil/dummy.rs
 // TODO: create vision of the project's future
 // TODO: add prometheus metrics
