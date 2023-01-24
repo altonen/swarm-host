@@ -110,6 +110,7 @@ impl Peer {
                                 .expect("channel to stay open");
                         }
 
+                        // TODO: notify P2P anyway?
                         break;
                     }
                     Ok(nread) => {
@@ -365,7 +366,7 @@ mod tests {
     use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
     #[tokio::test]
-    async fn test_peer_connection() {
+    async fn peer_connects_and_handshakes() {
         tracing_subscriber::registry()
             .with(tracing_subscriber::EnvFilter::from_default_env())
             .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
@@ -393,6 +394,69 @@ mod tests {
         assert_eq!(p2p.peer_count, 1);
         assert_eq!(p2p.pending.len(), 0);
         assert_eq!(p2p.peers.len(), 1);
-        assert!(p2p.peers.get(&11).is_some());
+
+        let peer = p2p.peers.get(&11).unwrap();
+
+        assert_eq!(peer.peer, 11u64,);
+        assert_eq!(
+            peer.protocols,
+            Vec::from(vec![
+                String::from("/proto/0.1.0"),
+                String::from("/proto2/1.0.0")
+            ]),
+        );
+    }
+
+    #[tokio::test]
+    async fn peer_connects_then_disconnects() {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
+            .try_init()
+            .unwrap();
+
+        let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx);
+        let mut conn = TcpStream::connect("127.0.0.1:8888");
+
+        let (_, res2) = tokio::join!(p2p.poll_next(), conn);
+        let mut stream = res2.unwrap();
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 1);
+        assert_eq!(p2p.peers.len(), 0);
+
+        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0\n");
+        stream.write(message.as_bytes()).await.unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 0);
+        assert_eq!(p2p.peers.len(), 1);
+
+        let peer = p2p.peers.get(&11).unwrap();
+
+        assert_eq!(peer.peer, 11u64,);
+        assert_eq!(
+            peer.protocols,
+            Vec::from(vec![
+                String::from("/proto/0.1.0"),
+                String::from("/proto2/1.0.0")
+            ]),
+        );
+
+        drop(stream);
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 0);
+
+        // verify that the peer is no longer part of the P2P
+        assert_eq!(p2p.peers.len(), 0);
     }
 }
