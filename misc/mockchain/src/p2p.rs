@@ -16,7 +16,7 @@ const LOG_TARGET: &'static str = "p2p";
 //        - publish blocks and transations
 // TODO: create handshake message instead of sending a comma-separated string
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 enum Message {
     Transaction(Transaction),
     Block(Block),
@@ -225,7 +225,9 @@ impl Peer {
                                 "send transaction to peer"
                             );
 
-                            self.socket.write(&serde_cbor::to_vec(&transaction).unwrap()).await.unwrap();
+                            self.socket.write(&serde_cbor::to_vec(&Message::Transaction(
+                                transaction
+                            )).unwrap()).await.unwrap();
                         }
                         PeerCommand::PublishBlock(block) => {
                             tracing::trace!(
@@ -234,7 +236,9 @@ impl Peer {
                                 "send block to peer"
                             );
 
-                            self.socket.write(&serde_cbor::to_vec(&block).unwrap()).await.unwrap();
+                            self.socket.write(&serde_cbor::to_vec(&Message::Block(
+                                block
+                            )).unwrap()).await.unwrap();
                         }
                     }
                     None => panic!("channel should stay open"),
@@ -318,15 +322,6 @@ impl P2p {
             },
             result = self.cmd_rx.recv() => match result {
                 Some(cmd) => match cmd {
-                    Command::PublishBlock(block) => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            block = ?block,
-                            "publish block on the network",
-                        );
-
-                        todo!();
-                    },
                     Command::PublishTransaction(transaction) => {
                         tracing::debug!(
                             target: LOG_TARGET,
@@ -334,7 +329,24 @@ impl P2p {
                             "publish transaction on the network",
                         );
 
-                        todo!();
+                        for (_id, peer) in &self.peers {
+                            peer.cmd_tx.send(PeerCommand::PublishTransaction(
+                                transaction.clone()
+                            )).await.expect("channel to stay open");
+                        }
+                    },
+                    Command::PublishBlock(block) => {
+                        tracing::debug!(
+                            target: LOG_TARGET,
+                            block = ?block,
+                            "publish block on the network",
+                        );
+
+                        for (_id, peer) in &self.peers {
+                            peer.cmd_tx.send(PeerCommand::PublishBlock(
+                                block.clone()
+                            )).await.expect("channel to stay open");
+                        }
                     },
                     Command::DisconnectPeer(peer) => {
                         tracing::debug!(
@@ -390,6 +402,8 @@ impl P2p {
                             message = ?message,
                             "received message from peer",
                         );
+
+                        // TODO: forward message based on its type
                     }
                 },
                 None => panic!("channel should stay open"),
@@ -412,9 +426,9 @@ mod tests {
             .unwrap();
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
-        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let mut p2p = P2p::new(socket, cmd_rx);
-        let mut conn = TcpStream::connect("127.0.0.1:8888");
+        let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
         let mut stream = res2.unwrap();
@@ -454,9 +468,9 @@ mod tests {
             .unwrap();
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
-        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let mut p2p = P2p::new(socket, cmd_rx);
-        let mut conn = TcpStream::connect("127.0.0.1:8888");
+        let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
         let mut stream = res2.unwrap();
@@ -507,9 +521,9 @@ mod tests {
             .unwrap();
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
-        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let mut p2p = P2p::new(socket, cmd_rx);
-        let mut conn = TcpStream::connect("127.0.0.1:8888");
+        let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
         let mut stream = res2.unwrap();
@@ -528,13 +542,69 @@ mod tests {
         assert_eq!(p2p.pending.len(), 0);
         assert_eq!(p2p.peers.len(), 1);
 
-        let message =
-            serde_cbor::to_vec(&Message::Transaction(Transaction::new(0, 1, 1337))).unwrap();
-        tracing::warn!(target: LOG_TARGET, "send message, len {}", message.len());
-
-        stream.write(&message).await.unwrap();
+        stream
+            .write(
+                &serde_cbor::to_vec(&Message::Transaction(Transaction::new(0, 1, 1337))).unwrap(),
+            )
+            .await
+            .unwrap();
 
         // poll the next event
         p2p.poll_next().await;
+    }
+
+    #[tokio::test]
+    async fn publish_block() {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
+            .try_init()
+            .unwrap();
+
+        let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx);
+        let conn = TcpStream::connect("127.0.0.1:8888");
+
+        let (_, res2) = tokio::join!(p2p.poll_next(), conn);
+        let mut stream = res2.unwrap();
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 1);
+        assert_eq!(p2p.peers.len(), 0);
+
+        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0");
+        stream.write(message.as_bytes()).await.unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 0);
+        assert_eq!(p2p.peers.len(), 1);
+
+        cmd_tx
+            .send(Command::PublishBlock(Block::from_transactions(vec![
+                Transaction::new(1, 2, 1338),
+            ])))
+            .await
+            .unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        let mut buf = vec![0u8; 1024];
+        match stream.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                tracing::error!("len {nread}");
+                let message: Message = serde_cbor::from_slice(&buf[..nread]).unwrap();
+
+                assert_eq!(
+                    message,
+                    Message::Block(Block::from_transactions(vec![Transaction::new(1, 2, 1338)])),
+                )
+            }
+        }
     }
 }

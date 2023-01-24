@@ -6,7 +6,7 @@ use std::net::IpAddr;
 pub type AccountId = u64;
 
 /// Transaction.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
     sender: AccountId,
     receiver: AccountId,
@@ -24,7 +24,7 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Block {
     time: u64,
     transactions: Vec<Transaction>,
@@ -50,6 +50,7 @@ impl Block {
 pub type PeerId = u64;
 
 /// Commands send to P2P.
+#[derive(Debug)]
 pub enum Command {
     /// Publish transaction on the network.
     PublishTransaction(Transaction),
