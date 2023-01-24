@@ -11,9 +11,6 @@ use std::{collections::HashMap, net::SocketAddr};
 
 const LOG_TARGET: &'static str = "p2p";
 
-// TODO: spawn task for each peer
-//        - listen for incoming blocks and transations
-//        - publish blocks and transations
 // TODO: create handshake message instead of sending a comma-separated string
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -597,12 +594,93 @@ mod tests {
         match stream.read(&mut buf).await {
             Err(_) => panic!("should not fail"),
             Ok(nread) => {
-                tracing::error!("len {nread}");
                 let message: Message = serde_cbor::from_slice(&buf[..nread]).unwrap();
 
                 assert_eq!(
                     message,
                     Message::Block(Block::from_transactions(vec![Transaction::new(1, 2, 1338)])),
+                )
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_tx_two_peers() {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
+            .try_init()
+            .unwrap();
+
+        let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx);
+
+        let conn = TcpStream::connect("127.0.0.1:8888");
+        let (_, res1) = tokio::join!(p2p.poll_next(), conn);
+
+        let conn = TcpStream::connect("127.0.0.1:8888");
+        let (_, res2) = tokio::join!(p2p.poll_next(), conn);
+
+        let (mut stream1, mut stream2) = (res1.unwrap(), res2.unwrap());
+
+        assert_eq!(p2p.peer_count, 2);
+        assert_eq!(p2p.pending.len(), 2);
+        assert_eq!(p2p.peers.len(), 0);
+
+        stream1
+            .write(String::from("11,/proto/0.1.0,/proto2/1.0.0").as_bytes())
+            .await
+            .unwrap();
+        stream2
+            .write(String::from("22,/proto/0.1.0,/proto2/1.0.0").as_bytes())
+            .await
+            .unwrap();
+
+        // poll two next events
+        p2p.poll_next().await;
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 2);
+        assert_eq!(p2p.pending.len(), 0);
+        assert_eq!(p2p.peers.len(), 2);
+
+        cmd_tx
+            .send(Command::PublishBlock(Block::from_transactions(vec![
+                Transaction::new(13, 37, 1337),
+            ])))
+            .await
+            .unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        // first peer reads the transaction
+        let mut buf = vec![0u8; 1024];
+        match stream1.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                let message: Message = serde_cbor::from_slice(&buf[..nread]).unwrap();
+
+                assert_eq!(
+                    message,
+                    Message::Block(Block::from_transactions(vec![Transaction::new(
+                        13, 37, 1337
+                    )])),
+                )
+            }
+        }
+
+        match stream2.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                let message: Message = serde_cbor::from_slice(&buf[..nread]).unwrap();
+
+                assert_eq!(
+                    message,
+                    Message::Block(Block::from_transactions(vec![Transaction::new(
+                        13, 37, 1337
+                    )])),
                 )
             }
         }
