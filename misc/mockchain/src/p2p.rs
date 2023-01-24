@@ -1,5 +1,6 @@
-use crate::types::{Command, PeerId};
+use crate::types::{Block, Command, PeerId, Transaction};
 
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -13,12 +14,34 @@ const LOG_TARGET: &'static str = "p2p";
 // TODO: spawn task for each peer
 //        - listen for incoming blocks and transations
 //        - publish blocks and transations
+// TODO: create handshake message instead of sending a comma-separated string
+
+#[derive(Debug, Deserialize, Serialize)]
+enum Message {
+    Transaction(Transaction),
+    Block(Block),
+}
+
+/// Commands sent by [`P2p`] to [`Peer`].
+#[derive(Debug)]
+enum PeerCommand {
+    /// Disconnect peer.
+    Disconnect,
+
+    /// Publish transaction on the network.
+    PublishTransaction(Transaction),
+
+    /// Publish block on the network.
+    PublishBlock(Block),
+}
 
 /// Events sent by the [`Peer`] to [`P2p`].
 #[derive(Debug)]
 enum PeerEvent {
     /// Peer disconnected.
-    Disconnected { peer: PeerId },
+    Disconnected {
+        peer: PeerId,
+    },
 
     /// Peer connected.
     Connected {
@@ -29,8 +52,7 @@ enum PeerEvent {
 
     Message {
         peer: PeerId,
-        protocol: String,
-        message: Vec<u8>,
+        message: Message,
     },
 }
 
@@ -60,14 +82,8 @@ struct Peer {
     /// TX channel for communication.
     tx: Sender<PeerEvent>,
 
-    /// TX channel for sender messages.
-    msg_tx: Sender<(String, String)>,
-
-    /// RX channel for receiving messages
-    msg_rx: Receiver<(String, String)>,
-
     /// RX channel for receiving commands.
-    cmd_rx: Receiver<Command>,
+    cmd_rx: Receiver<PeerCommand>,
 
     /// Peer state.
     state: PeerState,
@@ -78,15 +94,11 @@ impl Peer {
         key: usize,
         socket: TcpStream,
         tx: Sender<PeerEvent>,
-        cmd_rx: Receiver<Command>,
+        cmd_rx: Receiver<PeerCommand>,
     ) -> Self {
-        let (msg_tx, msg_rx) = mpsc::channel(64);
-
         Self {
             socket,
             tx,
-            msg_tx,
-            msg_rx,
             cmd_rx,
             state: PeerState::Uninitialized { key },
         }
@@ -123,7 +135,7 @@ impl Peer {
                                 // for this implementation, it's a comma-separated list of values:
                                 //   <peer id>,<protocol 1>,<protocol 2>,<protocol 3>
                                 let payload =
-                                    std::str::from_utf8(&buf[..nread - 1]).expect("valid utf-8 string");
+                                    std::str::from_utf8(&buf[..nread]).expect("valid utf-8 string");
                                 let handshake = payload.split(",").collect::<Vec<&str>>();
                                 let peer = handshake
                                     .get(0)
@@ -146,30 +158,54 @@ impl Peer {
                                 self.state = PeerState::Initialized { peer, protocols };
                             }
                             PeerState::Initialized {
-                                peer: _,
+                                peer,
                                 protocols: _,
                             } => {
-                                // TODO: fix this
-                                todo!("implement Vec<u8> messages");
+                                tracing::debug!(
+                                    target: LOG_TARGET,
+                                    bytes_read = nread,
+                                    "read message from socket"
+                                );
 
-                                // let payload =
-                                //     std::str::from_utf8(&buf[..nread - 1]).expect("valid utf-8 string");
-                                // let message = payload.split(",").collect::<Vec<&str>>();
-                                // let protocol = message.get(0).expect("protocol to exist").to_string();
-                                // let message = message.get(1).expect("message to exist");
+                                match serde_cbor::from_slice(&buf[..nread]) {
+                                    Ok(Message::Transaction(transaction)) => {
+                                        tracing::trace!(
+                                            target: LOG_TARGET,
+                                            id = peer,
+                                            tx = ?transaction,
+                                            "received transaction from peer",
+                                        );
 
-                                // if protocols.iter().any(|proto| proto == &protocol) {
-                                //     self.tx
-                                //         .send(PeerEvent::Message {
-                                //             peer,
-                                //             protocol,
-                                //             message: message.to_string(),
-                                //         })
-                                //         .await
-                                //         .expect("channel to stay open");
-                                // } else {
-                                //     tracing::warn!(target: LOG_TARGET, id = peer, protocol = protocol, "received message from uknown protocol from node");
-                                // }
+                                        self.tx.send(PeerEvent::Message {
+                                            peer,
+                                            message: Message::Transaction(transaction)
+                                        })
+                                        .await
+                                        .expect("channel to stay open");
+                                    }
+                                    Ok(Message::Block(block)) => {
+                                        tracing::trace!(
+                                            target: LOG_TARGET,
+                                            id = peer,
+                                            tx = ?block,
+                                            "received block from peer",
+                                        );
+
+                                        self.tx.send(PeerEvent::Message {
+                                            peer,
+                                            message: Message::Block(block)
+                                        })
+                                        .await
+                                        .expect("channel to stay open");
+                                    }
+                                    Err(err) => {
+                                        tracing::error!(
+                                            target: LOG_TARGET,
+                                            err = ?err,
+                                            "failed to decode message",
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -177,27 +213,28 @@ impl Peer {
                         tracing::error!(target: LOG_TARGET, err = ?err, "falied to read from opened stream");
                     }
                 },
-                result = self.msg_rx.recv() => match result {
-                    Some((protocol, message)) => {
-                        // TODO: match on state before sending
-                        tracing::trace!(target: LOG_TARGET, protocol = protocol, "send message to node");
-                        self.socket.write(message.as_bytes()).await.unwrap();
-                    }
-                    None => panic!("channel should stay open"),
-                },
                 result = self.cmd_rx.recv() => match result {
-                    Some(cmd) => match cmd {
-                        Command::PublishTransaction(_transaction) => {
+                    Some(command) => match command {
+                        PeerCommand::Disconnect => {
                             todo!();
                         }
-                        Command::PublishBlock(_block) => {
-                            todo!();
+                        PeerCommand::PublishTransaction(transaction) => {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                transaction = ?transaction,
+                                "send transaction to peer"
+                            );
+
+                            self.socket.write(&serde_cbor::to_vec(&transaction).unwrap()).await.unwrap();
                         }
-                        Command::DisconnectPeer(_peer) => {
-                            todo!();
-                        }
-                        Command::ConnectToPeer((_addr, _port)) => {
-                            todo!();
+                        PeerCommand::PublishBlock(block) => {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                block = ?block,
+                                "send block to peer"
+                            );
+
+                            self.socket.write(&serde_cbor::to_vec(&block).unwrap()).await.unwrap();
                         }
                     }
                     None => panic!("channel should stay open"),
@@ -207,14 +244,16 @@ impl Peer {
     }
 }
 
+// TODO: simplify this by creating the channel on `Peer` side
+
 struct PendingInfo {
     address: SocketAddr,
-    cmd_tx: Sender<Command>,
+    cmd_tx: Sender<PeerCommand>,
 }
 
 struct PeerInfo {
     peer: PeerId,
-    cmd_tx: Sender<Command>,
+    cmd_tx: Sender<PeerCommand>,
     protocols: Vec<String>,
 }
 
@@ -344,14 +383,13 @@ impl P2p {
                             protocols,
                         });
                     },
-                    PeerEvent::Message { peer, protocol, message: _, } => {
+                    PeerEvent::Message { peer, message } => {
                         tracing::trace!(
                             target: LOG_TARGET,
                             id = peer,
-                            protocol = protocol,
+                            message = ?message,
                             "received message from peer",
                         );
-                        todo!("do something with message");
                     }
                 },
                 None => panic!("channel should stay open"),
@@ -458,5 +496,45 @@ mod tests {
 
         // verify that the peer is no longer part of the P2P
         assert_eq!(p2p.peers.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn peer_sends_messages() {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
+            .try_init()
+            .unwrap();
+
+        let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx);
+        let mut conn = TcpStream::connect("127.0.0.1:8888");
+
+        let (_, res2) = tokio::join!(p2p.poll_next(), conn);
+        let mut stream = res2.unwrap();
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 1);
+        assert_eq!(p2p.peers.len(), 0);
+
+        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0");
+        stream.write(message.as_bytes()).await.unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 0);
+        assert_eq!(p2p.peers.len(), 1);
+
+        let message =
+            serde_cbor::to_vec(&Message::Transaction(Transaction::new(0, 1, 1337))).unwrap();
+        tracing::warn!(target: LOG_TARGET, "send message, len {}", message.len());
+
+        stream.write(&message).await.unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
     }
 }
