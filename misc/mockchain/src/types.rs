@@ -65,3 +65,14 @@ pub enum Command {
     // TODO: `oneshot::Sender` for result?
     ConnectToPeer((IpAddr, u16)),
 }
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub enum Message {
+    Transaction(Transaction),
+    Block(Block),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum OverseerEvent {
+    Message(Message),
+}

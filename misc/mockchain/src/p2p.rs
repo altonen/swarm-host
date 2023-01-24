@@ -1,6 +1,5 @@
-use crate::types::{Block, Command, PeerId, Transaction};
+use crate::types::{Block, Command, Message, OverseerEvent, PeerId, Transaction};
 
-use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -12,12 +11,6 @@ use std::{collections::HashMap, net::SocketAddr};
 const LOG_TARGET: &'static str = "p2p";
 
 // TODO: create handshake message instead of sending a comma-separated string
-
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
-enum Message {
-    Transaction(Transaction),
-    Block(Block),
-}
 
 /// Commands sent by [`P2p`] to [`Peer`].
 #[derive(Debug)]
@@ -263,6 +256,7 @@ pub struct P2p {
     cmd_rx: Receiver<Command>,
     peer_tx: Sender<PeerEvent>,
     peer_rx: Receiver<PeerEvent>,
+    overseer_tx: Sender<OverseerEvent>,
 
     /// Number of peers that have connected.
     peer_count: usize,
@@ -275,13 +269,18 @@ pub struct P2p {
 }
 
 impl P2p {
-    pub fn new(listener: TcpListener, cmd_rx: Receiver<Command>) -> Self {
+    pub fn new(
+        listener: TcpListener,
+        cmd_rx: Receiver<Command>,
+        overseer_tx: Sender<OverseerEvent>,
+    ) -> Self {
         let (peer_tx, peer_rx) = mpsc::channel(64);
         Self {
             listener,
             cmd_rx,
             peer_rx,
             peer_tx,
+            overseer_tx,
             peers: HashMap::new(),
             pending: HashMap::new(),
             peer_count: 0usize,
@@ -400,7 +399,7 @@ impl P2p {
                             "received message from peer",
                         );
 
-                        // TODO: forward message based on its type
+                        self.overseer_tx.send(OverseerEvent::Message(message)).await.unwrap();
                     }
                 },
                 None => panic!("channel should stay open"),
@@ -424,7 +423,8 @@ mod tests {
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx);
+        let (overseer_tx, _overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -466,7 +466,8 @@ mod tests {
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx);
+        let (overseer_tx, _overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -519,7 +520,8 @@ mod tests {
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx);
+        let (overseer_tx, mut overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -548,6 +550,13 @@ mod tests {
 
         // poll the next event
         p2p.poll_next().await;
+
+        assert_eq!(
+            overseer_rx.try_recv(),
+            Ok(OverseerEvent::Message(Message::Transaction(
+                Transaction::new(0, 1, 1337)
+            ))),
+        );
     }
 
     #[tokio::test]
@@ -560,7 +569,8 @@ mod tests {
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx);
+        let (overseer_tx, _overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -614,7 +624,8 @@ mod tests {
 
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx);
+        let (overseer_tx, _overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
 
         let conn = TcpStream::connect("127.0.0.1:8888");
         let (_, res1) = tokio::join!(p2p.poll_next(), conn);
