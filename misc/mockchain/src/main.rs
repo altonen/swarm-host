@@ -12,9 +12,9 @@ const LOG_TARGET: &'static str = "overseer";
 //   - bind to interface
 //   - publish block
 //   - publish transaction
+//   - connect to peer
 //
 //   - disconnect from peer
-//   - connect to peer
 //   - query if tx is present
 //   - query if block is present
 //   - request block from peer
@@ -57,16 +57,14 @@ async fn main() {
 
     // start p2p
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
-    let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+    let socket = TcpListener::bind(format!("127.0.0.1:{}", flags.p2p_port))
+        .await
+        .unwrap();
 
     let p2p_tx = overseer_tx.clone();
     tokio::spawn(async move { p2p::P2p::new(socket, cmd_rx, p2p_tx).run().await });
     tokio::spawn(async move {
-        rpc::run_server(
-            overseer_tx,
-            (IpAddr::V6(Ipv6Addr::LOCALHOST), flags.rpc_port),
-        )
-        .await
+        rpc::run_server(overseer_tx, String::from("127.0.0.1"), flags.rpc_port).await
     });
 
     // start chainstate

@@ -293,27 +293,28 @@ impl P2p {
         }
     }
 
+    fn spawn_peer(&mut self, stream: TcpStream, address: SocketAddr) {
+        let tx = self.peer_tx.clone();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let peer_count = {
+            let peer_count = self.peer_count;
+            self.peer_count += 1;
+            peer_count
+        };
+
+        self.pending
+            .insert(peer_count, PendingInfo { address, cmd_tx });
+
+        tokio::spawn(async move { Peer::new(peer_count, stream, tx, cmd_rx).run().await });
+    }
+
     pub async fn poll_next(&mut self) {
         tokio::select! {
             result = self.listener.accept() => match result {
                 Err(err) => tracing::error!(target: LOG_TARGET, err = ?err, "failed to accept connection"),
                 Ok((stream, address)) => {
                     tracing::debug!(target: LOG_TARGET, address = ?address, "node connected");
-
-                    let tx = self.peer_tx.clone();
-                    let (cmd_tx, cmd_rx) = mpsc::channel(64);
-                    let peer_count = {
-                        let peer_count = self.peer_count;
-                        self.peer_count += 1;
-                        peer_count
-                    };
-
-                    self.pending.insert(peer_count, PendingInfo {
-                        address,
-                        cmd_tx,
-                    });
-
-                    tokio::spawn(async move { Peer::new(peer_count, stream, tx, cmd_rx).run().await });
+                    self.spawn_peer(stream, address);
                 }
             },
             result = self.cmd_rx.recv() => match result {
@@ -361,17 +362,29 @@ impl P2p {
                             "attempt to connect to peer",
                         );
 
+                        // TODO: verify that `address:port` is not self
+                        let address: SocketAddr = format!("{}:{}", address, port).parse().unwrap();
+
                         match tokio::time::timeout(
                             std::time::Duration::from_secs(5),
-                            TcpStream::connect((address, port)),
+                            TcpStream::connect(address),
                         ).await {
-                            Ok(_stream) => {
-                                tracing::debug!(
-                                    target: LOG_TARGET,
-                                    "connection established with remote peer",
-                                );
+                            Ok(result) => match result {
+                                Ok(stream) => {
+                                    tracing::debug!(
+                                        target: LOG_TARGET,
+                                        "connection established with remote peer",
+                                    );
 
-                                todo!("do something with the stream");
+                                    self.spawn_peer(stream, address);
+                                }
+                                Err(err) => {
+                                    tracing::error!(
+                                        target: LOG_TARGET,
+                                        err = ?err,
+                                        "failed to establish connection with remote peer",
+                                    );
+                                }
                             }
                             Err(err) => {
                                 tracing::error!(

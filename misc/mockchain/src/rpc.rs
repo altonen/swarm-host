@@ -7,9 +7,13 @@ use std::net::{IpAddr, SocketAddr};
 
 const LOG_TARGET: &'static str = "rpc";
 
-pub async fn run_server(overseer_tx: Sender<OverseerEvent>, server_addr: (IpAddr, u16)) {
+pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, port: u16) {
     let server = ServerBuilder::default()
-        .build("127.0.0.1:8887".parse::<SocketAddr>().unwrap())
+        .build(
+            format!("{}:{}", address, port)
+                .parse::<SocketAddr>()
+                .unwrap(),
+        )
         .await
         .unwrap();
     let mut module = RpcModule::new(overseer_tx);
