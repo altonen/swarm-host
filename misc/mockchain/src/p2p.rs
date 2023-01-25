@@ -126,7 +126,7 @@ impl Peer {
     pub async fn run(mut self) {
         let mut buf = vec![0u8; 1024];
 
-        loop {
+        'outer: loop {
             tokio::select! {
                 result = self.socket.read(&mut buf) => match result {
                     Ok(nread) if nread == 0 => {
@@ -243,7 +243,8 @@ impl Peer {
                 result = self.cmd_rx.recv() => match result {
                     Some(command) => match command {
                         PeerCommand::Disconnect => {
-                            todo!();
+                            tracing::trace!(target: LOG_TARGET, "disconnect peer");
+                            break 'outer;
                         }
                         PeerCommand::PublishTransaction(transaction) => {
                             tracing::trace!(
@@ -272,6 +273,8 @@ impl Peer {
                 }
             }
         }
+
+        tracing::info!(target: LOG_TARGET, "peer existing");
     }
 }
 
@@ -410,7 +413,15 @@ impl P2p {
                             "disconnect peer",
                         );
 
-                        todo!();
+                        if let Some(info) = self.peers.remove(&peer) {
+                            info.cmd_tx.send(PeerCommand::Disconnect).await.expect("channel to stay open");
+                        } else {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                id = ?peer,
+                                "peer doesn't exist",
+                            );
+                        }
                     },
                     Command::ConnectToPeer(address, port) => {
                         tracing::debug!(

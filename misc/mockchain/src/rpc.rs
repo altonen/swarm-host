@@ -1,4 +1,4 @@
-use crate::types::OverseerEvent;
+use crate::types::{OverseerEvent, PeerId};
 
 use jsonrpsee::server::{RpcModule, ServerBuilder};
 use tokio::sync::mpsc::Sender;
@@ -35,7 +35,21 @@ pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, por
             ctx.send(OverseerEvent::ConnectToPeer(address, port))
                 .await
                 .expect("channel to stay open");
-            Result::<_, jsonrpsee::core::Error>::Ok("lo")
+            Result::<_, jsonrpsee::core::Error>::Ok("")
+        })
+        .unwrap();
+
+    module
+        .register_async_method("disconnect_peer", |params, ctx| async move {
+            let mut params = params.sequence();
+            let peer: PeerId = params.next().expect("peer id");
+
+            tracing::info!(target: LOG_TARGET, id = peer, "disconnect peer");
+
+            ctx.send(OverseerEvent::DisconnectPeer(peer))
+                .await
+                .expect("channel to stay open");
+            Result::<_, jsonrpsee::core::Error>::Ok("")
         })
         .unwrap();
 

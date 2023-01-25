@@ -76,4 +76,5 @@ pub enum Message {
 pub enum OverseerEvent {
     Message(Message),
     ConnectToPeer(String, u16),
+    DisconnectPeer(PeerId),
 }
