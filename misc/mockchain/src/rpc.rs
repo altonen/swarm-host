@@ -1,3 +1,5 @@
+use crate::types::{OverseerEvent, PeerId};
+
 use futures::{future, prelude::*};
 use rand::{
     distributions::{Distribution, Uniform},
@@ -8,21 +10,29 @@ use tarpc::{
     server::{self, incoming::Incoming, Channel},
     tokio_serde::formats::Json,
 };
-use tokio::time;
+use tokio::{sync::mpsc::Sender, time};
 
 use std::{
     net::{IpAddr, SocketAddr},
     time::Duration,
 };
 
+const LOG_TARGET: &'static str = "rpc";
+
 #[tarpc::service]
 pub trait World {
     /// Returns a greeting for name.
     async fn hello(name: String) -> String;
+
+    // /// Connect to peer.
+    // async fn connect_to_peer(address: String, port: u16);
 }
 
 #[derive(Clone)]
-struct HelloServer(SocketAddr);
+struct HelloServer {
+    address: SocketAddr,
+    overseer_tx: Sender<OverseerEvent>,
+}
 
 #[tarpc::server]
 impl World for HelloServer {
@@ -30,11 +40,29 @@ impl World for HelloServer {
         let sleep_time =
             Duration::from_millis(Uniform::new_inclusive(1, 10).sample(&mut thread_rng()));
         time::sleep(sleep_time).await;
-        format!("Hello, {name}! You are connected from {}", self.0)
+        format!("Hello, {name}! You are connected from {}", self.address)
     }
+
+    // async fn connect_to_peer(self, _: context::Context, address: String, port: u16) {
+    //     tracing::info!(
+    //         target: LOG_TARGET,
+    //         address = ?address,
+    //         "attempt to establish connection to peer"
+    //     );
+
+    //     self.overseer_tx
+    //         .send(OverseerEvent::ConnectToPeer(address, port))
+    //         .await
+    //         .expect("channel to stay open");
+
+    //     // TODO: send `oneshot::Sender` and wait for result here
+    // }
 }
 
-pub async fn run_server(server_addr: (IpAddr, u16)) -> anyhow::Result<()> {
+pub async fn run_server(
+    overseer_tx: Sender<OverseerEvent>,
+    server_addr: (IpAddr, u16),
+) -> anyhow::Result<()> {
     let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
     tracing::info!("Listening on port {}", listener.local_addr().port());
 
@@ -44,7 +72,12 @@ pub async fn run_server(server_addr: (IpAddr, u16)) -> anyhow::Result<()> {
         .map(server::BaseChannel::with_defaults)
         .max_channels_per_key(1, |t| t.transport().peer_addr().unwrap().ip())
         .map(|channel| {
-            let server = HelloServer(channel.transport().peer_addr().unwrap());
+            tracing::info!(target: LOG_TARGET, "start serving RCP request",);
+
+            let server = HelloServer {
+                address: channel.transport().peer_addr().unwrap(),
+                overseer_tx: overseer_tx.clone(),
+            };
             channel.execute(server.serve())
         })
         .buffer_unordered(10)

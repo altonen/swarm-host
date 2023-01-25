@@ -353,13 +353,34 @@ impl P2p {
 
                         todo!();
                     },
-                    Command::ConnectToPeer((addr, port)) => {
+                    Command::ConnectToPeer(address, port) => {
                         tracing::debug!(
                             target: LOG_TARGET,
-                            address = ?addr,
+                            address = ?address,
                             port = port,
                             "attempt to connect to peer",
                         );
+
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(5),
+                            TcpStream::connect((address, port)),
+                        ).await {
+                            Ok(_stream) => {
+                                tracing::debug!(
+                                    target: LOG_TARGET,
+                                    "connection established with remote peer",
+                                );
+
+                                todo!("do something with the stream");
+                            }
+                            Err(err) => {
+                                tracing::error!(
+                                    target: LOG_TARGET,
+                                    err = ?err,
+                                    "failed to establish connection with remote peer",
+                                );
+                            }
+                        }
                     }
                 }
                 None => panic!("channel should stay open"),

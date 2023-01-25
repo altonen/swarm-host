@@ -1,4 +1,4 @@
-use crate::types::{Message, OverseerEvent};
+use crate::types::{Command, Message, OverseerEvent};
 
 use clap::Parser;
 use tokio::{net::TcpListener, sync::mpsc};
@@ -56,13 +56,17 @@ async fn main() {
     let (overseer_tx, mut overseer_rx) = mpsc::channel(64);
 
     // start p2p
-    let (_cmd_tx, cmd_rx) = mpsc::channel(64);
+    let (cmd_tx, cmd_rx) = mpsc::channel(64);
     let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
 
     let p2p_tx = overseer_tx.clone();
     tokio::spawn(async move { p2p::P2p::new(socket, cmd_rx, p2p_tx).run().await });
     tokio::spawn(async move {
-        rpc::run_server((IpAddr::V6(Ipv6Addr::LOCALHOST), flags.rpc_port)).await
+        rpc::run_server(
+            overseer_tx,
+            (IpAddr::V6(Ipv6Addr::LOCALHOST), flags.rpc_port),
+        )
+        .await
     });
 
     // start chainstate
@@ -102,6 +106,19 @@ async fn main() {
                     }
                 }
             },
+            OverseerEvent::ConnectToPeer(address, port) => {
+                tracing::debug!(
+                    target: LOG_TARGET,
+                    address = address,
+                    port = port,
+                    "attempt to connect to remote peer",
+                );
+
+                cmd_tx
+                    .send(Command::ConnectToPeer(address, port))
+                    .await
+                    .expect("channel to stay open");
+            }
         }
     }
 }

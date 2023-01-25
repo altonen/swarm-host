@@ -63,7 +63,7 @@ pub enum Command {
 
     /// Attempt to establish connection with a peer.
     // TODO: `oneshot::Sender` for result?
-    ConnectToPeer((IpAddr, u16)),
+    ConnectToPeer(String, u16),
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -75,4 +75,5 @@ pub enum Message {
 #[derive(Debug, PartialEq, Eq)]
 pub enum OverseerEvent {
     Message(Message),
+    ConnectToPeer(String, u16),
 }
