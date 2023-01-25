@@ -1,4 +1,5 @@
 use crate::types::{Block, Command, Message, OverseerEvent, PeerId, Transaction};
+use rand::Rng;
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -11,6 +12,11 @@ use std::{collections::HashMap, net::SocketAddr};
 const LOG_TARGET: &'static str = "p2p";
 
 // TODO: create handshake message instead of sending a comma-separated string
+
+enum ConnectionType {
+    Inbound,
+    Outbound,
+}
 
 /// Commands sent by [`P2p`] to [`Peer`].
 #[derive(Debug)]
@@ -55,6 +61,11 @@ enum PeerState {
     },
 
     // TODO: document
+    HandshakeSent {
+        key: usize,
+    },
+
+    // TODO: document
     Initialized {
         /// Peer ID.
         peer: PeerId,
@@ -66,6 +77,9 @@ enum PeerState {
 
 #[derive(Debug)]
 struct Peer {
+    /// PeerId of [`P2p`].
+    id: PeerId,
+
     /// Socket of the peer.
     socket: TcpStream,
 
@@ -80,17 +94,32 @@ struct Peer {
 }
 
 impl Peer {
-    pub fn new(
+    pub async fn new(
+        id: PeerId,
         key: usize,
-        socket: TcpStream,
+        mut socket: TcpStream,
         tx: Sender<PeerEvent>,
         cmd_rx: Receiver<PeerCommand>,
+        connection_type: ConnectionType,
     ) -> Self {
+        let state = match connection_type {
+            ConnectionType::Inbound => PeerState::Uninitialized { key },
+            ConnectionType::Outbound => {
+                let handshake = format!("{},/tx/1.0.0,/block/1.0.0", id);
+                socket
+                    .write(handshake.as_bytes())
+                    .await
+                    .expect("stream to stay open");
+                PeerState::HandshakeSent { key }
+            }
+        };
+
         Self {
             socket,
+            id,
             tx,
             cmd_rx,
-            state: PeerState::Uninitialized { key },
+            state,
         }
     }
 
@@ -117,7 +146,7 @@ impl Peer {
                     }
                     Ok(nread) => {
                         match self.state {
-                            PeerState::Uninitialized { key } => {
+                            PeerState::Uninitialized { key } | PeerState::HandshakeSent { key } => {
                                 // TODO: remove unwraps
                                 // the first message read is the handshake which contains peer information
                                 // such as peer ID and supported protocols.
@@ -136,6 +165,14 @@ impl Peer {
                                     handshake[1..].into_iter().map(|&x| x.into()).collect();
 
                                 tracing::debug!(target: LOG_TARGET, id = peer, protocols = ?protocols, "node connected");
+
+                                if std::matches!(self.state, PeerState::Uninitialized { .. }) {
+                                    let handshake = format!("{},/tx/1.0.0,/block/1.0.0", self.id);
+                                    self.socket
+                                        .write(handshake.as_bytes())
+                                        .await
+                                        .expect("stream to stay open");
+                                }
 
                                 self.tx
                                     .send(PeerEvent::Connected {
@@ -252,6 +289,7 @@ struct PeerInfo {
 }
 
 pub struct P2p {
+    id: PeerId,
     listener: TcpListener,
     cmd_rx: Receiver<Command>,
     peer_tx: Sender<PeerEvent>,
@@ -275,7 +313,16 @@ impl P2p {
         overseer_tx: Sender<OverseerEvent>,
     ) -> Self {
         let (peer_tx, peer_rx) = mpsc::channel(64);
+        let id = rand::thread_rng().gen::<PeerId>();
+
+        tracing::info!(
+            target: LOG_TARGET,
+            id = ?id,
+            "starting p2p"
+        );
+
         Self {
+            id,
             listener,
             cmd_rx,
             peer_rx,
@@ -293,9 +340,15 @@ impl P2p {
         }
     }
 
-    fn spawn_peer(&mut self, stream: TcpStream, address: SocketAddr) {
+    fn spawn_peer(
+        &mut self,
+        stream: TcpStream,
+        address: SocketAddr,
+        connection_type: ConnectionType,
+    ) {
         let tx = self.peer_tx.clone();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let id = self.id;
         let peer_count = {
             let peer_count = self.peer_count;
             self.peer_count += 1;
@@ -305,7 +358,12 @@ impl P2p {
         self.pending
             .insert(peer_count, PendingInfo { address, cmd_tx });
 
-        tokio::spawn(async move { Peer::new(peer_count, stream, tx, cmd_rx).run().await });
+        tokio::spawn(async move {
+            Peer::new(id, peer_count, stream, tx, cmd_rx, connection_type)
+                .await
+                .run()
+                .await
+        });
     }
 
     pub async fn poll_next(&mut self) {
@@ -314,7 +372,7 @@ impl P2p {
                 Err(err) => tracing::error!(target: LOG_TARGET, err = ?err, "failed to accept connection"),
                 Ok((stream, address)) => {
                     tracing::debug!(target: LOG_TARGET, address = ?address, "node connected");
-                    self.spawn_peer(stream, address);
+                    self.spawn_peer(stream, address, ConnectionType::Inbound);
                 }
             },
             result = self.cmd_rx.recv() => match result {
@@ -376,7 +434,7 @@ impl P2p {
                                         "connection established with remote peer",
                                     );
 
-                                    self.spawn_peer(stream, address);
+                                    self.spawn_peer(stream, address, ConnectionType::Outbound);
                                 }
                                 Err(err) => {
                                     tracing::error!(
@@ -729,5 +787,64 @@ mod tests {
                 )
             }
         }
+    }
+
+    #[tokio::test]
+    async fn outbound_peer() {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
+            .try_init()
+            .unwrap();
+
+        let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(64);
+        let (overseer_tx, _overseer_rx) = mpsc::channel(64);
+        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let inbound = TcpListener::bind("127.0.0.1:9999").await.unwrap();
+
+        cmd_tx
+            .send(Command::ConnectToPeer(String::from("127.0.0.1"), 9999))
+            .await
+            .unwrap();
+        p2p.poll_next().await;
+
+        let (mut stream, _) = inbound.accept().await.unwrap();
+
+        let mut buf = vec![0u8; 1024];
+        match stream.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                assert_eq!(
+                    std::str::from_utf8(&buf[..nread]).expect("valid utf-8 string"),
+                    format!("{},/tx/1.0.0,/block/1.0.0", p2p.id),
+                );
+            }
+        }
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 1);
+        assert_eq!(p2p.peers.len(), 0);
+
+        let message = String::from("11,/tx/1.0.0,/block/1.0.0");
+        stream.write(message.as_bytes()).await.unwrap();
+
+        // poll the next event
+        p2p.poll_next().await;
+
+        assert_eq!(p2p.peer_count, 1);
+        assert_eq!(p2p.pending.len(), 0);
+        assert_eq!(p2p.peers.len(), 1);
+
+        let peer = p2p.peers.get(&11).unwrap();
+
+        assert_eq!(peer.peer, 11u64);
+        assert_eq!(
+            peer.protocols,
+            Vec::from(vec![
+                String::from("/tx/1.0.0"),
+                String::from("/block/1.0.0")
+            ]),
+        );
     }
 }

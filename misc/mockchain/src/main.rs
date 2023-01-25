@@ -4,8 +4,6 @@ use clap::Parser;
 use tokio::{net::TcpListener, sync::mpsc};
 use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
-use std::net::{IpAddr, Ipv6Addr};
-
 const LOG_TARGET: &'static str = "overseer";
 
 // TODO: mitä kaikkea täytyy olla implmentoituna:
@@ -14,12 +12,15 @@ const LOG_TARGET: &'static str = "overseer";
 //   - publish transaction
 //   - connect to peer
 //
-//   - disconnect from peer
+//   - disconnect peer
+//
 //   - query if tx is present
 //   - query if block is present
-//   - request block from peer
 //   - create block and publish it
 //   - submit transaction
+//
+//   - rudimentary syncing
+//   - rudimentary block production
 //
 // TODO: figure out architecture for the project
 //   - simple event loop with timers?

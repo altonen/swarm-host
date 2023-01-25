@@ -3,7 +3,7 @@ use crate::types::OverseerEvent;
 use jsonrpsee::server::{RpcModule, ServerBuilder};
 use tokio::sync::mpsc::Sender;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 
 const LOG_TARGET: &'static str = "rpc";
 
@@ -16,11 +16,8 @@ pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, por
         )
         .await
         .unwrap();
-    let mut module = RpcModule::new(overseer_tx);
 
-    module
-        .register_method("say_hello", |_, _| Ok("lo"))
-        .unwrap();
+    let mut module = RpcModule::new(overseer_tx);
 
     module
         .register_async_method("connect_to_peer", |params, ctx| async move {
