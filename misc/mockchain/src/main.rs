@@ -11,23 +11,21 @@ const LOG_TARGET: &'static str = "overseer";
 //   - publish block
 //   - publish transaction
 //   - connect to peer
-//
 //   - disconnect peer
 //
-//   - query if tx is present
-//   - query if block is present
-//   - create block and publish it
-//   - submit transaction
+//   - implement gossip engine which sends random messages
 //
+//   - create genesis block and seed some accounts
 //   - rudimentary syncing
 //   - rudimentary block production
-//
-// TODO: figure out architecture for the project
-//   - simple event loop with timers?
+//   - submit transaction
+//   - query if tx is present
+//   - query if block is present
 //
 // TODO: bind to interface instead
 
 mod chainstate;
+mod gossip;
 mod p2p;
 mod rpc;
 mod types;
@@ -64,6 +62,10 @@ async fn main() {
 
     let p2p_tx = overseer_tx.clone();
     tokio::spawn(async move { p2p::P2p::new(socket, cmd_rx, p2p_tx).run().await });
+
+    let gossip_tx = overseer_tx.clone();
+    tokio::spawn(async move { gossip::GossipEngine::new(gossip_tx).run().await });
+
     tokio::spawn(async move {
         rpc::run_server(overseer_tx, String::from("127.0.0.1"), flags.rpc_port).await
     });
@@ -104,6 +106,7 @@ async fn main() {
                         );
                     }
                 }
+                _ => panic!("unexpected message type"),
             },
             OverseerEvent::ConnectToPeer(address, port) => {
                 tracing::debug!(

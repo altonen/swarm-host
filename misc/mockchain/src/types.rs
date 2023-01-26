@@ -5,6 +5,9 @@ use std::net::IpAddr;
 /// Unique account ID.
 pub type AccountId = u64;
 
+/// Unique block ID.
+pub type BlockId = u64;
+
 /// Transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
@@ -67,9 +70,48 @@ pub enum Command {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Vote {
+    block: BlockId,
+    peer: PeerId,
+    vote: bool, // true == yay, false == nay,
+}
+
+impl Vote {
+    pub fn new(block: BlockId, peer: PeerId, vote: bool) -> Self {
+        Self { block, peer, vote }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Dispute {
+    block: BlockId,
+    peer: PeerId,
+}
+
+impl Dispute {
+    pub fn new(block: BlockId, peer: PeerId) -> Self {
+        Self { block, peer }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Pex {
+    peers: Vec<(String, u16)>,
+}
+
+impl Pex {
+    pub fn new(peers: Vec<(String, u16)>) -> Self {
+        Self { peers }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Message {
     Transaction(Transaction),
     Block(Block),
+    Vote(Vote),
+    Dispute(Dispute),
+    PeerExchange(Pex),
 }
 
 #[derive(Debug, PartialEq, Eq)]

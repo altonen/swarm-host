@@ -225,6 +225,7 @@ impl Peer {
                                         .await
                                         .expect("channel to stay open");
                                     }
+                                    Ok(_) => panic!("unexpected message type"),
                                     Err(err) => {
                                         tracing::error!(
                                             target: LOG_TARGET,
