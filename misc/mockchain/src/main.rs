@@ -1,4 +1,4 @@
-use crate::types::{Command, Message, OverseerEvent};
+use crate::types::{Command, Message, OverseerEvent, Subsystem};
 
 use clap::Parser;
 use tokio::{net::TcpListener, sync::mpsc};
@@ -74,39 +74,52 @@ async fn main() {
 
     loop {
         match overseer_rx.recv().await.expect("channel to stay open") {
-            OverseerEvent::Message(message) => match message {
-                Message::Transaction(transaction) => {
-                    tracing::error!(
-                        target: LOG_TARGET,
-                        tx = ?transaction,
-                        "received transaction from p2p"
-                    );
-
-                    if let Err(err) = chainstate.import_transaction(transaction) {
-                        tracing::error!(
+            OverseerEvent::Message(source, message) => {
+                match message.clone() {
+                    Message::Transaction(transaction) => {
+                        tracing::debug!(
                             target: LOG_TARGET,
-                            err = ?err,
-                            "failed to import transaction"
+                            tx = ?transaction,
+                            "received transaction from p2p"
                         );
-                    }
-                }
-                Message::Block(block) => {
-                    tracing::error!(
-                        target: LOG_TARGET,
-                        block = ?block,
-                        "received block from p2p"
-                    );
 
-                    if let Err(err) = chainstate.import_block(block) {
-                        tracing::error!(
-                            target: LOG_TARGET,
-                            err = ?err,
-                            "failed to import block"
-                        );
+                        if let Err(err) = chainstate.import_transaction(transaction) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                err = ?err,
+                                "failed to import transaction"
+                            );
+                        }
                     }
+                    Message::Block(block) => {
+                        tracing::debug!(
+                            target: LOG_TARGET,
+                            block = ?block,
+                            "received block from p2p"
+                        );
+
+                        if let Err(err) = chainstate.import_block(block) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                err = ?err,
+                                "failed to import block"
+                            );
+                        }
+                    }
+                    msg => tracing::warn!(
+                        target: LOG_TARGET,
+                        message = ?msg,
+                        "unexpected message type"
+                    ),
                 }
-                _ => panic!("unexpected message type"),
-            },
+
+                if source == Subsystem::Gossip {
+                    cmd_tx
+                        .send(Command::PublishMessage(message))
+                        .await
+                        .expect("channel to stay open");
+                }
+            }
             OverseerEvent::ConnectToPeer(address, port) => {
                 tracing::debug!(
                     target: LOG_TARGET,

@@ -1,4 +1,4 @@
-use crate::types::{Block, Command, Message, OverseerEvent, PeerId, Transaction};
+use crate::types::{Block, Command, Message, OverseerEvent, PeerId, Subsystem, Transaction};
 use rand::Rng;
 
 use tokio::{
@@ -29,6 +29,9 @@ enum PeerCommand {
 
     /// Publish block on the network.
     PublishBlock(Block),
+
+    /// Publish message on the network.
+    PublishMessage(Message),
 }
 
 /// Events sent by the [`Peer`] to [`P2p`].
@@ -269,6 +272,15 @@ impl Peer {
                                 block
                             )).unwrap()).await.unwrap();
                         }
+                        PeerCommand::PublishMessage(message) => {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                message = ?message,
+                                "send message to peer"
+                            );
+
+                            self.socket.write(&serde_cbor::to_vec(&message).unwrap()).await.unwrap();
+                        }
                     }
                     None => panic!("channel should stay open"),
                 }
@@ -465,6 +477,13 @@ impl P2p {
                             }
                         }
                     }
+                    Command::PublishMessage(message) => {
+                        for (_id, peer) in &self.peers {
+                            peer.cmd_tx.send(PeerCommand::PublishMessage(
+                                message.clone(),
+                            )).await.expect("channel to stay open");
+                        }
+                    }
                 }
                 None => panic!("channel should stay open"),
             },
@@ -503,7 +522,7 @@ impl P2p {
                             "received message from peer",
                         );
 
-                        self.overseer_tx.send(OverseerEvent::Message(message)).await.unwrap();
+                        self.overseer_tx.send(OverseerEvent::Message(Subsystem::P2p, message)).await.unwrap();
                     }
                 },
                 None => panic!("channel should stay open"),

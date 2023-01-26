@@ -67,9 +67,12 @@ pub enum Command {
     /// Attempt to establish connection with a peer.
     // TODO: `oneshot::Sender` for result?
     ConnectToPeer(String, u16),
+
+    /// Publish generic message on the network
+    PublishMessage(Message),
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Vote {
     block: BlockId,
     peer: PeerId,
@@ -82,7 +85,7 @@ impl Vote {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Dispute {
     block: BlockId,
     peer: PeerId,
@@ -94,7 +97,7 @@ impl Dispute {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Pex {
     peers: Vec<(String, u16)>,
 }
@@ -105,7 +108,7 @@ impl Pex {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Message {
     Transaction(Transaction),
     Block(Block),
@@ -116,7 +119,14 @@ pub enum Message {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum OverseerEvent {
-    Message(Message),
+    Message(Subsystem, Message),
     ConnectToPeer(String, u16),
     DisconnectPeer(PeerId),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Subsystem {
+    Gossip,
+    P2p,
+    Rpc,
 }

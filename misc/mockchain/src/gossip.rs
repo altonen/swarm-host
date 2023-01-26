@@ -1,5 +1,6 @@
 use crate::types::{
-    AccountId, Block, BlockId, Dispute, Message, OverseerEvent, PeerId, Pex, Transaction, Vote,
+    AccountId, Block, BlockId, Dispute, Message, OverseerEvent, PeerId, Pex, Subsystem,
+    Transaction, Vote,
 };
 
 use rand::{
@@ -78,6 +79,11 @@ impl GossipEngine {
                 message = ?message,
                 "publish message on the network"
             );
+
+            self.overseer_tx
+                .send(OverseerEvent::Message(Subsystem::Gossip, message))
+                .await
+                .expect("channel to stay open");
         }
     }
 }
