@@ -13,6 +13,8 @@ const LOG_TARGET: &'static str = "overseer";
 //   - connect to peer
 //   - disconnect peer
 //
+//   - don't forward messages to source peers
+//
 // TODO: some day maybe
 //   - create genesis block and seed some accounts
 //   - rudimentary syncing

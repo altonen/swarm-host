@@ -1,4 +1,6 @@
-use crate::types::{Block, Command, Message, OverseerEvent, PeerId, Subsystem, Transaction};
+use crate::types::{
+    Block, Command, Message, MessageId, OverseerEvent, PeerId, Subsystem, Transaction,
+};
 use rand::Rng;
 
 use tokio::{
@@ -7,7 +9,14 @@ use tokio::{
     sync::mpsc::{self, Receiver, Sender},
 };
 
-use std::{collections::HashMap, net::SocketAddr};
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, Entry},
+        HashMap, HashSet,
+    },
+    hash::Hasher,
+    net::SocketAddr,
+};
 
 const LOG_TARGET: &'static str = "p2p";
 
@@ -92,6 +101,9 @@ struct Peer {
     /// RX channel for receiving commands.
     cmd_rx: Receiver<PeerCommand>,
 
+    /// Seen messages.
+    seen: HashMap<MessageId, HashSet<PeerId>>,
+
     /// Peer state.
     state: PeerState,
 }
@@ -123,6 +135,7 @@ impl Peer {
             tx,
             cmd_rx,
             state,
+            seen: HashMap::new(),
         }
     }
 
@@ -206,6 +219,13 @@ impl Peer {
                                             "received transaction from peer",
                                         );
 
+                                        let digest = {
+                                            let mut hasher = DefaultHasher::new();
+                                            hasher.write(&buf[..nread]);
+                                            hasher.finish()
+                                        };
+
+                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
                                         self.tx.send(PeerEvent::Message {
                                             peer,
                                             message: Message::Transaction(transaction)
@@ -221,6 +241,13 @@ impl Peer {
                                             "received block from peer",
                                         );
 
+                                        let digest = {
+                                            let mut hasher = DefaultHasher::new();
+                                            hasher.write(&buf[..nread]);
+                                            hasher.finish()
+                                        };
+
+                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
                                         self.tx.send(PeerEvent::Message {
                                             peer,
                                             message: Message::Block(block)
@@ -228,7 +255,16 @@ impl Peer {
                                         .await
                                         .expect("channel to stay open");
                                     }
-                                    Ok(_) => panic!("unexpected message type"),
+                                    Ok(_) => {
+                                        let digest = {
+                                            let mut hasher = DefaultHasher::new();
+                                            hasher.write(&buf[..nread]);
+                                            hasher.finish()
+                                        };
+
+                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
+                                        panic!("unexpected message type");
+                                    },
                                     Err(err) => {
                                         tracing::error!(
                                             target: LOG_TARGET,
