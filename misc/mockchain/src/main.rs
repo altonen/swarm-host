@@ -13,8 +13,7 @@ const LOG_TARGET: &'static str = "overseer";
 //   - connect to peer
 //   - disconnect peer
 //
-//   - implement gossip engine which sends random messages
-//
+// TODO: some day maybe
 //   - create genesis block and seed some accounts
 //   - rudimentary syncing
 //   - rudimentary block production
