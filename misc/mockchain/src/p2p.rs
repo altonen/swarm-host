@@ -44,9 +44,7 @@ enum PeerCommand {
 #[derive(Debug)]
 enum PeerEvent {
     /// Peer disconnected.
-    Disconnected {
-        peer: PeerId,
-    },
+    Disconnected { peer: PeerId },
 
     /// Peer connected.
     Connected {
@@ -58,6 +56,7 @@ enum PeerEvent {
     Message {
         peer: PeerId,
         message: Message,
+        digest: u64,
     },
 }
 
@@ -98,9 +97,6 @@ struct Peer {
     /// RX channel for receiving commands.
     cmd_rx: Receiver<PeerCommand>,
 
-    /// Seen messages.
-    seen: HashMap<MessageId, HashSet<PeerId>>,
-
     /// Peer state.
     state: PeerState,
 }
@@ -132,7 +128,6 @@ impl Peer {
             tx,
             cmd_rx,
             state,
-            seen: HashMap::new(),
         }
     }
 
@@ -222,10 +217,10 @@ impl Peer {
                                             hasher.finish()
                                         };
 
-                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
                                         self.tx.send(PeerEvent::Message {
                                             peer,
-                                            message: Message::Transaction(transaction)
+                                            message: Message::Transaction(transaction),
+                                            digest,
                                         })
                                         .await
                                         .expect("channel to stay open");
@@ -244,22 +239,28 @@ impl Peer {
                                             hasher.finish()
                                         };
 
-                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
                                         self.tx.send(PeerEvent::Message {
                                             peer,
-                                            message: Message::Block(block)
+                                            message: Message::Block(block),
+                                            digest,
                                         })
                                         .await
                                         .expect("channel to stay open");
                                     }
-                                    Ok(_) => {
+                                    Ok(message) => {
                                         let digest = {
                                             let mut hasher = DefaultHasher::new();
                                             hasher.write(&buf[..nread]);
                                             hasher.finish()
                                         };
 
-                                        self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
+                                        self.tx.send(PeerEvent::Message {
+                                            peer,
+                                            message,
+                                            digest,
+                                        })
+                                        .await
+                                        .expect("channel to stay open");
                                     },
                                     Err(err) => {
                                         tracing::error!(
@@ -352,6 +353,9 @@ pub struct P2p {
 
     /// Pending peers.
     pending: HashMap<usize, PendingInfo>,
+
+    /// Seen messages.
+    seen: HashMap<MessageId, HashSet<PeerId>>,
 }
 
 impl P2p {
@@ -378,6 +382,7 @@ impl P2p {
             overseer_tx,
             peers: HashMap::new(),
             pending: HashMap::new(),
+            seen: HashMap::new(),
             peer_count: 0usize,
         }
     }
@@ -546,7 +551,7 @@ impl P2p {
                             protocols,
                         });
                     },
-                    PeerEvent::Message { peer, message } => {
+                    PeerEvent::Message { peer, message, digest } => {
                         tracing::trace!(
                             target: LOG_TARGET,
                             id = peer,
@@ -554,6 +559,16 @@ impl P2p {
                             "received message from peer",
                         );
 
+                        let peers = self.seen.entry(digest).or_insert(HashSet::new());
+                        peers.insert(peer);
+
+                        for (id, info) in &self.peers {
+                            if !peers.contains(id) {
+                                info.cmd_tx.send(PeerCommand::PublishMessage(
+                                    message.clone(),
+                                )).await.expect("channel to stay open");
+                            }
+                        }
                         self.overseer_tx.send(OverseerEvent::Message(Subsystem::P2p, message)).await.unwrap();
                     }
                 },

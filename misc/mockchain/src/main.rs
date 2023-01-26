@@ -12,8 +12,10 @@ const LOG_TARGET: &'static str = "overseer";
 //   - publish transaction
 //   - connect to peer
 //   - disconnect peer
-//
 //   - don't forward messages to source peers
+//
+//   - rework how message information is stored
+//   - verify multiple mockchains works together
 //
 // TODO: some day maybe
 //   - create genesis block and seed some accounts
