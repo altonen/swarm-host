@@ -40,6 +40,10 @@ struct Flags {
     /// Network port.
     #[clap(long)]
     p2p_port: u16,
+
+    /// Enable gossip subsystem.
+    #[clap(long)]
+    enable_gossip: bool,
 }
 
 #[tokio::main]
@@ -64,8 +68,10 @@ async fn main() {
     let p2p_tx = overseer_tx.clone();
     tokio::spawn(async move { p2p::P2p::new(socket, cmd_rx, p2p_tx).run().await });
 
-    let gossip_tx = overseer_tx.clone();
-    tokio::spawn(async move { gossip::GossipEngine::new(gossip_tx).run().await });
+    if flags.enable_gossip {
+        let gossip_tx = overseer_tx.clone();
+        tokio::spawn(async move { gossip::GossipEngine::new(gossip_tx).run().await });
+    }
 
     tokio::spawn(async move {
         rpc::run_server(overseer_tx, String::from("127.0.0.1"), flags.rpc_port).await

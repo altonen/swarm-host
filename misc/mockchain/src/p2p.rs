@@ -10,10 +10,7 @@ use tokio::{
 };
 
 use std::{
-    collections::{
-        hash_map::{DefaultHasher, Entry},
-        HashMap, HashSet,
-    },
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     net::SocketAddr,
 };
@@ -263,7 +260,6 @@ impl Peer {
                                         };
 
                                         self.seen.entry(digest).or_insert(HashSet::new()).insert(peer);
-                                        panic!("unexpected message type");
                                     },
                                     Err(err) => {
                                         tracing::error!(
