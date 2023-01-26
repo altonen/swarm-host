@@ -20,11 +20,13 @@ impl Chainstate {
     }
 
     pub fn import_block(&mut self, block: Block) -> Result<(), ()> {
-        todo!();
+        // TODO:
+        Ok(())
     }
 
     pub fn import_transaction(&mut self, transaction: Transaction) -> Result<(), ()> {
-        todo!();
+        // TODO:
+        Ok(())
     }
 
     pub fn produce_block(&mut self) -> Block {
