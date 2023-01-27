@@ -1,3 +1,5 @@
 /target
 misc/mockchain/Cargo.lock
 misc/mockchain/target
+__pycache__/
+*.py[cod]
