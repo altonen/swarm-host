@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use tokio::sync::oneshot;
+
 use std::net::IpAddr;
 
 /// Unique account ID.
@@ -73,6 +75,9 @@ pub enum Command {
 
     /// Publish generic message on the network
     PublishMessage(Message),
+
+    /// Get local peer ID.
+    GetLocalPeerId(oneshot::Sender<PeerId>),
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -120,11 +125,31 @@ pub enum Message {
     PeerExchange(Pex),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OverseerEvent {
     Message(Subsystem, Message),
     ConnectToPeer(String, u16),
     DisconnectPeer(PeerId),
+    GetLocalPeerId(oneshot::Sender<PeerId>),
+}
+
+impl PartialEq for OverseerEvent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                OverseerEvent::Message(subsystem1, message1),
+                OverseerEvent::Message(subsystem2, message2),
+            ) => subsystem1 == subsystem2 && message1 == message2,
+            (
+                OverseerEvent::ConnectToPeer(address1, port1),
+                OverseerEvent::ConnectToPeer(address2, port2),
+            ) => address1 == address2 && port1 == port2,
+            (OverseerEvent::DisconnectPeer(peer1), OverseerEvent::DisconnectPeer(peer2)) => {
+                peer1 == peer2
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

@@ -521,6 +521,9 @@ impl P2p {
                             )).await.expect("channel to stay open");
                         }
                     }
+                    Command::GetLocalPeerId(tx) => {
+                        tx.send(self.id).expect("channel to stay open");
+                    }
                 }
                 None => panic!("channel should stay open"),
             },

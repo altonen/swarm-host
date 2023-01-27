@@ -145,10 +145,18 @@ async fn main() {
                     .expect("channel to stay open");
             }
             OverseerEvent::DisconnectPeer(peer) => {
-                tracing::debug!(target: LOG_TARGET, id = peer, "disconnect peer",);
+                tracing::debug!(target: LOG_TARGET, id = peer, "disconnect peer");
 
                 cmd_tx
                     .send(Command::DisconnectPeer(peer))
+                    .await
+                    .expect("channel to stay open");
+            }
+            OverseerEvent::GetLocalPeerId(tx) => {
+                tracing::debug!(target: LOG_TARGET, "get local peer id");
+
+                cmd_tx
+                    .send(Command::GetLocalPeerId(tx))
                     .await
                     .expect("channel to stay open");
             }

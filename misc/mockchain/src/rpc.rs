@@ -1,7 +1,7 @@
 use crate::types::{OverseerEvent, PeerId};
 
 use jsonrpsee::server::{RpcModule, ServerBuilder};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 use std::net::SocketAddr;
 
@@ -50,6 +50,18 @@ pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, por
                 .await
                 .expect("channel to stay open");
             Result::<_, jsonrpsee::core::Error>::Ok("")
+        })
+        .unwrap();
+
+    module
+        .register_async_method("get_local_peer_id", |_params, ctx| async move {
+            tracing::info!(target: LOG_TARGET, "get local peer id");
+
+            let (tx, rx) = oneshot::channel();
+            ctx.send(OverseerEvent::GetLocalPeerId(tx))
+                .await
+                .expect("channel to stay open");
+            Result::<_, jsonrpsee::core::Error>::Ok(rx.await.expect("channel to stay open"))
         })
         .unwrap();
 
