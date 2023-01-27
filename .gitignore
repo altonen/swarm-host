@@ -1,1 +1,3 @@
 /target
+misc/mockchain/Cargo.lock
+misc/mockchain/target
