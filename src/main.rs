@@ -12,10 +12,9 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
-// TODO: create very simple mock blockchain
+// TODO: add ability to start these new blockchains programmatically
 // TODO: implement compat layer for swarm-host for this blockchain
 // TODO: create sybil/dummy.rs
-// TODO: create vision of the project's future
 // TODO: add prometheus metrics
 // TODO: fix warnings
 // TODO: run clippy
