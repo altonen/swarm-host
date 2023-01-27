@@ -57,21 +57,7 @@ struct Flags {
 async fn main() {
     let flags = Flags::parse();
 
-    if let Some(path) = flags.log_file {
-        let file_appender = tracing_appender::rolling::hourly("/tmp/", path.as_str());
-        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-        tracing_subscriber::fmt()
-            .with_writer(non_blocking)
-            .try_init()
-            .expect("to succeed");
-    } else {
-        let subscriber = tracing_subscriber::registry()
-            .with(tracing_subscriber::EnvFilter::from_default_env())
-            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE));
-
-        subscriber.try_init().expect("to succeed");
-    }
+    tracing_subscriber::fmt::init();
 
     // start overseer
     let (overseer_tx, mut overseer_rx) = mpsc::channel(64);
