@@ -7,6 +7,7 @@ use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 const LOG_TARGET: &'static str = "overseer";
 
 // TODO: mitä kaikkea täytyy olla implmentoituna:
+//  - add proper logging support
 //   - bind to interface
 //   - publish block
 //   - publish transaction
@@ -46,17 +47,31 @@ struct Flags {
     /// Enable gossip subsystem.
     #[clap(long)]
     enable_gossip: bool,
+
+    /// Write logs to file.
+    #[clap(long)]
+    log_file: Option<String>,
 }
 
 #[tokio::main]
 async fn main() {
     let flags = Flags::parse();
 
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE))
-        .try_init()
-        .expect("to succeed");
+    if let Some(path) = flags.log_file {
+        let file_appender = tracing_appender::rolling::hourly("/tmp/", path.as_str());
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+        tracing_subscriber::fmt()
+            .with_writer(non_blocking)
+            .try_init()
+            .expect("to succeed");
+    } else {
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_subscriber::EnvFilter::from_default_env())
+            .with(tracing_subscriber::fmt::layer().with_span_events(FmtSpan::NEW | FmtSpan::CLOSE));
+
+        subscriber.try_init().expect("to succeed");
+    }
 
     // start overseer
     let (overseer_tx, mut overseer_rx) = mpsc::channel(64);
