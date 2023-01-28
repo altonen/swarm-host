@@ -64,12 +64,13 @@ async fn main() {
 
     // start p2p
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
-    let socket = TcpListener::bind(format!("127.0.0.1:{}", flags.p2p_port))
+    let address = format!("127.0.0.1:{}", flags.p2p_port);
+    let socket = TcpListener::bind(address.clone())
         .await
         .unwrap();
 
     let p2p_tx = overseer_tx.clone();
-    tokio::spawn(async move { p2p::P2p::new(socket, cmd_rx, p2p_tx).run().await });
+    tokio::spawn(async move { p2p::P2p::new(socket, address, cmd_rx, p2p_tx).run().await });
 
     if flags.enable_gossip {
         let gossip_tx = overseer_tx.clone();
@@ -157,6 +158,14 @@ async fn main() {
 
                 cmd_tx
                     .send(Command::GetLocalPeerId(tx))
+                    .await
+                    .expect("channel to stay open");
+            }
+            OverseerEvent::GetLocalAddress(tx) => {
+                tracing::debug!(target: LOG_TARGET, "get local address");
+
+                cmd_tx
+                    .send(Command::GetLocalAddress(tx))
                     .await
                     .expect("channel to stay open");
             }

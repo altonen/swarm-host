@@ -340,6 +340,7 @@ struct PeerInfo {
 pub struct P2p {
     id: PeerId,
     listener: TcpListener,
+    address: String,
     cmd_rx: Receiver<Command>,
     peer_tx: Sender<PeerEvent>,
     peer_rx: Receiver<PeerEvent>,
@@ -361,6 +362,7 @@ pub struct P2p {
 impl P2p {
     pub fn new(
         listener: TcpListener,
+        address: String,
         cmd_rx: Receiver<Command>,
         overseer_tx: Sender<OverseerEvent>,
     ) -> Self {
@@ -376,6 +378,7 @@ impl P2p {
         Self {
             id,
             listener,
+            address,
             cmd_rx,
             peer_rx,
             peer_tx,
@@ -523,6 +526,9 @@ impl P2p {
                     }
                     Command::GetLocalPeerId(tx) => {
                         tx.send(self.id).expect("channel to stay open");
+                    }
+                    Command::GetLocalAddress(tx) => {
+                        tx.send(self.address.clone()).expect("channel to stay open");
                     }
                 }
                 None => panic!("channel should stay open"),

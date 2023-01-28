@@ -65,5 +65,17 @@ pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, por
         })
         .unwrap();
 
+    module
+        .register_async_method("get_local_address", |_params, ctx| async move {
+            tracing::info!(target: LOG_TARGET, "get local address");
+
+            let (tx, rx) = oneshot::channel();
+            ctx.send(OverseerEvent::GetLocalAddress(tx))
+                .await
+                .expect("channel to stay open");
+            Result::<_, jsonrpsee::core::Error>::Ok(rx.await.expect("channel to stay open"))
+        })
+        .unwrap();
+
     server.start(module).unwrap().stopped().await;
 }

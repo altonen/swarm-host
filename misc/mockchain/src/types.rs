@@ -78,6 +78,9 @@ pub enum Command {
 
     /// Get local peer ID.
     GetLocalPeerId(oneshot::Sender<PeerId>),
+
+    /// Get local address.
+    GetLocalAddress(oneshot::Sender<String>),
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -131,6 +134,7 @@ pub enum OverseerEvent {
     ConnectToPeer(String, u16),
     DisconnectPeer(PeerId),
     GetLocalPeerId(oneshot::Sender<PeerId>),
+    GetLocalAddress(oneshot::Sender<String>),
 }
 
 impl PartialEq for OverseerEvent {
