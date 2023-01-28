@@ -30,9 +30,21 @@ class MockChain:
     def __del__(self):
         self.process.terminate()
 
-	# connect to node at "address:port"
-    def connect(self, address, port):
-        print("connect to peer")
+	# connect to remote node
+    def connect(self, address):
+        # TODO: params
+        response = requests.post(
+            "http://localhost:%d/" % (self.rpc_port),
+            json=request(
+                "connect",
+                params=[address],
+            )
+        )
+        if "result" in response.json():
+            return response.json()["result"]
+        elif "error" in response.json():
+            return response.json()["error"]
+        return None
 
 	# get local address
     def get_local_address(self):
@@ -47,7 +59,3 @@ class MockChain:
 	# get list of peers the local node is connected to
     def get_peers(self):
         return None
-
-	# TODO: move to util?
-    def verify_connected(self, peer):
-        print("verify that peer connected")
