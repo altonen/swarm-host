@@ -20,22 +20,24 @@ pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: String, por
     let mut module = RpcModule::new(overseer_tx);
 
     module
-        .register_async_method("connect_to_peer", |params, ctx| async move {
+        .register_async_method("connect", |params, ctx| async move {
             let mut params = params.sequence();
-            let address: String = params.next().expect("addres");
-            let port: u16 = params.next().expect("port");
+            let address: String = params.next().expect("address");
 
             tracing::info!(
                 target: LOG_TARGET,
-                address = ?address,
-                port = ?port,
-                "attempt to establish connection to peer"
+                address = address,
+                "connect to remote node"
             );
 
-            ctx.send(OverseerEvent::ConnectToPeer(address, port))
+            let (tx, rx) = oneshot::channel();
+            ctx.send(OverseerEvent::ConnectToPeer(address, tx))
                 .await
                 .expect("channel to stay open");
-            Result::<_, jsonrpsee::core::Error>::Ok("")
+            match rx.await.expect("channel to stay open") {
+                Ok(_) => Result::<_, jsonrpsee::core::Error>::Ok(()),
+                Err(err) => Err(jsonrpsee::core::Error::Custom(err)),
+            }
         })
         .unwrap();
 

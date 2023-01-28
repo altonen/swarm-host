@@ -71,7 +71,7 @@ pub enum Command {
 
     /// Attempt to establish connection with a peer.
     // TODO: `oneshot::Sender` for result?
-    ConnectToPeer(String, u16),
+    ConnectToPeer(String, oneshot::Sender<Result<(), String>>),
 
     /// Publish generic message on the network
     PublishMessage(Message),
@@ -131,7 +131,7 @@ pub enum Message {
 #[derive(Debug)]
 pub enum OverseerEvent {
     Message(Subsystem, Message),
-    ConnectToPeer(String, u16),
+    ConnectToPeer(String, oneshot::Sender<Result<(), String>>),
     DisconnectPeer(PeerId),
     GetLocalPeerId(oneshot::Sender<PeerId>),
     GetLocalAddress(oneshot::Sender<String>),
@@ -145,9 +145,9 @@ impl PartialEq for OverseerEvent {
                 OverseerEvent::Message(subsystem2, message2),
             ) => subsystem1 == subsystem2 && message1 == message2,
             (
-                OverseerEvent::ConnectToPeer(address1, port1),
-                OverseerEvent::ConnectToPeer(address2, port2),
-            ) => address1 == address2 && port1 == port2,
+                OverseerEvent::ConnectToPeer(address1, _),
+                OverseerEvent::ConnectToPeer(address2, _),
+            ) => address1 == address2,
             (OverseerEvent::DisconnectPeer(peer1), OverseerEvent::DisconnectPeer(peer2)) => {
                 peer1 == peer2
             }

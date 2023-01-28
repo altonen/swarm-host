@@ -65,9 +65,7 @@ async fn main() {
     // start p2p
     let (cmd_tx, cmd_rx) = mpsc::channel(64);
     let address = format!("127.0.0.1:{}", flags.p2p_port);
-    let socket = TcpListener::bind(address.clone())
-        .await
-        .unwrap();
+    let socket = TcpListener::bind(address.clone()).await.unwrap();
 
     let p2p_tx = overseer_tx.clone();
     tokio::spawn(async move { p2p::P2p::new(socket, address, cmd_rx, p2p_tx).run().await });
@@ -132,16 +130,15 @@ async fn main() {
                         .expect("channel to stay open");
                 }
             }
-            OverseerEvent::ConnectToPeer(address, port) => {
+            OverseerEvent::ConnectToPeer(address, tx) => {
                 tracing::debug!(
                     target: LOG_TARGET,
                     address = address,
-                    port = port,
                     "attempt to connect to remote peer",
                 );
 
                 cmd_tx
-                    .send(Command::ConnectToPeer(address, port))
+                    .send(Command::ConnectToPeer(address, tx))
                     .await
                     .expect("channel to stay open");
             }

@@ -476,16 +476,15 @@ impl P2p {
                             );
                         }
                     },
-                    Command::ConnectToPeer(address, port) => {
+                    Command::ConnectToPeer(address, tx) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             address = ?address,
-                            port = port,
                             "attempt to connect to peer",
                         );
 
                         // TODO: verify that `address:port` is not self
-                        let address: SocketAddr = format!("{}:{}", address, port).parse().unwrap();
+                        let address: SocketAddr = address.parse().unwrap();
 
                         match tokio::time::timeout(
                             std::time::Duration::from_secs(5),
@@ -498,6 +497,7 @@ impl P2p {
                                         "connection established with remote peer",
                                     );
 
+                                    tx.send(Ok(())).expect("channel to stay open");
                                     self.spawn_peer(stream, address, ConnectionType::Outbound);
                                 }
                                 Err(err) => {
@@ -506,6 +506,7 @@ impl P2p {
                                         err = ?err,
                                         "failed to establish connection with remote peer",
                                     );
+                                    tx.send(Err(String::from("connection refused"))).expect("channel to stay open");
                                 }
                             }
                             Err(err) => {
@@ -514,6 +515,7 @@ impl P2p {
                                     err = ?err,
                                     "failed to establish connection with remote peer",
                                 );
+                                tx.send(Err(String::from("timeout"))).expect("channel to stay open");
                             }
                         }
                     }
