@@ -12,7 +12,13 @@ use tokio::{
 
 use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 
-// TODO: add ability to start these new blockchains programmatically
+// TODO: think about architecture for this project:
+//  - swarm-host is started
+//  - peers connect to it
+//  - swarm-host relays traffic between the nodes
+//    - full bypass mode
+//    - how to install custom filters for traffic?
+
 // TODO: implement compat layer for swarm-host for this blockchain
 // TODO: create sybil/dummy.rs
 // TODO: add prometheus metrics
@@ -25,6 +31,7 @@ const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
 const LOG_TARGET: &'static str = "swarm-host";
 
+mod backend;
 mod sybil;
 mod types;
 
