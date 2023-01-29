@@ -1,7 +1,8 @@
 #![allow(unused)]
 
-use crate::types::PeerId;
+use crate::{backend::NetworkBackendType, types::PeerId};
 
+use clap::Parser;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tokio::{
@@ -35,128 +36,29 @@ mod backend;
 mod sybil;
 mod types;
 
-// TODO: find a better way to implement this
-// TODO: this needs to be generic over event?
-struct SybilEntry {
-    // TODO: better type
-    id: u8,
-    tx_iface: Sender<sybil::types::Event>,
-    tx_node: Sender<sybil::types::Event>,
-    tx_msg: Sender<(String, String)>,
-}
+#[derive(Parser)]
+struct Flags {
+    /// RPC port.
+    #[clap(long)]
+    rpc_port: u16,
 
-// TODO: documentation
-struct NodeEntry {
-    id: PeerId,
-    protocols: Vec<String>,
-    tx: Sender<(String, String)>,
+    #[clap(long)]
+    backend: NetworkBackendType,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let _ = tracing_subscriber::fmt()
+    let flags = Flags::parse();
+
+    // initialize logging
+    tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+        .try_init()
+        .expect("to succeed");
 
-    // TODO: clean this code
-    let (tx, mut rx) = mpsc::channel(32);
-    let mut id = 1;
-    let mut entries = HashMap::new();
-    let mut nodes = HashMap::new();
-
-    for i in 0..1 {
-        let (itx, irx) = mpsc::channel(64);
-        let (ntx, nrx) = mpsc::channel(64);
-        let (mtx, mrx) = mpsc::channel(64);
-
-        let mut interface = sybil::interface::Interface::new(
-            TcpListener::bind(format!("127.0.0.1:{}", TCP_START + i)).await?,
-            irx,
-            tx.clone(),
-        );
-
-        let mut node = sybil::Node::new(nrx, mrx, tx.clone(), Duration::from_secs(5));
-
-        tokio::spawn(async move { interface.run().await });
-        tokio::spawn(async move { node.run().await });
-
-        let node_id = id;
-        id += 1;
-
-        entries.insert(
-            id,
-            SybilEntry {
-                id,
-                tx_iface: itx,
-                tx_node: ntx,
-                tx_msg: mtx,
-            },
-        );
-    }
-
-    loop {
-        match rx.recv().await.expect("channel to stay open") {
-            sybil::types::Event::Connected {
-                peer,
-                protocols,
-                tx,
-            } => {
-                tracing::info!(target: LOG_TARGET, id = peer, protocols = ?protocols, "peer connected");
-
-                nodes.insert(
-                    peer,
-                    NodeEntry {
-                        id: peer,
-                        protocols,
-                        tx,
-                    },
-                );
-            }
-            sybil::types::Event::Disconnected(peer) => {
-                tracing::info!(target: LOG_TARGET, peer = peer, "peer disconnected");
-
-                nodes.remove(&peer);
-            }
-            sybil::types::Event::Message {
-                protocol,
-                message,
-                peer,
-            } => {
-                tracing::trace!(
-                    target: LOG_TARGET,
-                    id = peer,
-                    protocol = protocol,
-                    "received message from node"
-                );
-
-                for (id, node) in &mut entries {
-                    node.tx_msg
-                        .send((protocol.clone(), message.clone()))
-                        .await
-                        .unwrap();
-                }
-            }
-            sybil::types::Event::SybilMessage {
-                message,
-                protocol,
-                peer,
-            } => {
-                tracing::trace!(
-                    target: LOG_TARGET,
-                    id = peer,
-                    protocol = protocol,
-                    "received message from sybil node"
-                );
-
-                for (id, node) in &mut nodes {
-                    node.tx
-                        .send((protocol.clone(), message.clone()))
-                        .await
-                        .unwrap();
-                }
-            }
-        }
-    }
+    // TODO: start rpc server
+    // TODO: start correct backend
+    // TODO: start correct interfaces
 
     Ok(())
 }
