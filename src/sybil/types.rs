@@ -1,3 +1,4 @@
+/*
 use crate::types::PeerId;
 
 use serde::{Deserialize, Serialize};
@@ -58,3 +59,4 @@ pub enum Message {
         protocols: Vec<String>,
     },
 }
+*/

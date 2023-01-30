@@ -22,7 +22,6 @@ use std::net::SocketAddr;
 
 mod backend;
 mod rpc;
-mod sybil;
 mod types;
 
 #[derive(Parser)]
