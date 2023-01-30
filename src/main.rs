@@ -1,17 +1,8 @@
-#![allow(unused)]
-
-use crate::{backend::NetworkBackendType, types::PeerId};
+use crate::{backend::NetworkBackendType, rpc::run_server};
 
 use clap::Parser;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use tokio::{
-    io::AsyncReadExt,
-    net::TcpListener,
-    sync::mpsc::{self, Receiver, Sender},
-};
 
-use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
+use std::net::SocketAddr;
 
 // TODO: think about architecture for this project:
 //  - swarm-host is started
@@ -28,10 +19,6 @@ use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 // TODO: unitfy naming
 // TODO: document code
 // TODO: get rid of unneeded dependencies
-
-const NUM_SYBIL: usize = 3usize;
-const TCP_START: u16 = 55_555;
-const LOG_TARGET: &'static str = "swarm-host";
 
 mod backend;
 mod rpc;
@@ -50,7 +37,7 @@ struct Flags {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() {
     let flags = Flags::parse();
 
     // initialize logging
@@ -59,9 +46,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .try_init()
         .expect("to succeed");
 
-    // TODO: start rpc server
-    // TODO: start correct backend
-    // TODO: start correct interfaces
+    tokio::spawn(async move {
+        run_server(
+            format!("127.0.0.1:{}", flags.rpc_port)
+                .parse::<SocketAddr>()
+                .expect("valid address"),
+        )
+        .await;
+    });
 
-    Ok(())
+    // TODO: start correct backend
+    // TODO: think about architecture
+    // TODO: start correct interfaces
 }
