@@ -27,12 +27,14 @@ use std::{collections::HashMap, error::Error, pin::Pin, time::Duration};
 // TODO: run clippy
 // TODO: unitfy naming
 // TODO: document code
+// TODO: get rid of unneeded dependencies
 
 const NUM_SYBIL: usize = 3usize;
 const TCP_START: u16 = 55_555;
 const LOG_TARGET: &'static str = "swarm-host";
 
 mod backend;
+mod rpc;
 mod sybil;
 mod types;
 
@@ -42,6 +44,7 @@ struct Flags {
     #[clap(long)]
     rpc_port: u16,
 
+    /// Network backend type.
     #[clap(long)]
     backend: NetworkBackendType,
 }
