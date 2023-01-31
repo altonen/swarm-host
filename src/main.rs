@@ -1,4 +1,11 @@
-use crate::{backend::NetworkBackendType, rpc::run_server};
+#![allow(unused)]
+
+use crate::{
+    backend::{mockchain::MockchainBackend, NetworkBackendType},
+    overseer::Overseer,
+    rpc::run_server,
+    types::Error,
+};
 
 use clap::Parser;
 
@@ -21,9 +28,13 @@ use std::net::SocketAddr;
 // TODO: get rid of unneeded dependencies
 
 mod backend;
+mod overseer;
 mod rpc;
 mod types;
 mod utils;
+
+/// Global result type.
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Parser)]
 struct Flags {
@@ -46,16 +57,15 @@ async fn main() {
         .try_init()
         .expect("to succeed");
 
-    tokio::spawn(async move {
+    let (mut overseer, tx) = Overseer::<MockchainBackend>::new();
+
+    tokio::join!(
+        overseer.run(),
         run_server(
+            tx,
             format!("127.0.0.1:{}", flags.rpc_port)
                 .parse::<SocketAddr>()
                 .expect("valid address"),
-        )
-        .await;
-    });
-
-    // TODO: start correct backend
-    // TODO: think about architecture
-    // TODO: start correct interfaces
+        ),
+    );
 }

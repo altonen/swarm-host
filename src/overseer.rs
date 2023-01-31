@@ -24,7 +24,7 @@ pub struct Overseer<T: NetworkBackend> {
     /// RX channel for receiving events from RPC.
     overseer_rx: Receiver<OverseerEvent>,
 
-    /// Spawned interface handles.
+    /// Handles for spawned interfaces.
     interfaces: HashMap<T::InterfaceId, T::InterfaceHandle>,
 
     /// Event streams for spawned interfaces.
@@ -32,54 +32,51 @@ pub struct Overseer<T: NetworkBackend> {
 }
 
 impl<T: NetworkBackend> Overseer<T> {
-    pub fn new(backend: T) -> Self {
-        let (_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+    pub fn new() -> (Self, Sender<OverseerEvent>) {
+        let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-        Self {
-            backend,
-            overseer_rx,
-            interfaces: HashMap::new(),
-            event_streams: FuturesOrdered::new(),
-        }
+        (
+            Self {
+                backend: T::new(),
+                overseer_rx,
+                interfaces: HashMap::new(),
+                event_streams: FuturesOrdered::new(),
+            },
+            overseer_tx,
+        )
     }
 
-    pub async fn _run(mut self) {
+    pub async fn run(mut self) {
         tracing::info!(target: LOG_TARGET, "starting overseer");
 
         loop {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
-                    OverseerEvent::CreateInterface { address, result: _ } => {
+                    OverseerEvent::CreateInterface { address, result } => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             address = ?address,
                             "create new interface for swarm-host",
                         );
 
-                        match self.backend.spawn_interface(address) {
-                            Ok(handle) => {
-                                let event_stream = handle.event_stream();
-                                let id = *handle.id();
-
-                                match self.interfaces.entry(id) {
-                                    Entry::Vacant(entry) => {
-                                        entry.insert(handle);
-                                        self.event_streams.push_back(event_stream);
-                                    }
-                                    _ => tracing::error!(
-                                        target: LOG_TARGET,
-                                        id = ?id,
-                                        "duplicate interface id"
-                                    ),
-                                }
-                            }
-                            Err(err) => {
-                                tracing::error!(
+                        match self.backend.spawn_interface(address).await {
+                            Ok(handle) => match self.interfaces.entry(*handle.id()) {
+                                Entry::Vacant(entry) => {
+                                    self.event_streams.push_back(handle.event_stream());
+                                    entry.insert(handle);
+                                    // TODO: send result
+                                },
+                                Entry::Occupied(_) => tracing::error!(
                                     target: LOG_TARGET,
-                                    error = ?err,
-                                    "failed to start interface"
-                                );
+                                    id = ?*handle.id(),
+                                    "duplicate interface id"
+                                ),
                             }
+                            Err(err) => tracing::error!(
+                                target: LOG_TARGET,
+                                error = ?err,
+                                "failed to start interface"
+                            ),
                         }
                     }
                 },
@@ -112,6 +109,10 @@ impl<T: NetworkBackend> Overseer<T> {
                             "message received from peer to interface"
                         );
 
+                        // TODO: routing table?
+                        // TODO: peer id-based filtering?
+                        // TODO: packet-based filtering?
+                        // TODO: more complicated filtering?
                         todo!("handle message");
                     }
                 }
