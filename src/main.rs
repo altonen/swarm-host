@@ -23,6 +23,7 @@ use std::net::SocketAddr;
 mod backend;
 mod rpc;
 mod types;
+mod utils;
 
 #[derive(Parser)]
 struct Flags {
