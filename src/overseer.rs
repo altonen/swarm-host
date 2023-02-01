@@ -5,7 +5,7 @@ use crate::{
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
-use futures::{stream::FuturesOrdered, Stream, StreamExt};
+use futures::{stream::SelectAll, FutureExt, Stream, StreamExt};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use std::{
@@ -31,7 +31,7 @@ pub struct Overseer<T: NetworkBackend> {
     interfaces: HashMap<T::InterfaceId, T::InterfaceHandle>,
 
     /// Event streams for spawned interfaces.
-    event_streams: FuturesOrdered<Pin<Box<dyn Future<Output = InterfaceEvent<T>>>>>,
+    event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
 }
 
 impl<T: NetworkBackend> Overseer<T> {
@@ -43,7 +43,7 @@ impl<T: NetworkBackend> Overseer<T> {
                 backend: T::new(),
                 overseer_rx,
                 interfaces: HashMap::new(),
-                event_streams: FuturesOrdered::new(),
+                event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
             },
             overseer_tx,
@@ -76,19 +76,21 @@ impl<T: NetworkBackend> Overseer<T> {
                                     "duplicate interface id"
                                 ),
                             }
-                            Err(err) => tracing::error!(
-                                target: LOG_TARGET,
-                                error = ?err,
-                                "failed to start interface"
-                            ),
+                            Err(err) => {
+                                tracing::error!(
+                                    target: LOG_TARGET,
+                                    error = ?err,
+                                    "failed to start interface"
+                                );
+                            },
                         }
                     }
                     OverseerEvent::Message { peer, interface, message } => {
                         todo!();
                     }
                 },
-                event = self.event_streams.select_next_some() => match event {
-                    InterfaceEvent::PeerConnected { peer, interface } => {
+                event = self.event_streams.next() => match event {
+                    Some(InterfaceEvent::PeerConnected { peer, interface }) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             peer_id = ?peer,
@@ -98,7 +100,7 @@ impl<T: NetworkBackend> Overseer<T> {
 
                         todo!("handle peer connected event");
                     }
-                    InterfaceEvent::PeerDisconnected { peer, interface } => {
+                    Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             peer_id = ?peer,
@@ -108,7 +110,7 @@ impl<T: NetworkBackend> Overseer<T> {
 
                         todo!("handle peer disconnected event");
                     }
-                    InterfaceEvent::MessageReceived { peer, interface, message } => {
+                    Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             peer_id = ?peer,
@@ -122,6 +124,7 @@ impl<T: NetworkBackend> Overseer<T> {
                         // TODO: more complicated filtering?
                         todo!("handle message");
                     }
+                    _ => {},//tracing::error!(target: LOG_TARGET, "here"),
                 }
             }
         }
