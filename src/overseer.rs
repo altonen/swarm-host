@@ -56,7 +56,7 @@ impl<T: NetworkBackend> Overseer<T> {
                         tracing::debug!(
                             target: LOG_TARGET,
                             address = ?address,
-                            "create new interface for swarm-host",
+                            "create new interface",
                         );
 
                         match self.backend.spawn_interface(address).await {
