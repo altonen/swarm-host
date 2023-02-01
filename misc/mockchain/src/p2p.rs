@@ -1,8 +1,9 @@
 use crate::types::{
     Block, Command, Message, MessageId, OverseerEvent, PeerId, Subsystem, Transaction,
 };
-use rand::Rng;
 
+use rand::Rng;
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -50,7 +51,7 @@ enum PeerEvent {
     Connected {
         key: usize,
         peer: PeerId,
-        protocols: Vec<String>,
+        protocols: Vec<ProtocolId>,
     },
 
     Message {
@@ -58,6 +59,28 @@ enum PeerEvent {
         message: Message,
         digest: u64,
     },
+}
+
+/// Supported protocols.
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+enum ProtocolId {
+    /// Transaction protocol.
+    Transaction,
+
+    /// Block protocol.
+    Block,
+
+    /// Peer exchange protocol.
+    PeerExchange,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct Handshake {
+    /// Unique ID of the peer.
+    peer: PeerId,
+
+    /// Supported protocols of the peer.
+    protocols: Vec<ProtocolId>,
 }
 
 // TODO: document
@@ -79,7 +102,7 @@ enum PeerState {
         peer: PeerId,
 
         /// Supported protocols.
-        protocols: Vec<String>,
+        protocols: Vec<ProtocolId>,
     },
 }
 
@@ -113,11 +136,17 @@ impl Peer {
         let state = match connection_type {
             ConnectionType::Inbound => PeerState::Uninitialized { key },
             ConnectionType::Outbound => {
-                let handshake = format!("{},/tx/1.0.0,/block/1.0.0", id);
-                socket
-                    .write(handshake.as_bytes())
-                    .await
-                    .expect("stream to stay open");
+                let handshake = serde_cbor::to_vec(&Handshake {
+                    peer: id,
+                    protocols: vec![
+                        ProtocolId::Transaction,
+                        ProtocolId::Block,
+                        ProtocolId::PeerExchange,
+                    ],
+                })
+                .expect("encode to succeed");
+
+                socket.write(&handshake).await.expect("stream to stay open");
                 PeerState::HandshakeSent { key }
             }
         };
@@ -155,31 +184,29 @@ impl Peer {
                     Ok(nread) => {
                         match self.state {
                             PeerState::Uninitialized { key } | PeerState::HandshakeSent { key } => {
-                                // TODO: remove unwraps
-                                // the first message read is the handshake which contains peer information
-                                // such as peer ID and supported protocols.
-                                //
-                                // for this implementation, it's a comma-separated list of values:
-                                //   <peer id>,<protocol 1>,<protocol 2>,<protocol 3>
-                                let payload =
-                                    std::str::from_utf8(&buf[..nread]).expect("valid utf-8 string");
-                                let handshake = payload.split(",").collect::<Vec<&str>>();
-                                let peer = handshake
-                                    .get(0)
-                                    .expect("peer id to exist")
-                                    .parse::<PeerId>()
-                                    .expect("valid peer id");
-                                let protocols: Vec<String> =
-                                    handshake[1..].into_iter().map(|&x| x.into()).collect();
+                                let handshake: Handshake = serde_cbor::from_slice(&buf[..nread]).expect("valid handshake");
+                                let peer = handshake.peer;
+                                let protocols = handshake.protocols;
 
                                 tracing::debug!(target: LOG_TARGET, id = peer, protocols = ?protocols, "node connected");
 
                                 if std::matches!(self.state, PeerState::Uninitialized { .. }) {
-                                    let handshake = format!("{},/tx/1.0.0,/block/1.0.0", self.id);
-                                    self.socket
-                                        .write(handshake.as_bytes())
-                                        .await
-                                        .expect("stream to stay open");
+                                    let handshake = serde_cbor::to_vec(&Handshake {
+                                        peer: self.id,
+                                        protocols: vec![
+                                            ProtocolId::Transaction,
+                                            ProtocolId::Block,
+                                            ProtocolId::PeerExchange,
+                                        ],
+                                    })
+                                    .expect("encode to succeed");
+
+                                    self.socket.write(&handshake).await.expect("stream to stay open");
+                                    // let handshake = format!("{},/tx/1.0.0,/block/1.0.0", self.id);
+                                    // self.socket
+                                    //     .write(handshake.as_bytes())
+                                    //     .await
+                                    //     .expect("stream to stay open");
                                 }
 
                                 self.tx
@@ -274,7 +301,7 @@ impl Peer {
                         }
                     }
                     Err(err) => {
-                        tracing::error!(target: LOG_TARGET, err = ?err, "falied to read from opened stream");
+                        tracing::error!(target: LOG_TARGET, err = ?err, "failed to read from opened stream");
                     }
                 },
                 result = self.cmd_rx.recv() => match result {
@@ -334,7 +361,7 @@ struct PendingInfo {
 struct PeerInfo {
     peer: PeerId,
     cmd_tx: Sender<PeerCommand>,
-    protocols: Vec<String>,
+    protocols: Vec<ProtocolId>,
 }
 
 pub struct P2p {
@@ -592,6 +619,7 @@ impl P2p {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::oneshot;
     use tracing_subscriber::{fmt::format::FmtSpan, prelude::*};
 
     #[tokio::test]
@@ -605,7 +633,7 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, _overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -615,8 +643,17 @@ mod tests {
         assert_eq!(p2p.pending.len(), 1);
         assert_eq!(p2p.peers.len(), 0);
 
-        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0\n");
-        stream.write(message.as_bytes()).await.unwrap();
+        let handshake = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream.write(&handshake).await.expect("stream to stay open");
 
         // poll the next event
         p2p.poll_next().await;
@@ -631,8 +668,9 @@ mod tests {
         assert_eq!(
             peer.protocols,
             Vec::from(vec![
-                String::from("/proto/0.1.0"),
-                String::from("/proto2/1.0.0")
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
             ]),
         );
     }
@@ -648,7 +686,7 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, _overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -658,8 +696,17 @@ mod tests {
         assert_eq!(p2p.pending.len(), 1);
         assert_eq!(p2p.peers.len(), 0);
 
-        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0\n");
-        stream.write(message.as_bytes()).await.unwrap();
+        let handshake = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream.write(&handshake).await.expect("stream to stay open");
 
         // poll the next event
         p2p.poll_next().await;
@@ -674,8 +721,9 @@ mod tests {
         assert_eq!(
             peer.protocols,
             Vec::from(vec![
-                String::from("/proto/0.1.0"),
-                String::from("/proto2/1.0.0")
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
             ]),
         );
 
@@ -702,7 +750,7 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (_cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, mut overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -712,8 +760,17 @@ mod tests {
         assert_eq!(p2p.pending.len(), 1);
         assert_eq!(p2p.peers.len(), 0);
 
-        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0");
-        stream.write(message.as_bytes()).await.unwrap();
+        let handshake = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream.write(&handshake).await.expect("stream to stay open");
 
         // poll the next event
         p2p.poll_next().await;
@@ -734,9 +791,10 @@ mod tests {
 
         assert_eq!(
             overseer_rx.try_recv(),
-            Ok(OverseerEvent::Message(Message::Transaction(
-                Transaction::new(0, 1, 1337)
-            ))),
+            Ok(OverseerEvent::Message(
+                Subsystem::P2p,
+                Message::Transaction(Transaction::new(0, 1, 1337))
+            )),
         );
     }
 
@@ -751,7 +809,7 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, _overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
         let conn = TcpStream::connect("127.0.0.1:8888");
 
         let (_, res2) = tokio::join!(p2p.poll_next(), conn);
@@ -761,11 +819,29 @@ mod tests {
         assert_eq!(p2p.pending.len(), 1);
         assert_eq!(p2p.peers.len(), 0);
 
-        let message = String::from("11,/proto/0.1.0,/proto2/1.0.0");
-        stream.write(message.as_bytes()).await.unwrap();
+        let handshake = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream.write(&handshake).await.expect("stream to stay open");
 
         // poll the next event
         p2p.poll_next().await;
+
+        let mut buf = vec![0u8; 1024];
+        match stream.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                let _message: Handshake = serde_cbor::from_slice(&buf[..nread]).unwrap();
+                // TODO: check handshake?
+            }
+        }
 
         assert_eq!(p2p.peer_count, 1);
         assert_eq!(p2p.pending.len(), 0);
@@ -781,16 +857,16 @@ mod tests {
         // poll the next event
         p2p.poll_next().await;
 
-        let mut buf = vec![0u8; 1024];
         match stream.read(&mut buf).await {
             Err(_) => panic!("should not fail"),
             Ok(nread) => {
+                println!("{nread}");
                 let message: Message = serde_cbor::from_slice(&buf[..nread]).unwrap();
 
                 assert_eq!(
                     message,
                     Message::Block(Block::from_transactions(vec![Transaction::new(1, 2, 1338)])),
-                )
+                );
             }
         }
     }
@@ -806,7 +882,7 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, _overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
 
         let conn = TcpStream::connect("127.0.0.1:8888");
         let (_, res1) = tokio::join!(p2p.poll_next(), conn);
@@ -820,18 +896,49 @@ mod tests {
         assert_eq!(p2p.pending.len(), 2);
         assert_eq!(p2p.peers.len(), 0);
 
-        stream1
-            .write(String::from("11,/proto/0.1.0,/proto2/1.0.0").as_bytes())
-            .await
-            .unwrap();
-        stream2
-            .write(String::from("22,/proto/0.1.0,/proto2/1.0.0").as_bytes())
-            .await
-            .unwrap();
+        let handshake1 = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        let handshake2 = serde_cbor::to_vec(&Handshake {
+            peer: 22u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream1.write(&handshake1).await.unwrap();
+        stream2.write(&handshake2).await.unwrap();
 
         // poll two next events
         p2p.poll_next().await;
         p2p.poll_next().await;
+
+        let mut buf = vec![0u8; 1024];
+        match stream1.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                let _message: Handshake = serde_cbor::from_slice(&buf[..nread]).unwrap();
+                // TODO: check handshake?
+            }
+        }
+        let mut buf = vec![0u8; 1024];
+        match stream2.read(&mut buf).await {
+            Err(_) => panic!("should not fail"),
+            Ok(nread) => {
+                let _message: Handshake = serde_cbor::from_slice(&buf[..nread]).unwrap();
+                // TODO: check handshake?
+            }
+        }
 
         assert_eq!(p2p.peer_count, 2);
         assert_eq!(p2p.pending.len(), 0);
@@ -889,11 +996,12 @@ mod tests {
         let socket = TcpListener::bind("127.0.0.1:8888").await.unwrap();
         let (cmd_tx, cmd_rx) = mpsc::channel(64);
         let (overseer_tx, _overseer_rx) = mpsc::channel(64);
-        let mut p2p = P2p::new(socket, cmd_rx, overseer_tx);
+        let mut p2p = P2p::new(socket, "127.0.0.1:8888".to_string(), cmd_rx, overseer_tx);
         let inbound = TcpListener::bind("127.0.0.1:9999").await.unwrap();
 
+        let (tx, _rx) = oneshot::channel();
         cmd_tx
-            .send(Command::ConnectToPeer(String::from("127.0.0.1"), 9999))
+            .send(Command::ConnectToPeer(String::from("127.0.0.1:9999"), tx))
             .await
             .unwrap();
         p2p.poll_next().await;
@@ -905,8 +1013,15 @@ mod tests {
             Err(_) => panic!("should not fail"),
             Ok(nread) => {
                 assert_eq!(
-                    std::str::from_utf8(&buf[..nread]).expect("valid utf-8 string"),
-                    format!("{},/tx/1.0.0,/block/1.0.0", p2p.id),
+                    serde_cbor::from_slice::<Handshake>(&buf[..nread]).unwrap(),
+                    Handshake {
+                        peer: p2p.id,
+                        protocols: vec![
+                            ProtocolId::Transaction,
+                            ProtocolId::Block,
+                            ProtocolId::PeerExchange,
+                        ],
+                    },
                 );
             }
         }
@@ -915,8 +1030,17 @@ mod tests {
         assert_eq!(p2p.pending.len(), 1);
         assert_eq!(p2p.peers.len(), 0);
 
-        let message = String::from("11,/tx/1.0.0,/block/1.0.0");
-        stream.write(message.as_bytes()).await.unwrap();
+        let handshake = serde_cbor::to_vec(&Handshake {
+            peer: 11u64,
+            protocols: vec![
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
+            ],
+        })
+        .expect("encode to succeed");
+
+        stream.write(&handshake).await.expect("stream to stay open");
 
         // poll the next event
         p2p.poll_next().await;
@@ -931,8 +1055,9 @@ mod tests {
         assert_eq!(
             peer.protocols,
             Vec::from(vec![
-                String::from("/tx/1.0.0"),
-                String::from("/block/1.0.0")
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::PeerExchange,
             ]),
         );
     }
