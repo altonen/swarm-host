@@ -2,6 +2,7 @@
 use crate::types::OverseerEvent;
 
 use futures::stream::Stream;
+use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::mpsc::Sender;
 
 use std::{fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin};
@@ -71,7 +72,7 @@ pub trait Interface<T: NetworkBackend> {
 
     /// Get access to the event stream of the interface.
     // TODO: think of something else, there is no need for multiple event streams.
-    fn event_stream(&self) -> Pin<Box<dyn Future<Output = InterfaceEvent<T>>>>;
+    fn event_stream(&mut self) -> Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>;
 }
 
 /// Traits which each network backend must implement.
@@ -79,15 +80,15 @@ pub trait Interface<T: NetworkBackend> {
 pub trait NetworkBackend {
     /// Unique ID identifying a peer.
     // TODO: `Serialize` + `Deserialize`?
-    type PeerId: Debug + Copy + Clone;
+    type PeerId: Debug + Copy + Clone + Send + Sync;
 
     /// Unique ID identifying the interface.
     // TODO: `Serialize` + `Deserialize`?
-    type InterfaceId: Debug + Copy + Clone + Eq + Hash;
+    type InterfaceId: Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Type identifying a message understood by the backend.
     // TODO: `Serialize` + `Deserialize`?
-    type Message: Clone;
+    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;
 
     /// Handle which allows communication with a spawned interface.
     type InterfaceHandle: Interface<Self>

@@ -16,9 +16,11 @@ use tokio::{
     },
     sync::mpsc::{self, Receiver, Sender},
 };
+use tokio_stream::wrappers::ReceiverStream;
 
 use std::{
     collections::{hash_map::Entry, HashMap},
+    fmt::Debug,
     future::Future,
     net::SocketAddr,
     pin::Pin,
@@ -100,12 +102,12 @@ struct Peer;
 
 impl Peer {
     // TODO: too many params? Refactor
-    pub async fn start(
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
+    pub async fn start<T: NetworkBackend + Debug>(
+        overseer_tx: Sender<OverseerEvent<T>>,
         iface_tx: Sender<PeerEvent>,
         mut stream: TcpStream,
         connection_type: ConnectionType,
-        iface_id: InterfaceId,
+        iface_id: T::InterfaceId,
     ) -> crate::Result<void::Void> {
         let mut buf = vec![0u8; 8 * 1024];
 
@@ -159,7 +161,7 @@ impl Peer {
                 Err(err) => tracing::warn!(
                     target: LOG_TARGET,
                     peer = handshake.peer,
-                    interface = iface_id,
+                    interface = ?iface_id,
                     err = ?err,
                     "peer send an invalid message",
                 ),
@@ -172,11 +174,11 @@ impl Peer {
 struct P2p;
 
 impl P2p {
-    pub fn start(
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
+    pub fn start<T: NetworkBackend + Debug>(
+        overseer_tx: Sender<OverseerEvent<T>>,
         iface_tx: Sender<PeerEvent>,
         listener: TcpListener,
-        iface_id: InterfaceId,
+        iface_id: T::InterfaceId,
     ) -> Self {
         tokio::spawn(async move {
             loop {
@@ -218,31 +220,38 @@ impl P2p {
     }
 }
 
-pub struct MockchainHandle {
+pub struct MockchainHandle<T: NetworkBackend> {
     /// Unique ID of the interface.
-    id: InterfaceId,
+    id: T::InterfaceId,
 
     /// Peer-to-peer functionality.
     p2p: P2p,
+
+    /// Event streams.
+    event_streams: Vec<Sender<InterfaceEvent<T>>>,
 }
 
-impl MockchainHandle {
+impl<T: NetworkBackend + Debug> MockchainHandle<T> {
     pub async fn new(
-        id: InterfaceId,
+        id: T::InterfaceId,
         address: SocketAddr,
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
+        overseer_tx: Sender<OverseerEvent<T>>,
     ) -> crate::Result<Self> {
         let listener = TcpListener::bind(address).await?;
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let p2p = P2p::start(overseer_tx, tx, listener, id);
 
-        Ok(Self { id, p2p })
+        Ok(Self {
+            id,
+            p2p,
+            event_streams: Vec::new(),
+        })
     }
 }
 
-impl<T: NetworkBackend> Interface<T> for MockchainHandle {
+impl<T: NetworkBackend<InterfaceId = InterfaceId>> Interface<T> for MockchainHandle<T> {
     fn id(&self) -> &T::InterfaceId {
-        todo!();
+        &self.id
     }
 
     fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
@@ -253,8 +262,11 @@ impl<T: NetworkBackend> Interface<T> for MockchainHandle {
         todo!();
     }
 
-    fn event_stream(&self) -> Pin<Box<dyn Future<Output = InterfaceEvent<T>>>> {
-        todo!();
+    fn event_stream(&mut self) -> Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>> {
+        let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        self.event_streams.push(tx);
+
+        Box::pin(ReceiverStream::new(rx))
     }
 }
 
@@ -286,7 +298,7 @@ impl NetworkBackend for MockchainBackend {
     type PeerId = PeerId;
     type InterfaceId = InterfaceId;
     type Message = Message;
-    type InterfaceHandle = MockchainHandle;
+    type InterfaceHandle = MockchainHandle<Self>;
 
     /// Create new [`MockchainBackend`].
     fn new() -> Self {
@@ -307,7 +319,7 @@ impl NetworkBackend for MockchainBackend {
         tracing::debug!(
             target: LOG_TARGET,
             address = ?address,
-            "spawn interface"
+            "create interface"
         );
 
         let id = self.next_interface_id();
