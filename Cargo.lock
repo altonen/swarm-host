@@ -1337,6 +1337,7 @@ dependencies = [
  "serde_cbor",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "tracing-subscriber",

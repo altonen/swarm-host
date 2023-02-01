@@ -59,13 +59,13 @@ async fn main() {
 
     let (mut overseer, tx) = Overseer::<MockchainBackend>::new();
 
-    tokio::join!(
-        overseer.run(),
-        run_server(
-            tx,
-            format!("127.0.0.1:{}", flags.rpc_port)
-                .parse::<SocketAddr>()
-                .expect("valid address"),
-        ),
-    );
+    tokio::spawn(async move { overseer.run().await });
+
+    run_server(
+        tx,
+        format!("127.0.0.1:{}", flags.rpc_port)
+            .parse::<SocketAddr>()
+            .expect("valid address"),
+    )
+    .await;
 }

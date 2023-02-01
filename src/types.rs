@@ -8,11 +8,6 @@ use std::net::SocketAddr;
 /// Default channel size.
 pub const DEFAULT_CHANNEL_SIZE: usize = 64;
 
-/// Interface ID.
-///
-/// Used to distinguish between different interfaces `swarm-host` provides.
-pub type InterfaceId = u8;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Invalid address: `{0}`")]
@@ -55,7 +50,7 @@ pub enum OverseerEvent<T: NetworkBackend> {
         address: SocketAddr,
 
         /// Unique interface ID.
-        result: oneshot::Sender<crate::Result<InterfaceId>>,
+        result: oneshot::Sender<crate::Result<T::InterfaceId>>,
     },
 
     /// Message received from one of the peers connected to `swarm-host's` interface.
