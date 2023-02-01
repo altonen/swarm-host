@@ -64,11 +64,16 @@ impl<T: NetworkBackend> Overseer<T> {
                         );
 
                         match self.backend.spawn_interface(address, self.overseer_tx.clone()).await {
-                            Ok(handle) => match self.interfaces.entry(*handle.id()) {
+                            Ok(mut handle) => match self.interfaces.entry(*handle.id()) {
                                 Entry::Vacant(entry) => {
-                                    self.event_streams.push_back(handle.event_stream());
+                                    tracing::trace!(
+                                        target: LOG_TARGET,
+                                        "interface created"
+                                    );
+
+                                    self.event_streams.push(handle.event_stream());
+                                    result.send(Ok(*handle.id())).expect("channel to stay open");
                                     entry.insert(handle);
-                                    // TODO: send result
                                 },
                                 Entry::Occupied(_) => tracing::error!(
                                     target: LOG_TARGET,
