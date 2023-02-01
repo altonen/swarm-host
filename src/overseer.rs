@@ -21,8 +21,11 @@ pub struct Overseer<T: NetworkBackend> {
     /// Network-specific functionality.
     backend: T,
 
-    /// RX channel for receiving events from RPC.
-    overseer_rx: Receiver<OverseerEvent>,
+    /// RX channel for receiving events from RPC and peers.
+    overseer_rx: Receiver<OverseerEvent<T>>,
+
+    /// TX channel for sending events to [`Overseer`].
+    overseer_tx: Sender<OverseerEvent<T>>,
 
     /// Handles for spawned interfaces.
     interfaces: HashMap<T::InterfaceId, T::InterfaceHandle>,
@@ -32,7 +35,7 @@ pub struct Overseer<T: NetworkBackend> {
 }
 
 impl<T: NetworkBackend> Overseer<T> {
-    pub fn new() -> (Self, Sender<OverseerEvent>) {
+    pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         (
@@ -41,6 +44,7 @@ impl<T: NetworkBackend> Overseer<T> {
                 overseer_rx,
                 interfaces: HashMap::new(),
                 event_streams: FuturesOrdered::new(),
+                overseer_tx: overseer_tx.clone(),
             },
             overseer_tx,
         )
@@ -59,7 +63,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             "create new interface",
                         );
 
-                        match self.backend.spawn_interface(address).await {
+                        match self.backend.spawn_interface(address, self.overseer_tx.clone()).await {
                             Ok(handle) => match self.interfaces.entry(*handle.id()) {
                                 Entry::Vacant(entry) => {
                                     self.event_streams.push_back(handle.event_stream());
@@ -78,6 +82,9 @@ impl<T: NetworkBackend> Overseer<T> {
                                 "failed to start interface"
                             ),
                         }
+                    }
+                    OverseerEvent::Message { peer, interface, message } => {
+                        todo!();
                     }
                 },
                 event = self.event_streams.select_next_some() => match event {

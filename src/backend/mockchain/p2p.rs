@@ -1,8 +1,8 @@
-use crate::types::{
+use crate::backend::mockchain::types::{
     Block, Command, Message, MessageId, OverseerEvent, PeerId, Subsystem, Transaction,
 };
-use rand::Rng;
 
+use rand::Rng;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},

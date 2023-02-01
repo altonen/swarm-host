@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::types::OverseerEvent;
+use crate::{backend::NetworkBackend, types::OverseerEvent};
 
 use jsonrpsee::server::{RpcModule, ServerBuilder};
 use tokio::sync::{mpsc::Sender, oneshot};
@@ -11,7 +11,10 @@ const LOG_TARGET: &'static str = "rpc";
 
 // TODO: convert into a struct
 
-pub async fn run_server(overseer_tx: Sender<OverseerEvent>, address: SocketAddr) {
+pub async fn run_server<T: NetworkBackend>(
+    overseer_tx: Sender<OverseerEvent<T>>,
+    address: SocketAddr,
+) {
     tracing::debug!(
         target: LOG_TARGET,
         address = ?address,

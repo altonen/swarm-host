@@ -1,15 +1,26 @@
 #![allow(unused)]
+use crate::types::OverseerEvent;
 
 use futures::stream::Stream;
+use tokio::sync::mpsc::Sender;
 
-use std::{future::Future, net::SocketAddr, pin::Pin};
+use std::{fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin};
 
-mod mockchain;
+pub mod mockchain;
 
 /// List of supported network backends.
 #[derive(clap::ValueEnum, Clone)]
 pub enum NetworkBackendType {
     Mockchain,
+}
+
+// TODO: how to express capabilities in a generic way?
+pub enum InterfaceType {
+    /// Interface will masquerade a real node.
+    Masquerade,
+
+    /// Interface is backed up by a real node.
+    NodeBacked,
 }
 
 // TODO: how to express capabilities in a generic way?
@@ -49,9 +60,7 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
 /// Abstraction which allows `swarm-host` to maintain connections to remote peers.
 pub trait Interface<T: NetworkBackend> {
-    type InterfaceId: Clone;
-
-    /// Unique ID identifying the interface.
+    /// Return reference to the interface ID.
     fn id(&self) -> &T::InterfaceId;
 
     /// Attempt to establish connection with a remote peer.
@@ -61,28 +70,39 @@ pub trait Interface<T: NetworkBackend> {
     fn disconnect(&mut self, peer: T::PeerId) -> crate::Result<()>;
 
     /// Get access to the event stream of the interface.
+    // TODO: think of something else, there is no need for multiple event streams.
     fn event_stream(&self) -> Pin<Box<dyn Future<Output = InterfaceEvent<T>>>>;
 }
 
 /// Traits which each network backend must implement.
+#[async_trait::async_trait]
 pub trait NetworkBackend {
     /// Unique ID identifying a peer.
-    type PeerId: Clone;
+    // TODO: `Serialize` + `Deserialize`?
+    type PeerId: Debug + Copy + Clone;
 
     /// Unique ID identifying the interface.
-    type InterfaceId: Clone;
+    // TODO: `Serialize` + `Deserialize`?
+    type InterfaceId: Debug + Copy + Clone + Eq + Hash;
 
     /// Type identifying a message understood by the backend.
-    // TODO: Serialize + Deserialize?
+    // TODO: `Serialize` + `Deserialize`?
     type Message: Clone;
 
     /// Handle which allows communication with a spawned interface.
-    type InterfaceHandle: Unpin + Interface<Self> + Stream<Item = InterfaceEvent<Self>>
+    type InterfaceHandle: Interface<Self>
     where
         Self: Sized;
 
+    /// Create new `NetworkBackend`.
+    fn new() -> Self;
+
     /// Start new interface for accepting incoming connections.
-    fn spawn_interface(&mut self, address: SocketAddr) -> crate::Result<Self::InterfaceHandle>
+    async fn spawn_interface(
+        &mut self,
+        address: SocketAddr,
+        overseer_tx: Sender<OverseerEvent<Self>>,
+    ) -> crate::Result<Self::InterfaceHandle>
     where
         Self: Sized;
 }
