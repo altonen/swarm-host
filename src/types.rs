@@ -52,14 +52,4 @@ pub enum OverseerEvent<T: NetworkBackend> {
         /// Unique interface ID.
         result: oneshot::Sender<crate::Result<T::InterfaceId>>,
     },
-
-    /// Message received from one of the peers connected to `swarm-host's` interface.
-    ///
-    /// The message is identified by both the peer ID and interface ID as one peer
-    /// can connect to multiple different interfaces using the same peer ID.
-    Message {
-        peer: T::PeerId,
-        interface: T::InterfaceId,
-        message: T::Message,
-    },
 }

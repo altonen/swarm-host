@@ -90,9 +90,6 @@ impl<T: NetworkBackend> Overseer<T> {
                             },
                         }
                     }
-                    OverseerEvent::Message { peer, interface, message } => {
-                        todo!();
-                    }
                 },
                 event = self.event_streams.next() => match event {
                     Some(InterfaceEvent::PeerConnected { peer, interface, protocols, socket }) => {
@@ -102,6 +99,9 @@ impl<T: NetworkBackend> Overseer<T> {
                             interface_id = ?interface,
                             "peer connected"
                         );
+
+                        // TODO: what to do with a peer?
+                        // TODO: save it to some storage for later use?
 
                         todo!("handle peer connected event");
                     }

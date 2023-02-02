@@ -29,15 +29,11 @@ use std::{
     task::{Context, Poll},
 };
 
-mod p2p;
 mod types;
 
 const LOG_TARGET: &'static str = "mockchain";
 
 // TODO: move all type declarations to `type.rs`
-// TODO: move code from `p2p` to here
-// TODO: redesign event system for the p2p implementation
-// TODO: communicate directly with overseer?
 
 /// Unique ID identifying the interface.
 type InterfaceId = usize;
@@ -71,33 +67,6 @@ struct Handshake {
 pub enum ConnectionType {
     Inbound,
     Outbound,
-}
-
-// TODO: rename to something else?
-#[derive(Debug)]
-enum PeerEvent {
-    PeerConnected {
-        peer: PeerId,
-        protocols: Vec<ProtocolId>,
-        stream: OwnedWriteHalf,
-    },
-}
-
-enum PeerState {
-    /// Handshakes have not been exchanged between the peers.
-    Uninitialized {
-        stream: TcpStream,
-        connection_type: ConnectionType,
-    },
-
-    /// Handshakes have been exchanged between the peers.
-    Initialized {
-        /// Peer ID.
-        peer: PeerId,
-
-        /// Reader half of the TCP stream.
-        stream: OwnedReadHalf,
-    },
 }
 
 struct Peer;
