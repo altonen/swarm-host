@@ -63,15 +63,15 @@ impl<T: NetworkBackend> Overseer<T> {
                             "create new interface",
                         );
 
-                        match self.backend.spawn_interface(address, self.overseer_tx.clone()).await {
-                            Ok(mut handle) => match self.interfaces.entry(*handle.id()) {
+                        match self.backend.spawn_interface(address).await {
+                            Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                                 Entry::Vacant(entry) => {
                                     tracing::trace!(
                                         target: LOG_TARGET,
                                         "interface created"
                                     );
 
-                                    self.event_streams.push(handle.event_stream());
+                                    self.event_streams.push(event_stream);
                                     result.send(Ok(*handle.id())).expect("channel to stay open");
                                     entry.insert(handle);
                                 },
@@ -95,7 +95,7 @@ impl<T: NetworkBackend> Overseer<T> {
                     }
                 },
                 event = self.event_streams.next() => match event {
-                    Some(InterfaceEvent::PeerConnected { peer, interface }) => {
+                    Some(InterfaceEvent::PeerConnected { peer, interface, protocols, socket }) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             peer_id = ?peer,

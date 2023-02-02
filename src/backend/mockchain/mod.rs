@@ -1,7 +1,9 @@
 #![allow(unused)]
 
 use crate::{
-    backend::{mockchain::types::Message, Interface, InterfaceEvent, NetworkBackend},
+    backend::{
+        mockchain::types::Message, Interface, InterfaceEvent, InterfaceEventStream, NetworkBackend,
+    },
     ensure,
     types::{Error, OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
@@ -44,8 +46,8 @@ type InterfaceId = usize;
 type PeerId = u64;
 
 /// Supported protocols.
-#[derive(Debug, Serialize, Deserialize)]
-enum ProtocolId {
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum ProtocolId {
     /// Transaction protocol.
     Transaction,
 
@@ -103,8 +105,7 @@ struct Peer;
 impl Peer {
     // TODO: too many params? Refactor
     pub async fn start(
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
-        iface_tx: Sender<PeerEvent>,
+        iface_tx: Sender<InterfaceEvent<MockchainBackend>>,
         mut stream: TcpStream,
         connection_type: ConnectionType,
         iface_id: InterfaceId,
@@ -136,27 +137,34 @@ impl Peer {
         // TODO: verify that the peers agree on at least one protocol
         let (mut read, write) = stream.into_split();
 
-        iface_tx
-            .send(PeerEvent::PeerConnected {
+        if iface_tx
+            .send(InterfaceEvent::PeerConnected {
                 peer: handshake.peer,
+                interface: iface_id,
                 protocols: handshake.protocols,
-                stream: write,
+                socket: Box::new(write),
             })
             .await
-            .expect("channel to stay open");
+            .is_err()
+        {
+            panic!("essential task shut down");
+        }
 
         loop {
             let nread = read.read(&mut buf).await?;
-            match serde_cbor::from_slice(&buf[..nread]) {
+            match serde_cbor::from_slice::<Message>(&buf[..nread]) {
                 Ok(message) => {
-                    overseer_tx
-                        .send(OverseerEvent::Message {
+                    if iface_tx
+                        .send(InterfaceEvent::MessageReceived {
                             peer: handshake.peer,
                             interface: iface_id,
                             message,
                         })
                         .await
-                        .expect("channel to stay open");
+                        .is_err()
+                    {
+                        panic!("essential task shut down");
+                    }
                 }
                 Err(err) => tracing::warn!(
                     target: LOG_TARGET,
@@ -175,8 +183,7 @@ struct P2p;
 
 impl P2p {
     pub fn start(
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
-        iface_tx: Sender<PeerEvent>,
+        iface_tx: Sender<InterfaceEvent<MockchainBackend>>,
         listener: TcpListener,
         iface_id: InterfaceId,
     ) -> Self {
@@ -192,11 +199,8 @@ impl P2p {
                         tracing::debug!(target: LOG_TARGET, address = ?address, "peer connected");
 
                         let iface_tx_copy = iface_tx.clone();
-                        let overseer_tx_copy = overseer_tx.clone();
-
                         tokio::spawn(async move {
                             if let Err(err) = Peer::start(
-                                overseer_tx_copy,
                                 iface_tx_copy,
                                 stream,
                                 ConnectionType::Inbound,
@@ -227,25 +231,27 @@ pub struct MockchainHandle {
     /// Peer-to-peer functionality.
     p2p: P2p,
 
-    /// Event streams.
-    event_streams: Vec<Sender<InterfaceEvent<MockchainBackend>>>,
+    /// Connected peers.
+    peers: HashMap<PeerId, ()>,
 }
 
 impl MockchainHandle {
     pub async fn new(
         id: InterfaceId,
         address: SocketAddr,
-        overseer_tx: Sender<OverseerEvent<MockchainBackend>>,
-    ) -> crate::Result<Self> {
+    ) -> crate::Result<(Self, InterfaceEventStream<MockchainBackend>)> {
         let listener = TcpListener::bind(address).await?;
-        let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let p2p = P2p::start(overseer_tx, tx, listener, id);
+        let (iface_tx, iface_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let p2p = P2p::start(iface_tx, listener, id);
 
-        Ok(Self {
-            id,
-            p2p,
-            event_streams: Vec::new(),
-        })
+        Ok((
+            Self {
+                id,
+                p2p,
+                peers: HashMap::new(),
+            },
+            Box::pin(ReceiverStream::new(iface_rx)),
+        ))
     }
 }
 
@@ -263,17 +269,6 @@ impl Interface<MockchainBackend> for MockchainHandle {
         peer: <MockchainBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
         todo!();
-    }
-
-    fn event_stream(
-        &mut self,
-    ) -> Pin<Box<dyn Stream<Item = InterfaceEvent<MockchainBackend>> + Send>> {
-        tracing::trace!(target: LOG_TARGET, interface = self.id, "get event stream");
-
-        let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        self.event_streams.push(tx);
-
-        Box::pin(ReceiverStream::new(rx))
     }
 }
 
@@ -304,6 +299,7 @@ impl MockchainBackend {
 impl NetworkBackend for MockchainBackend {
     type PeerId = PeerId;
     type InterfaceId = InterfaceId;
+    type ProtocolId = ProtocolId;
     type Message = Message;
     type InterfaceHandle = MockchainHandle;
 
@@ -316,8 +312,7 @@ impl NetworkBackend for MockchainBackend {
     async fn spawn_interface(
         &mut self,
         address: SocketAddr,
-        overseer_tx: Sender<OverseerEvent<Self>>,
-    ) -> crate::Result<Self::InterfaceHandle> {
+    ) -> crate::Result<(Self::InterfaceHandle, InterfaceEventStream<Self>)> {
         ensure!(
             !self.interfaces.contains_key(&address),
             Error::AddressInUse(address),
@@ -330,11 +325,11 @@ impl NetworkBackend for MockchainBackend {
         );
 
         let id = self.next_interface_id();
-        MockchainHandle::new(id, address, overseer_tx)
+        MockchainHandle::new(id, address)
             .await
-            .map(|handle| {
+            .map(|(handle, stream)| {
                 self.interfaces.insert(address, id);
-                handle
+                (handle, stream)
             })
     }
 }
