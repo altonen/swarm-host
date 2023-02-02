@@ -136,10 +136,11 @@ impl<T: NetworkBackend> Overseer<T> {
                         todo!("handle peer disconnected event");
                     }
                     Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
-                        tracing::debug!(
+                        tracing::trace!(
                             target: LOG_TARGET,
                             peer_id = ?peer,
                             interface_id = ?interface,
+                            message = ?message,
                             "message received from peer"
                         );
 
@@ -147,7 +148,7 @@ impl<T: NetworkBackend> Overseer<T> {
                         // TODO: peer id-based filtering?
                         // TODO: packet-based filtering?
                         // TODO: more complicated filtering?
-                        todo!("handle message");
+                        // todo!("handle message");
                     }
                     _ => {},//tracing::error!(target: LOG_TARGET, "here"),
                 }
