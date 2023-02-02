@@ -108,7 +108,7 @@ pub trait NetworkBackend {
     ///
     /// Return a handle which allows performing actions on the interface
     /// such as publishing messages or managing peer connections and
-    /// a stream which allows reading events of the interface.
+    /// a stream which allows reading events from interface.
     async fn spawn_interface(
         &mut self,
         address: SocketAddr,

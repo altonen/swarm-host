@@ -65,13 +65,19 @@ struct Handshake {
 
 #[derive(Debug)]
 pub enum ConnectionType {
+    /// Local node received a connection and is expecting to
+    /// read a handshake from the socket as first message.
     Inbound,
+
+    /// Local node initiated the connection and must send a handshake
+    /// message to remote node before doing anything else.
     Outbound,
 }
 
 struct Peer;
 
 impl Peer {
+    /// Start task for a remote peer.
     // TODO: too many params? Refactor
     pub async fn start(
         iface_tx: Sender<InterfaceEvent<MockchainBackend>>,
@@ -106,6 +112,7 @@ impl Peer {
         // TODO: verify that the peers agree on at least one protocol
         let (mut read, write) = stream.into_split();
 
+        // TODO: use `expect()` when the leaky abstraction of `socket` is fixed
         if iface_tx
             .send(InterfaceEvent::PeerConnected {
                 peer: handshake.peer,
@@ -123,6 +130,7 @@ impl Peer {
             let nread = read.read(&mut buf).await?;
             match serde_cbor::from_slice::<Message>(&buf[..nread]) {
                 Ok(message) => {
+                    // TODO: use `expect()` when the leaky abstraction of `socket` is fixed
                     if iface_tx
                         .send(InterfaceEvent::MessageReceived {
                             peer: handshake.peer,
@@ -151,6 +159,7 @@ impl Peer {
 struct P2p;
 
 impl P2p {
+    /// Start the P2P functionality.
     pub fn start(
         iface_tx: Sender<InterfaceEvent<MockchainBackend>>,
         listener: TcpListener,
@@ -193,6 +202,7 @@ impl P2p {
     }
 }
 
+/// Interface handle.
 pub struct MockchainHandle {
     /// Unique ID of the interface.
     id: InterfaceId,
@@ -205,6 +215,7 @@ pub struct MockchainHandle {
 }
 
 impl MockchainHandle {
+    /// Create new [`MockchainHandle`].
     pub async fn new(
         id: InterfaceId,
         address: SocketAddr,
@@ -225,14 +236,17 @@ impl MockchainHandle {
 }
 
 impl Interface<MockchainBackend> for MockchainHandle {
+    /// Get ID of the interface.
     fn id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
         &self.id
     }
 
+    /// Connect to peer.
     fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
         todo!();
     }
 
+    /// Disconnect peer.
     fn disconnect(
         &mut self,
         peer: <MockchainBackend as NetworkBackend>::PeerId,

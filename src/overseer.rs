@@ -120,7 +120,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             target: LOG_TARGET,
                             peer_id = ?peer,
                             interface_id = ?interface,
-                            "message received from peer to interface"
+                            "message received from peer"
                         );
 
                         // TODO: routing table?
