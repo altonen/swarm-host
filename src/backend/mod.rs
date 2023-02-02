@@ -85,7 +85,7 @@ pub trait Interface<T: NetworkBackend> {
 #[async_trait::async_trait]
 pub trait NetworkBackend {
     /// Unique ID identifying a peer.
-    type PeerId: Debug + Copy + Clone + Send + Sync;
+    type PeerId: Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying the interface.
     type InterfaceId: Debug + Copy + Clone + Eq + Hash + Send + Sync;

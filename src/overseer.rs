@@ -6,7 +6,10 @@ use crate::{
 };
 
 use futures::{stream::SelectAll, FutureExt, Stream, StreamExt};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    io::AsyncWrite,
+    sync::mpsc::{self, Receiver, Sender},
+};
 
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -16,6 +19,14 @@ use std::{
 };
 
 const LOG_TARGET: &'static str = "overseer";
+
+struct PeerInfo<T: NetworkBackend> {
+    /// Supported protocols.
+    protocols: Vec<T::ProtocolId>,
+
+    /// Socket for sending messages to peer.
+    socket: Box<dyn AsyncWrite + Send>,
+}
 
 pub struct Overseer<T: NetworkBackend> {
     /// Network-specific functionality.
@@ -29,6 +40,12 @@ pub struct Overseer<T: NetworkBackend> {
 
     /// Handles for spawned interfaces.
     interfaces: HashMap<T::InterfaceId, T::InterfaceHandle>,
+
+    /// Interface peers.
+    iface_peers: HashMap<T::InterfaceId, T::PeerId>,
+
+    /// Connected peers.
+    peers: HashMap<T::PeerId, PeerInfo<T>>,
 
     /// Event streams for spawned interfaces.
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
@@ -45,6 +62,8 @@ impl<T: NetworkBackend> Overseer<T> {
                 interfaces: HashMap::new(),
                 event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
+                iface_peers: HashMap::new(),
+                peers: HashMap::new(),
             },
             overseer_tx,
         )
@@ -100,10 +119,11 @@ impl<T: NetworkBackend> Overseer<T> {
                             "peer connected"
                         );
 
-                        // TODO: what to do with a peer?
-                        // TODO: save it to some storage for later use?
-
-                        todo!("handle peer connected event");
+                        self.iface_peers.insert(interface, peer);
+                        self.peers.insert(peer, PeerInfo {
+                            protocols,
+                            socket,
+                        });
                     }
                     Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
                         tracing::debug!(
