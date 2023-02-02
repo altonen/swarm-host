@@ -133,7 +133,8 @@ impl<T: NetworkBackend> Overseer<T> {
                             "peer disconnected"
                         );
 
-                        todo!("handle peer disconnected event");
+                        self.iface_peers.remove(&interface);
+                        self.peers.remove(&peer);
                     }
                     Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
                         tracing::trace!(
