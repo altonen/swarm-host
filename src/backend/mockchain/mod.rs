@@ -84,7 +84,7 @@ impl Peer {
         mut stream: TcpStream,
         connection_type: ConnectionType,
         iface_id: InterfaceId,
-    ) -> crate::Result<void::Void> {
+    ) -> crate::Result<()> {
         let mut buf = vec![0u8; 8 * 1024];
 
         if let ConnectionType::Inbound = connection_type {
@@ -128,6 +128,30 @@ impl Peer {
 
         loop {
             let nread = read.read(&mut buf).await?;
+
+            if nread == 0 {
+                tracing::debug!(
+                    target: LOG_TARGET,
+                    peer = handshake.peer,
+                    interface = ?iface_id,
+                    "connection closed to peer",
+                );
+
+                // TODO: use `expect()` when the leaky abstraction of `socket` is fixed
+                if iface_tx
+                    .send(InterfaceEvent::PeerDisconnected {
+                        peer: handshake.peer,
+                        interface: iface_id,
+                    })
+                    .await
+                    .is_err()
+                {
+                    panic!("essential task shut down");
+                }
+
+                return Ok(());
+            }
+
             match serde_cbor::from_slice::<Message>(&buf[..nread]) {
                 Ok(message) => {
                     // TODO: use `expect()` when the leaky abstraction of `socket` is fixed
