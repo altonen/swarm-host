@@ -28,6 +28,7 @@ use std::net::SocketAddr;
 // TODO: get rid of unneeded dependencies
 
 mod backend;
+mod filter;
 mod overseer;
 mod rpc;
 mod types;

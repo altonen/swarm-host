@@ -1,7 +1,8 @@
 #![allow(unused)]
 
 use crate::{
-    backend::{Interface, InterfaceEvent, NetworkBackend},
+    backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend},
+    filter::MessageFilter,
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -46,6 +47,9 @@ pub struct Overseer<T: NetworkBackend> {
 
     /// Event streams for spawned interfaces.
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
+
+    /// Message filters.
+    filter: MessageFilter<T>,
 }
 
 impl<T: NetworkBackend> Overseer<T> {
@@ -60,6 +64,7 @@ impl<T: NetworkBackend> Overseer<T> {
                 event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
                 iface_peers: HashMap::new(),
+                filter: MessageFilter::new(),
             },
             overseer_tx,
         )
@@ -87,6 +92,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                     );
 
                                     self.event_streams.push(event_stream);
+                                    self.filter.register_interface(*handle.id(), InterfaceType::Masquerade);
                                     result.send(Ok(*handle.id())).expect("channel to stay open");
                                     entry.insert(handle);
                                 },
@@ -122,6 +128,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                 socket,
                             }
                         );
+                        self.filter.register_peer(peer, interface);
                     }
                     Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
                         tracing::debug!(
@@ -142,7 +149,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                 tracing::warn!(
                                     target: LOG_TARGET,
                                     peer_id = ?peer,
-                                    interface = ?interface,
+                                    interface_id = ?interface,
                                     "peer does not exist",
                                 );
                             }
@@ -157,13 +164,15 @@ impl<T: NetworkBackend> Overseer<T> {
                             "message received from peer"
                         );
 
-                        // TODO: routing table?
-                        // TODO: peer id-based filtering?
-                        // TODO: packet-based filtering?
-                        // TODO: more complicated filtering?
-                        // todo!("handle message");
+                        for (interface, peer, message) in self.filter.inject_message(
+                            peer,
+                            interface,
+                            message
+                        ) {
+                            todo!();
+                        }
                     }
-                    _ => {},//tracing::error!(target: LOG_TARGET, "here"),
+                    _ => {},
                 }
             }
         }

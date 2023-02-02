@@ -19,6 +19,8 @@ pub enum NetworkBackendType {
 }
 
 // TODO: how to express capabilities in a generic way?
+// TODO: specify how node backed interfaces work?
+#[derive(Debug)]
 pub enum InterfaceType {
     /// Interface will masquerade a real node.
     Masquerade,
