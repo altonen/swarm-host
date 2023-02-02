@@ -42,10 +42,7 @@ pub struct Overseer<T: NetworkBackend> {
     interfaces: HashMap<T::InterfaceId, T::InterfaceHandle>,
 
     /// Interface peers.
-    iface_peers: HashMap<T::InterfaceId, T::PeerId>,
-
-    /// Connected peers.
-    peers: HashMap<T::PeerId, PeerInfo<T>>,
+    iface_peers: HashMap<T::InterfaceId, HashMap<T::PeerId, PeerInfo<T>>>,
 
     /// Event streams for spawned interfaces.
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
@@ -63,7 +60,6 @@ impl<T: NetworkBackend> Overseer<T> {
                 event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
                 iface_peers: HashMap::new(),
-                peers: HashMap::new(),
             },
             overseer_tx,
         )
@@ -119,11 +115,13 @@ impl<T: NetworkBackend> Overseer<T> {
                             "peer connected"
                         );
 
-                        self.iface_peers.insert(interface, peer);
-                        self.peers.insert(peer, PeerInfo {
-                            protocols,
-                            socket,
-                        });
+                        self.iface_peers.entry(interface).or_default().insert(
+                            peer,
+                            PeerInfo {
+                                protocols,
+                                socket,
+                            }
+                        );
                     }
                     Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
                         tracing::debug!(
@@ -133,8 +131,22 @@ impl<T: NetworkBackend> Overseer<T> {
                             "peer disconnected"
                         );
 
-                        self.iface_peers.remove(&interface);
-                        self.peers.remove(&peer);
+                        match self.iface_peers.entry(interface) {
+                            Entry::Vacant(_) => tracing::error!(
+                                target: LOG_TARGET,
+                                peer_id = ?peer,
+                                interface = ?interface,
+                                "interface does not exist",
+                            ),
+                            Entry::Occupied(mut entry) => if entry.get_mut().remove(&peer).is_none() {
+                                tracing::warn!(
+                                    target: LOG_TARGET,
+                                    peer_id = ?peer,
+                                    interface = ?interface,
+                                    "peer does not exist",
+                                );
+                            }
+                        }
                     }
                     Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
                         tracing::trace!(
