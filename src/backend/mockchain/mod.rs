@@ -5,7 +5,8 @@ use crate::{
         mockchain::types::Message, Interface, InterfaceEvent, InterfaceEventStream, NetworkBackend,
     },
     ensure,
-    types::{Error, OverseerEvent, DEFAULT_CHANNEL_SIZE},
+    error::Error,
+    types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
 use futures::stream::Stream;

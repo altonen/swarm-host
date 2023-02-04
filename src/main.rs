@@ -2,9 +2,9 @@
 
 use crate::{
     backend::{mockchain::MockchainBackend, NetworkBackendType},
+    error::Error,
     overseer::Overseer,
     rpc::run_server,
-    types::Error,
 };
 
 use clap::Parser;
@@ -28,6 +28,7 @@ use std::net::SocketAddr;
 // TODO: get rid of unneeded dependencies
 
 mod backend;
+mod error;
 mod filter;
 mod overseer;
 mod rpc;
