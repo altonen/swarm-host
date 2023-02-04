@@ -30,17 +30,17 @@ use std::{
     task::{Context, Poll},
 };
 
-mod types;
+pub mod types;
 
 const LOG_TARGET: &'static str = "mockchain";
 
 // TODO: move all type declarations to `type.rs`
 
 /// Unique ID identifying the interface.
-type InterfaceId = usize;
+pub type InterfaceId = usize;
 
 /// Unique ID identifying the peer.
-type PeerId = u64;
+pub type PeerId = u64;
 
 /// Supported protocols.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]

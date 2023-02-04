@@ -18,6 +18,13 @@ use std::net::SocketAddr;
 //    - full bypass mode
 //    - how to install custom filters for traffic?
 
+// TODO: differentiate between pubsub and other messages
+//        - source: peer ID
+//        - destinnation:
+//        	- peer ID
+//        	- broadcast
+//      - InterfaceType::Masquerade vs InterfaceType::NodeBacked??
+//
 // TODO: implement compat layer for swarm-host for this blockchain
 // TODO: create sybil/dummy.rs
 // TODO: add prometheus metrics
