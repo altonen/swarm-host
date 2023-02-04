@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
 use tokio::sync::oneshot;
 
 use std::net::IpAddr;
@@ -100,4 +104,50 @@ pub enum Message {
     Vote(Vote),
     Dispute(Dispute),
     PeerExchange(Pex),
+}
+
+impl Distribution<Message> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Message {
+        match rng.gen_range(0..=4) {
+            0 => Message::Transaction(Transaction::new(
+                rng.gen::<AccountId>(),
+                rng.gen::<AccountId>(),
+                rng.gen::<u64>(),
+            )),
+            1 => Message::Block(Block::from_transactions(
+                (0..rng.gen_range(1..=5))
+                    .map(|_| {
+                        Transaction::new(
+                            rng.gen::<AccountId>(),
+                            rng.gen::<AccountId>(),
+                            rng.gen::<u64>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )),
+            2 => Message::Vote(Vote::new(
+                rng.gen::<BlockId>(),
+                rng.gen::<PeerId>(),
+                rng.gen::<bool>(),
+            )),
+            3 => Message::Dispute(Dispute::new(rng.gen::<BlockId>(), rng.gen::<PeerId>())),
+            4 => Message::PeerExchange(Pex::new(
+                (0..rng.gen_range(2..=6))
+                    .map(|_| {
+                        (
+                            format!(
+                                "{}.{}.{}.{}",
+                                rng.gen_range(1..=255),
+                                rng.gen_range(0..=255),
+                                rng.gen_range(0..=255),
+                                rng.gen_range(0..=255),
+                            ),
+                            rng.gen::<u16>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )),
+            _ => todo!(),
+        }
+    }
 }
