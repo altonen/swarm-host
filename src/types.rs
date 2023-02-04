@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 /// Default channel size.
 pub const DEFAULT_CHANNEL_SIZE: usize = 64;
 
+// TODO: move to `error.rs`
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Invalid address: `{0}`")]
@@ -21,6 +22,18 @@ pub enum Error {
 
     #[error("Serde CBOR error: `{0}`")]
     SerdeCborError(serde_cbor::Error),
+
+    #[error("Interface already exists")]
+    InterfaceAlreadyExists,
+
+    #[error("Peer already exists")]
+    PeerAlreadyExists,
+
+    #[error("Interface does not exist")]
+    InterfaceDoesntExist,
+
+    #[error("Peer does not exist")]
+    PeerDoesntExist,
 }
 
 impl From<std::io::Error> for Error {
@@ -32,6 +45,27 @@ impl From<std::io::Error> for Error {
 impl From<serde_cbor::Error> for Error {
     fn from(error: serde_cbor::Error) -> Self {
         Error::SerdeCborError(error)
+    }
+}
+
+impl PartialEq for Error {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Error::InvalidAddress(address1), Error::InvalidAddress(address2)) => {
+                address1 == address2
+            }
+            (Error::AddressInUse(address1), Error::AddressInUse(address2)) => address1 == address2,
+            (Error::IoError(error1), Error::IoError(error2)) => error1.kind() == error2.kind(),
+            (Error::SerdeCborError(error1), Error::SerdeCborError(error2)) => {
+                // TODO: verify
+                error1.classify() == error2.classify()
+            }
+            (Error::InterfaceAlreadyExists, Error::InterfaceAlreadyExists) => true,
+            (Error::PeerAlreadyExists, Error::PeerAlreadyExists) => true,
+            (Error::InterfaceDoesntExist, Error::InterfaceDoesntExist) => true,
+            (Error::PeerDoesntExist, Error::PeerDoesntExist) => true,
+            _ => false,
+        }
     }
 }
 
