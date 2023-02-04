@@ -57,32 +57,6 @@ impl Block {
 /// Unique peer ID.
 pub type PeerId = u64;
 
-/// Commands send to P2P.
-#[derive(Debug)]
-pub enum Command {
-    /// Publish transaction on the network.
-    PublishTransaction(Transaction),
-
-    /// Publish block on the network.
-    PublishBlock(Block),
-
-    /// Disconnect peer.
-    DisconnectPeer(PeerId),
-
-    /// Attempt to establish connection with a peer.
-    // TODO: `oneshot::Sender` for result?
-    ConnectToPeer(String, oneshot::Sender<Result<(), String>>),
-
-    /// Publish generic message on the network
-    PublishMessage(Message),
-
-    /// Get local peer ID.
-    GetLocalPeerId(oneshot::Sender<PeerId>),
-
-    /// Get local address.
-    GetLocalAddress(oneshot::Sender<String>),
-}
-
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Vote {
     block: BlockId,
@@ -126,39 +100,4 @@ pub enum Message {
     Vote(Vote),
     Dispute(Dispute),
     PeerExchange(Pex),
-}
-
-#[derive(Debug)]
-pub enum OverseerEvent {
-    Message(Subsystem, Message),
-    ConnectToPeer(String, oneshot::Sender<Result<(), String>>),
-    DisconnectPeer(PeerId),
-    GetLocalPeerId(oneshot::Sender<PeerId>),
-    GetLocalAddress(oneshot::Sender<String>),
-}
-
-impl PartialEq for OverseerEvent {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                OverseerEvent::Message(subsystem1, message1),
-                OverseerEvent::Message(subsystem2, message2),
-            ) => subsystem1 == subsystem2 && message1 == message2,
-            (
-                OverseerEvent::ConnectToPeer(address1, _),
-                OverseerEvent::ConnectToPeer(address2, _),
-            ) => address1 == address2,
-            (OverseerEvent::DisconnectPeer(peer1), OverseerEvent::DisconnectPeer(peer2)) => {
-                peer1 == peer2
-            }
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Subsystem {
-    Gossip,
-    P2p,
-    Rpc,
 }
