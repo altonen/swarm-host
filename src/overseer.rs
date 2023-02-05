@@ -211,6 +211,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                         "peer doesn't exist"
                                     ),
                                     Some(peer_info) => {
+                                        // TODO: zzz
                                         let message = serde_cbor::to_vec(&message).expect("message to serialize");
                                         match peer_info.socket.write(&message).await {
                                             Ok(_) =>

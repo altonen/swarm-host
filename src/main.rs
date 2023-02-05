@@ -11,13 +11,6 @@ use clap::Parser;
 
 use std::net::SocketAddr;
 
-// TODO: think about architecture for this project:
-//  - swarm-host is started
-//  - peers connect to it
-//  - swarm-host relays traffic between the nodes
-//    - full bypass mode
-//    - how to install custom filters for traffic?
-
 // TODO: differentiate between pubsub and other messages
 //        - source: peer ID
 //        - destinnation:
@@ -27,8 +20,6 @@ use std::net::SocketAddr;
 //
 // TODO: introduce more generic `NetworkBackend::Source` instead of `NetworkBackend::PeerId`
 // TODO: `InterfaceId` doesn't need to be part of `NetworkBackend`
-// TODO: implement compat layer for swarm-host for this blockchain
-// TODO: create sybil/dummy.rs
 // TODO: add prometheus metrics
 // TODO: fix warnings
 // TODO: run clippy
