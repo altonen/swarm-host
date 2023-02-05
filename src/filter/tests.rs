@@ -14,8 +14,8 @@ fn register_new_interface() {
         Ok(())
     );
     assert_eq!(
-        filter.iface_filters.get(&0usize),
-        Some(&FilterType::FullBypass),
+        filter.interfaces.get(&0usize).unwrap().filter,
+        FilterType::FullBypass,
     );
     assert_eq!(
         filter.register_interface(0usize, FilterType::FullBypass),
@@ -162,8 +162,8 @@ fn interface_drop() {
         Ok(())
     );
     assert_eq!(
-        filter.iface_filters.get(&0usize),
-        Some(&FilterType::DropAll),
+        filter.interfaces.get(&0usize).unwrap().filter,
+        FilterType::DropAll,
     );
     assert_eq!(
         filter.register_peer(0usize, 0u64, FilterType::FullBypass),
@@ -232,12 +232,12 @@ fn two_linked_interfaces() {
     // link interfaces together so messages can flow between them
     filter.link_interfaces(0usize, 1usize).unwrap();
     assert_eq!(
-        filter.iface_links.get(&0usize),
-        Some(&HashSet::from([1usize])),
+        filter.interfaces.get(&0usize).unwrap().links,
+        HashSet::from([1usize]),
     );
     assert_eq!(
-        filter.iface_links.get(&1usize),
-        Some(&HashSet::from([0usize])),
+        filter.interfaces.get(&1usize).unwrap().links,
+        HashSet::from([0usize]),
     );
 
     // register `peer0` to `iface0` and `peer1` to `iface1`
@@ -275,12 +275,12 @@ fn peer_connected_to_two_linked_interfaces_receives() {
     // link interfaces together so messages can flow between them
     filter.link_interfaces(0usize, 1usize).unwrap();
     assert_eq!(
-        filter.iface_links.get(&0usize),
-        Some(&HashSet::from([1usize])),
+        filter.interfaces.get(&0usize).unwrap().links,
+        HashSet::from([1usize]),
     );
     assert_eq!(
-        filter.iface_links.get(&1usize),
-        Some(&HashSet::from([0usize])),
+        filter.interfaces.get(&1usize).unwrap().links,
+        HashSet::from([0usize]),
     );
 
     // register `peer0` to `iface0` and `iface1`
@@ -350,12 +350,12 @@ fn linked_interfaces_with_dropall() {
     // link interfaces together so messages can flow between them
     filter.link_interfaces(0usize, 1usize).unwrap();
     assert_eq!(
-        filter.iface_links.get(&0usize),
-        Some(&HashSet::from([1usize])),
+        filter.interfaces.get(&0usize).unwrap().links,
+        HashSet::from([1usize]),
     );
     assert_eq!(
-        filter.iface_links.get(&1usize),
-        Some(&HashSet::from([0usize])),
+        filter.interfaces.get(&1usize).unwrap().links,
+        HashSet::from([0usize]),
     );
 
     // register `peer0` to `iface0` and `iface1`

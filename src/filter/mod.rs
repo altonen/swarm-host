@@ -8,22 +8,19 @@ use crate::{
 
 use tracing::Level;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 #[cfg(test)]
 mod tests;
 
 const LOG_TARGET: &'static str = "filter";
 
-// TODO: hierarchy for filter rules
-// TODO: start using `mockall`
+// TODO: filter should have apply method?
 // TODO: separate filter types for peers and interfaces
 // TODO: more complex filters?
-// TODO: filter should have apply method?
-// TODO: think about how to store all peer/iface data sensibly
-// TODO: link interfaces together
-// TODO: separate struct for Interface
 // TODO: differentiate between ingress and egress
+// TODO: start using `mockall`
+// TODO: documentation
 // TODO: fuzzing
 // TODO: benches
 
@@ -44,20 +41,22 @@ pub enum FilterType {
     DropAll,
 }
 
+struct Interface<T: NetworkBackend> {
+    filter: FilterType,
+    peers: HashSet<T::PeerId>,
+    links: HashSet<T::InterfaceId>,
+}
+
 pub struct MessageFilter<T: NetworkBackend> {
-    iface_filters: HashMap<T::InterfaceId, FilterType>,
-    iface_peers: HashMap<T::InterfaceId, HashSet<T::PeerId>>,
-    iface_links: HashMap<T::InterfaceId, HashSet<T::InterfaceId>>,
     peer_filters: HashMap<(T::InterfaceId, T::PeerId), FilterType>,
+    interfaces: HashMap<T::InterfaceId, Interface<T>>,
 }
 
 impl<T: NetworkBackend> MessageFilter<T> {
     pub fn new() -> Self {
         Self {
-            iface_filters: HashMap::new(),
-            iface_peers: HashMap::new(),
-            iface_links: HashMap::new(),
             peer_filters: HashMap::new(),
+            interfaces: HashMap::new(),
         }
     }
 
@@ -67,15 +66,6 @@ impl<T: NetworkBackend> MessageFilter<T> {
         interface: T::InterfaceId,
         filter: FilterType,
     ) -> crate::Result<()> {
-        ensure!(
-            !self.iface_filters.contains_key(&interface),
-            Error::InterfaceAlreadyExists,
-        );
-        ensure!(
-            !self.iface_peers.contains_key(&interface),
-            Error::InterfaceAlreadyExists,
-        );
-
         tracing::info!(
             target: LOG_TARGET,
             interface_id = ?interface,
@@ -83,10 +73,18 @@ impl<T: NetworkBackend> MessageFilter<T> {
             "register interface",
         );
 
-        self.iface_filters.insert(interface, filter);
-        self.iface_peers.insert(interface, Default::default());
-        self.iface_links.insert(interface, Default::default());
-        Ok(())
+        match self.interfaces.entry(interface) {
+            Entry::Occupied(_) => return Err(Error::InterfaceAlreadyExists),
+            Entry::Vacant(entry) => {
+                entry.insert(Interface {
+                    filter,
+                    peers: Default::default(),
+                    links: Default::default(),
+                });
+
+                Ok(())
+            }
+        }
     }
 
     /// Link interfaces together.
@@ -96,12 +94,20 @@ impl<T: NetworkBackend> MessageFilter<T> {
         second: T::InterfaceId,
     ) -> crate::Result<()> {
         ensure!(
-            self.iface_filters.contains_key(&first) && self.iface_filters.contains_key(&second),
+            self.interfaces.contains_key(&first) && self.interfaces.contains_key(&second),
             Error::InterfaceDoesntExist,
         );
 
-        self.iface_links.entry(first).or_default().insert(second);
-        self.iface_links.entry(second).or_default().insert(first);
+        self.interfaces
+            .get_mut(&first)
+            .expect("entry to exist")
+            .links
+            .insert(second);
+        self.interfaces
+            .get_mut(&second)
+            .expect("entry to exist")
+            .links
+            .insert(first);
 
         Ok(())
     }
@@ -114,7 +120,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
         filter: FilterType,
     ) -> crate::Result<()> {
         ensure!(
-            self.iface_filters.contains_key(&interface),
+            self.interfaces.contains_key(&interface),
             Error::InterfaceDoesntExist,
         );
         ensure!(
@@ -131,9 +137,10 @@ impl<T: NetworkBackend> MessageFilter<T> {
         );
 
         self.peer_filters.insert((interface, peer), filter);
-        self.iface_peers
+        self.interfaces
             .get_mut(&interface)
-            .expect("interface peers to exist")
+            .expect("entry to exist")
+            .peers
             .insert(peer);
         Ok(())
     }
@@ -151,7 +158,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
         message: &T::Message,
     ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
         ensure!(
-            self.iface_filters.contains_key(&interface),
+            self.interfaces.contains_key(&interface),
             Error::InterfaceDoesntExist,
         );
 
@@ -168,25 +175,32 @@ impl<T: NetworkBackend> MessageFilter<T> {
         );
 
         // special case (TODO: refactor into something more sensible)
-        if let FilterType::DropAll = self.iface_filters.get(&interface).expect("entry to exist") {
+        if let FilterType::DropAll = self
+            .interfaces
+            .get(&interface)
+            .expect("entry to exist")
+            .filter
+        {
             return Ok(vec![].into_iter());
         }
 
         // TODO: this needs some serious thought
         let pairs = std::iter::once(&interface)
             .chain(
-                self.iface_links
+                self.interfaces
                     .get(&interface)
-                    .expect("links to exist")
+                    .expect("entry to exist")
+                    .links
                     .iter(),
             )
             .filter_map(
-                |iface| match self.iface_filters.get(iface).expect("filter to exist") {
+                |iface| match self.interfaces.get(iface).expect("filter to exist").filter {
                     FilterType::DropAll => None,
                     FilterType::FullBypass => Some(
-                        self.iface_peers
+                        self.interfaces
                             .get(&iface)
-                            .expect("interface peers to exist")
+                            .expect("entry to exist")
+                            .peers
                             .iter()
                             .filter_map(|&iface_peer| {
                                 if (iface_peer != peer && iface == &interface) {
