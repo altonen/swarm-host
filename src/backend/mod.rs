@@ -9,6 +9,8 @@ use std::{fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin};
 
 pub mod mockchain;
 
+// TODO: `Message` -> `Packet`
+
 /// Stream which allows reading events from the interface.
 pub type InterfaceEventStream<T> = Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>;
 

@@ -21,8 +21,10 @@ use std::{
 
 // TODO: get filter type from rpc
 
+/// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
 
+/// Peer-related information.
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
     protocols: Vec<T::ProtocolId>,
@@ -31,6 +33,7 @@ struct PeerInfo<T: NetworkBackend> {
     socket: Box<dyn AsyncWrite + Send + Unpin>,
 }
 
+/// Object overseeing `swarm-host` execution.
 pub struct Overseer<T: NetworkBackend> {
     /// Network-specific functionality.
     backend: T,
@@ -55,6 +58,7 @@ pub struct Overseer<T: NetworkBackend> {
 }
 
 impl<T: NetworkBackend> Overseer<T> {
+    /// Create new [`Overseer`].
     pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
@@ -72,6 +76,7 @@ impl<T: NetworkBackend> Overseer<T> {
         )
     }
 
+    /// Start running the [`Overseer`] event loop.
     pub async fn run(mut self) {
         tracing::info!(target: LOG_TARGET, "starting overseer");
 
@@ -170,14 +175,14 @@ impl<T: NetworkBackend> Overseer<T> {
                             "peer disconnected"
                         );
 
-                        match self.iface_peers.entry(interface) {
-                            Entry::Vacant(_) => tracing::error!(
+                        match self.iface_peers.get_mut(&interface) {
+                            None => tracing::error!(
                                 target: LOG_TARGET,
                                 interface = ?interface,
                                 peer_id = ?peer,
                                 "interface does not exist",
                             ),
-                            Entry::Occupied(mut entry) => if entry.get_mut().remove(&peer).is_none() {
+                            Some(peers) => if peers.remove(&peer).is_none() {
                                 tracing::warn!(
                                     target: LOG_TARGET,
                                     interface_id = ?interface,
@@ -208,7 +213,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                         target: LOG_TARGET,
                                         interface_id = ?interface,
                                         peer_id = ?peer,
-                                        "peer doesn't exist"
+                                        "peer does not exist"
                                     ),
                                     Some(peer_info) => {
                                         // TODO: zzz

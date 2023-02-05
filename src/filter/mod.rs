@@ -32,7 +32,7 @@ const LOG_TARGET: &'static str = "filter";
 /// }
 /// ```
 
-// TODO: filtertype -> forwardonly
+/// Filtering mode for peer/interface.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FilterType {
     /// Forward all messages to other peers of the interface.
@@ -42,18 +42,29 @@ pub enum FilterType {
     DropAll,
 }
 
+/// Interface-related information.
 struct Interface<T: NetworkBackend> {
+    /// Message filtering mode.
     filter: FilterType,
+
+    /// Connected peers of the interface.
     peers: HashSet<T::PeerId>,
+
+    /// Established links between interfaces.
     links: HashSet<T::InterfaceId>,
 }
 
+/// Object implementing message filtering for `swarm-host`.
 pub struct MessageFilter<T: NetworkBackend> {
+    /// Filtering modes installed for connected peers.
     peer_filters: HashMap<(T::InterfaceId, T::PeerId), FilterType>,
+
+    /// Installed interfaces and their information.
     interfaces: HashMap<T::InterfaceId, Interface<T>>,
 }
 
 impl<T: NetworkBackend> MessageFilter<T> {
+    /// Create new [`MessageFilter`].
     pub fn new() -> Self {
         Self {
             peer_filters: HashMap::new(),
@@ -89,6 +100,10 @@ impl<T: NetworkBackend> MessageFilter<T> {
     }
 
     /// Link interfaces together.
+    ///
+    /// This allows packet flow between interfaces and makes it possible for peers
+    /// of interface 1 to receive packets of interface 2 even if the peers have not
+    /// connected to interface 1 directly.
     pub fn link_interface(
         &mut self,
         first: T::InterfaceId,
@@ -121,6 +136,9 @@ impl<T: NetworkBackend> MessageFilter<T> {
     }
 
     /// Unlink interfaces.
+    ///
+    /// Remove previously established link between the interfaces. Peers of interface 1
+    /// no longer receives packets from interface 2.
     pub fn unlink_interface(
         &mut self,
         first: T::InterfaceId,
@@ -188,6 +206,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
             .expect("entry to exist")
             .peers
             .insert(peer);
+
         Ok(())
     }
 
@@ -196,7 +215,8 @@ impl<T: NetworkBackend> MessageFilter<T> {
     /// The message is processed based on the source peer and interface IDs and message type
     /// using any user-installed filters to further alter the message processing.
     ///
-    /// After the processing is done, TODO:
+    /// After the processing is done, a list of `(interface ID, peer ID)` pairs are returned
+    /// to caller who can then forward the message to correct peers.
     pub fn inject_message(
         &mut self,
         interface: T::InterfaceId,
