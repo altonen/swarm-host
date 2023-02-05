@@ -32,7 +32,6 @@ class MockChain:
 
 	# connect to remote node
     def connect(self, address):
-        # TODO: params
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
             json=request(
