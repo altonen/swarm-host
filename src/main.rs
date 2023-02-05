@@ -25,6 +25,8 @@ use std::net::SocketAddr;
 //        	- broadcast
 //      - InterfaceType::Masquerade vs InterfaceType::NodeBacked??
 //
+// TODO: introduce more generic `NetworkBackend::Source` instead of `NetworkBackend::PeerId`
+// TODO: `InterfaceId` doesn't need to be part of `NetworkBackend`
 // TODO: implement compat layer for swarm-host for this blockchain
 // TODO: create sybil/dummy.rs
 // TODO: add prometheus metrics

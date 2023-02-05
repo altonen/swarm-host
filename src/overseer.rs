@@ -88,7 +88,7 @@ impl<T: NetworkBackend> Overseer<T> {
                         match self.backend.spawn_interface(address).await {
                             Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                                 Entry::Vacant(entry) => {
-                                    tracing::info!(
+                                    tracing::trace!(
                                         target: LOG_TARGET,
                                         "interface created"
                                     );
@@ -117,6 +117,16 @@ impl<T: NetworkBackend> Overseer<T> {
                                 );
                             },
                         }
+                    }
+                    OverseerEvent::LinkInterfaces { first, second, result } => {
+                        tracing::debug!(
+                            target: LOG_TARGET,
+                            interface = ?first,
+                            interface = ?second,
+                            "link interfaces",
+                        );
+
+                        result.send(self.filter.link_interfaces(first, second));
                     }
                 },
                 event = self.event_streams.next() => match event {

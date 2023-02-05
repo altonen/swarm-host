@@ -24,4 +24,19 @@ pub enum OverseerEvent<T: NetworkBackend> {
         /// Unique interface ID.
         result: oneshot::Sender<crate::Result<T::InterfaceId>>,
     },
+
+    /// Link interfaces together
+    ///
+    /// This allows passing messages from one interface to another implicitly
+    /// when a message has been received to one of the linked interfaces.
+    LinkInterfaces {
+        /// First interface.
+        first: T::InterfaceId,
+
+        /// Second interface.
+        second: T::InterfaceId,
+
+        /// Result.
+        result: oneshot::Sender<crate::Result<()>>,
+    },
 }

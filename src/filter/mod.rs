@@ -15,6 +15,7 @@ mod tests;
 
 const LOG_TARGET: &'static str = "filter";
 
+// TODO: interface chaining
 // TODO: filter should have apply method?
 // TODO: separate filter types for peers and interfaces
 // TODO: more complex filters?
@@ -96,6 +97,13 @@ impl<T: NetworkBackend> MessageFilter<T> {
         ensure!(
             self.interfaces.contains_key(&first) && self.interfaces.contains_key(&second),
             Error::InterfaceDoesntExist,
+        );
+
+        tracing::info!(
+            target: LOG_TARGET,
+            interface = ?first,
+            interface = ?second,
+            "link interfaces",
         );
 
         self.interfaces
