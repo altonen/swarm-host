@@ -43,7 +43,7 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
         // TODO: too leaky
         /// Socket which allows sending messages to the peer.
-        socket: Box<dyn AsyncWrite + Send>,
+        socket: Box<dyn AsyncWrite + Send + Unpin>,
 
         /// Supported protocols.
         protocols: Vec<T::ProtocolId>,
@@ -90,7 +90,7 @@ pub trait NetworkBackend {
     type PeerId: Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying the interface.
-    type InterfaceId: Debug + Copy + Clone + Eq + Hash + Send + Sync;
+    type InterfaceId: Serialize + DeserializeOwned + Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying a protocol.
     type ProtocolId: Debug + Copy + Clone + Send + Sync;

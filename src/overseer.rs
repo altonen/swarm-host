@@ -8,7 +8,7 @@ use crate::{
 
 use futures::{stream::SelectAll, FutureExt, Stream, StreamExt};
 use tokio::{
-    io::AsyncWrite,
+    io::{AsyncWrite, AsyncWriteExt},
     sync::mpsc::{self, Receiver, Sender},
 };
 
@@ -28,7 +28,7 @@ struct PeerInfo<T: NetworkBackend> {
     protocols: Vec<T::ProtocolId>,
 
     /// Socket for sending messages to peer.
-    socket: Box<dyn AsyncWrite + Send>,
+    socket: Box<dyn AsyncWrite + Send + Unpin>,
 }
 
 pub struct Overseer<T: NetworkBackend> {
@@ -170,14 +170,15 @@ impl<T: NetworkBackend> Overseer<T> {
                             Entry::Occupied(mut entry) => if entry.get_mut().remove(&peer).is_none() {
                                 tracing::warn!(
                                     target: LOG_TARGET,
-                                    peer_id = ?peer,
                                     interface_id = ?interface,
+                                    peer_id = ?peer,
                                     "peer does not exist",
                                 );
                             }
                         }
                     }
                     Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
+                        // TODO: span?
                         tracing::trace!(
                             target: LOG_TARGET,
                             interface_id = ?interface,
@@ -192,7 +193,33 @@ impl<T: NetworkBackend> Overseer<T> {
                             &message
                         ) {
                             Ok(routing_table) => for (interface, peer) in routing_table {
-                                todo!();
+                                match self.iface_peers.get_mut(&interface).expect("interface to exist").get_mut(&peer) {
+                                    None => tracing::error!(
+                                        target: LOG_TARGET,
+                                        interface_id = ?interface,
+                                        peer_id = ?peer,
+                                        "peer doesn't exist"
+                                    ),
+                                    Some(peer_info) => {
+                                        let message = serde_cbor::to_vec(&message).expect("message to serialize");
+                                        match peer_info.socket.write(&message).await {
+                                            Ok(_) =>
+                                                tracing::trace!(
+                                                    target: LOG_TARGET,
+                                                    interface_id = ?interface,
+                                                    peer_id = ?peer,
+                                                    "message sent to peer",
+                                                ),
+                                            Err(err) => tracing::error!(
+                                                target: LOG_TARGET,
+                                                interface_id = ?interface,
+                                                peer_id = ?peer,
+                                                error = ?err,
+                                                "failed to send message"
+                                            ),
+                                        }
+                                    }
+                                }
                             }
                             Err(err) => tracing::error!(
                                 target: LOG_TARGET,
