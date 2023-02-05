@@ -118,7 +118,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             },
                         }
                     }
-                    OverseerEvent::LinkInterfaces { first, second, result } => {
+                    OverseerEvent::LinkInterface { first, second, result } => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             interface = ?first,
@@ -126,7 +126,17 @@ impl<T: NetworkBackend> Overseer<T> {
                             "link interfaces",
                         );
 
-                        result.send(self.filter.link_interfaces(first, second));
+                        result.send(self.filter.link_interface(first, second));
+                    }
+                    OverseerEvent::UnlinkInterface { first, second, result } => {
+                        tracing::debug!(
+                            target: LOG_TARGET,
+                            interface = ?first,
+                            interface = ?second,
+                            "unlink interfaces",
+                        );
+
+                        result.send(self.filter.unlink_interface(first, second));
                     }
                 },
                 event = self.event_streams.next() => match event {

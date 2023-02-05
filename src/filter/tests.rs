@@ -230,7 +230,7 @@ fn two_linked_interfaces() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interfaces(0usize, 1usize).unwrap();
+    filter.link_interface(0usize, 1usize).unwrap();
     assert_eq!(
         filter.interfaces.get(&0usize).unwrap().links,
         HashSet::from([1usize]),
@@ -273,7 +273,7 @@ fn peer_connected_to_two_linked_interfaces_receives() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interfaces(0usize, 1usize).unwrap();
+    filter.link_interface(0usize, 1usize).unwrap();
     assert_eq!(
         filter.interfaces.get(&0usize).unwrap().links,
         HashSet::from([1usize]),
@@ -348,7 +348,7 @@ fn linked_interfaces_with_dropall() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interfaces(0usize, 1usize).unwrap();
+    filter.link_interface(0usize, 1usize).unwrap();
     assert_eq!(
         filter.interfaces.get(&0usize).unwrap().links,
         HashSet::from([1usize]),
@@ -368,6 +368,69 @@ fn linked_interfaces_with_dropall() {
 
     // inject message to first interface and verify that it is not received
     // by the second interface because its type is `InterfaceType::DropAll`
+    assert_eq!(
+        filter
+            .inject_message(0usize, 0u64, &rand::random())
+            .expect("valid configuration")
+            .collect::<Vec<_>>(),
+        vec![],
+    );
+}
+
+#[test]
+fn link_message_unlink() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+
+    let mut filter = MessageFilter::<MockchainBackend>::new();
+    filter
+        .register_interface(0usize, FilterType::FullBypass)
+        .unwrap();
+    filter
+        .register_interface(1usize, FilterType::FullBypass)
+        .unwrap();
+
+    // link interfaces together so messages can flow between them
+    filter.link_interface(0usize, 1usize).unwrap();
+    assert_eq!(
+        filter.interfaces.get(&0usize).unwrap().links,
+        HashSet::from([1usize]),
+    );
+    assert_eq!(
+        filter.interfaces.get(&1usize).unwrap().links,
+        HashSet::from([0usize]),
+    );
+
+    // register `peer0` to `iface0` and `peer1` to `iface1`
+    filter
+        .register_peer(0usize, 0u64, FilterType::FullBypass)
+        .unwrap();
+    filter
+        .register_peer(1usize, 1u64, FilterType::FullBypass)
+        .unwrap();
+
+    // inject message to first interface and verify it's forwarded to the other interface
+    assert_eq!(
+        filter
+            .inject_message(0usize, 0u64, &rand::random())
+            .expect("valid configuration")
+            .collect::<Vec<_>>(),
+        vec![(1usize, 1u64)],
+    );
+
+    // unlink interfaces
+    filter.unlink_interface(1usize, 0usize).unwrap();
+    assert_eq!(
+        filter.interfaces.get(&0usize).unwrap().links,
+        HashSet::from([]),
+    );
+    assert_eq!(
+        filter.interfaces.get(&1usize).unwrap().links,
+        HashSet::from([]),
+    );
+
+    // verify that messages don't flow between the interfaces anymore
     assert_eq!(
         filter
             .inject_message(0usize, 0u64, &rand::random())
@@ -404,7 +467,7 @@ fn linked_interfaces_with_dropall() {
 //         );
 
 //         if i > 0 {
-//             filter.link_interfaces(i - 1, i).unwrap();
+//             filter.link_interface(i - 1, i).unwrap();
 //         }
 //     }
 

@@ -65,7 +65,7 @@ where
         .unwrap();
 
     module
-        .register_async_method("link_interfaces", |params, ctx| async move {
+        .register_async_method("link_interface", |params, ctx| async move {
             let mut params = params.sequence();
             let first: T::InterfaceId = params
                 .next()
@@ -83,7 +83,45 @@ where
 
             let (tx, rx) = oneshot::channel();
             match ctx
-                .send(OverseerEvent::LinkInterfaces {
+                .send(OverseerEvent::LinkInterface {
+                    first,
+                    second,
+                    result: tx,
+                })
+                .await
+            {
+                Ok(_) => rx
+                    .await
+                    .map_err(|_| Error::Custom(String::from("Essential task closed")))?
+                    .map(|id| id)
+                    .map_err(|err| Error::Custom(err.to_string())),
+                Err(_) => {
+                    Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
+                }
+            }
+        })
+        .unwrap();
+
+    module
+        .register_async_method("unlink_interface", |params, ctx| async move {
+            let mut params = params.sequence();
+            let first: T::InterfaceId = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?;
+            let second: T::InterfaceId = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?;
+
+            tracing::trace!(
+                target: LOG_TARGET,
+                interface = ?first,
+                interface = ?second,
+                "unlink interfaces"
+            );
+
+            let (tx, rx) = oneshot::channel();
+            match ctx
+                .send(OverseerEvent::UnlinkInterface {
                     first,
                     second,
                     result: tx,

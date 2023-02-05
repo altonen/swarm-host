@@ -29,7 +29,22 @@ pub enum OverseerEvent<T: NetworkBackend> {
     ///
     /// This allows passing messages from one interface to another implicitly
     /// when a message has been received to one of the linked interfaces.
-    LinkInterfaces {
+    LinkInterface {
+        /// First interface.
+        first: T::InterfaceId,
+
+        /// Second interface.
+        second: T::InterfaceId,
+
+        /// Result.
+        result: oneshot::Sender<crate::Result<()>>,
+    },
+
+    /// Unlink interfaces.
+    ///
+    /// If the interfaces were linked together, remove that link and prevent
+    /// any packet flow between the interfaces.
+    UnlinkInterface {
         /// First interface.
         first: T::InterfaceId,
 

@@ -89,7 +89,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
     }
 
     /// Link interfaces together.
-    pub fn link_interfaces(
+    pub fn link_interface(
         &mut self,
         first: T::InterfaceId,
         second: T::InterfaceId,
@@ -116,6 +116,44 @@ impl<T: NetworkBackend> MessageFilter<T> {
             .expect("entry to exist")
             .links
             .insert(first);
+
+        Ok(())
+    }
+
+    /// Unlink interfaces.
+    pub fn unlink_interface(
+        &mut self,
+        first: T::InterfaceId,
+        second: T::InterfaceId,
+    ) -> crate::Result<()> {
+        ensure!(
+            self.interfaces.contains_key(&first) && self.interfaces.contains_key(&second),
+            Error::InterfaceDoesntExist,
+        );
+
+        tracing::info!(
+            target: LOG_TARGET,
+            interface = ?first,
+            interface = ?second,
+            "link interfaces",
+        );
+
+        let link_exists = self
+            .interfaces
+            .get_mut(&first)
+            .expect("entry to exist")
+            .links
+            .remove(&second);
+
+        assert_eq!(
+            self.interfaces
+                .get_mut(&second)
+                .expect("entry to exist")
+                .links
+                .remove(&first),
+            link_exists,
+            "state mismatch: link exists for only one of the interfaces",
+        );
 
         Ok(())
     }
