@@ -2,6 +2,8 @@ use super::*;
 use crate::backend::mockchain::{types::Message, InterfaceId, MockchainBackend};
 use rand::Rng;
 
+// TODO: add tests `IngressOnly` and `EgressOnly`
+
 #[test]
 fn register_new_interface() {
     tracing_subscriber::fmt()
@@ -230,15 +232,9 @@ fn two_linked_interfaces() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interface(0usize, 1usize).unwrap();
-    assert_eq!(
-        filter.interfaces.get(&0usize).unwrap().links,
-        HashSet::from([1usize]),
-    );
-    assert_eq!(
-        filter.interfaces.get(&1usize).unwrap().links,
-        HashSet::from([0usize]),
-    );
+    filter
+        .link_interface(0usize, 1usize, LinkType::Bidrectional)
+        .unwrap();
 
     // register `peer0` to `iface0` and `peer1` to `iface1`
     filter
@@ -273,15 +269,9 @@ fn peer_connected_to_two_linked_interfaces_receives() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interface(0usize, 1usize).unwrap();
-    assert_eq!(
-        filter.interfaces.get(&0usize).unwrap().links,
-        HashSet::from([1usize]),
-    );
-    assert_eq!(
-        filter.interfaces.get(&1usize).unwrap().links,
-        HashSet::from([0usize]),
-    );
+    filter
+        .link_interface(0usize, 1usize, LinkType::Bidrectional)
+        .unwrap();
 
     // register `peer0` to `iface0` and `iface1`
     filter
@@ -348,15 +338,9 @@ fn linked_interfaces_with_dropall() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interface(0usize, 1usize).unwrap();
-    assert_eq!(
-        filter.interfaces.get(&0usize).unwrap().links,
-        HashSet::from([1usize]),
-    );
-    assert_eq!(
-        filter.interfaces.get(&1usize).unwrap().links,
-        HashSet::from([0usize]),
-    );
+    filter
+        .link_interface(0usize, 1usize, LinkType::Bidrectional)
+        .unwrap();
 
     // register `peer0` to `iface0` and `iface1`
     filter
@@ -392,15 +376,9 @@ fn link_message_unlink() {
         .unwrap();
 
     // link interfaces together so messages can flow between them
-    filter.link_interface(0usize, 1usize).unwrap();
-    assert_eq!(
-        filter.interfaces.get(&0usize).unwrap().links,
-        HashSet::from([1usize]),
-    );
-    assert_eq!(
-        filter.interfaces.get(&1usize).unwrap().links,
-        HashSet::from([0usize]),
-    );
+    filter
+        .link_interface(0usize, 1usize, LinkType::Bidrectional)
+        .unwrap();
 
     // register `peer0` to `iface0` and `peer1` to `iface1`
     filter
@@ -420,15 +398,7 @@ fn link_message_unlink() {
     );
 
     // unlink interfaces
-    filter.unlink_interface(1usize, 0usize).unwrap();
-    assert_eq!(
-        filter.interfaces.get(&0usize).unwrap().links,
-        HashSet::from([]),
-    );
-    assert_eq!(
-        filter.interfaces.get(&1usize).unwrap().links,
-        HashSet::from([]),
-    );
+    filter.unlink_interface(0usize, 1usize).unwrap();
 
     // verify that messages don't flow between the interfaces anymore
     assert_eq!(
@@ -442,47 +412,40 @@ fn link_message_unlink() {
 
 // chain `N` interfaces together,
 // publish message at the head and verify it's received by the tail
-// #[test]
-// fn chained_interfaces() {
-//     tracing_subscriber::fmt()
-//         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-//         .try_init();
+#[test]
+fn chained_interfaces() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
 
-//     let mut rng = rand::thread_rng();
-//     let mut filter = MessageFilter::<MockchainBackend>::new();
+    let mut rng = rand::thread_rng();
+    let mut filter = MessageFilter::<MockchainBackend>::new();
 
-//     // let upper_bound = rng.gen_range(2..10);
-//     let upper_bound = 3;
-//     let selected = rng.gen_range(0..upper_bound);
+    let upper_bound = rng.gen_range(2..10);
+    let selected = rng.gen_range(0..upper_bound);
 
-//     for i in (0..upper_bound) {
-//         assert_eq!(filter.register_interface(i, FilterType::FullBypass), Ok(()));
-//         assert_eq!(
-//             filter.register_peer(
-//                 i,
-//                 i.try_into().unwrap(),
-//                 FilterType::FullBypass
-//             ),
-//             Ok(())
-//         );
+    for i in (0..upper_bound) {
+        assert_eq!(filter.register_interface(i, FilterType::FullBypass), Ok(()));
+        assert_eq!(
+            filter.register_peer(i, i.try_into().unwrap(), FilterType::FullBypass),
+            Ok(())
+        );
 
-//         if i > 0 {
-//             filter.link_interface(i - 1, i).unwrap();
-//         }
-//     }
+        if i > 0 {
+            filter
+                .link_interface(i - 1, i, LinkType::Bidrectional)
+                .unwrap();
+        }
+    }
 
-//     let forwards = filter
-//         .inject_message(
-//             selected,
-//             selected.try_into().unwrap(),
-//             &rand::random(),
-//         )
-//         .expect("valid configuration")
-//         .collect::<HashSet<_>>();
+    let forwards = filter
+        .inject_message(selected, selected.try_into().unwrap(), &rand::random())
+        .expect("valid configuration")
+        .collect::<HashSet<_>>();
 
-//     assert_eq!(
-//         forwards.len(),
-//         TryInto::<usize>::try_into(upper_bound - 1).unwrap()
-//     );
-//     // assert!(!peers.contains(&(0usize, selected.try_into().unwrap())));
-// }
+    assert_eq!(
+        forwards.len(),
+        TryInto::<usize>::try_into(upper_bound - 1).unwrap()
+    );
+    assert!(!forwards.contains(&(0usize, selected.try_into().unwrap())));
+}

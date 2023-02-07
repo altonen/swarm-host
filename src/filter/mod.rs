@@ -6,6 +6,10 @@ use crate::{
     error::Error,
 };
 
+use petgraph::{
+    graph::{DiGraph, EdgeIndex, NodeIndex},
+    visit::{Dfs, Walker},
+};
 use tracing::Level;
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
@@ -32,6 +36,7 @@ const LOG_TARGET: &'static str = "filter";
 /// }
 /// ```
 
+// TODO: remove?
 /// Filtering mode for peer/interface.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FilterType {
@@ -40,6 +45,18 @@ pub enum FilterType {
 
     /// Drop all messages received to the interface.
     DropAll,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum LinkType {
+    IngressOnly,
+    EgressOnly,
+    Bidrectional,
+}
+
+pub enum EdgeType {
+    Unidirectional(EdgeIndex),
+    Bidrectional(EdgeIndex, EdgeIndex),
 }
 
 /// Interface-related information.
@@ -52,6 +69,9 @@ struct Interface<T: NetworkBackend> {
 
     /// Established links between interfaces.
     links: HashSet<T::InterfaceId>,
+
+    /// Index to the link graph.
+    index: NodeIndex,
 }
 
 /// Object implementing message filtering for `swarm-host`.
@@ -61,6 +81,13 @@ pub struct MessageFilter<T: NetworkBackend> {
 
     /// Installed interfaces and their information.
     interfaces: HashMap<T::InterfaceId, Interface<T>>,
+
+    /// Edges of the link graph.
+    edges: HashMap<(T::InterfaceId, T::InterfaceId), EdgeType>,
+
+    /// Linked interfaces.
+    // TODO: store `Interface<T>` here?
+    links: DiGraph<T::InterfaceId, ()>,
 }
 
 impl<T: NetworkBackend> MessageFilter<T> {
@@ -69,6 +96,8 @@ impl<T: NetworkBackend> MessageFilter<T> {
         Self {
             peer_filters: HashMap::new(),
             interfaces: HashMap::new(),
+            links: DiGraph::new(),
+            edges: HashMap::new(),
         }
     }
 
@@ -90,6 +119,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
             Entry::Vacant(entry) => {
                 entry.insert(Interface {
                     filter,
+                    index: self.links.add_node(interface),
                     peers: Default::default(),
                     links: Default::default(),
                 });
@@ -99,38 +129,60 @@ impl<T: NetworkBackend> MessageFilter<T> {
         }
     }
 
-    /// Link interfaces together.
+    /// Link interfaces together `first` to `second`.
     ///
-    /// This allows packet flow between interfaces and makes it possible for peers
-    /// of interface 1 to receive packets of interface 2 even if the peers have not
-    /// connected to interface 1 directly.
+    /// Parameter `link` defines how packet flow between the interfaces work:
+    ///   - `LinkType::IngressOnly`: `first` <- `second`
+    ///   - `LinkType::EgressOnly`: `first` -> `second`
+    ///   - `LinkType::Bidrectional`: `first` <-> `second`
     pub fn link_interface(
         &mut self,
         first: T::InterfaceId,
         second: T::InterfaceId,
+        link: LinkType,
     ) -> crate::Result<()> {
-        ensure!(
-            self.interfaces.contains_key(&first) && self.interfaces.contains_key(&second),
-            Error::InterfaceDoesntExist,
-        );
+        let first_idx = self
+            .interfaces
+            .get(&first)
+            .ok_or(Error::InterfaceDoesntExist)?
+            .index;
+        let second_idx = self
+            .interfaces
+            .get(&second)
+            .ok_or(Error::InterfaceDoesntExist)?
+            .index;
 
         tracing::info!(
             target: LOG_TARGET,
             interface = ?first,
             interface = ?second,
+            link = ?link,
             "link interfaces",
         );
 
-        self.interfaces
-            .get_mut(&first)
-            .expect("entry to exist")
-            .links
-            .insert(second);
-        self.interfaces
-            .get_mut(&second)
-            .expect("entry to exist")
-            .links
-            .insert(first);
+        match link {
+            LinkType::IngressOnly => {
+                self.edges.insert(
+                    (first, second),
+                    EdgeType::Unidirectional(self.links.add_edge(second_idx, first_idx, ())),
+                );
+            }
+            LinkType::EgressOnly => {
+                self.edges.insert(
+                    (first, second),
+                    EdgeType::Unidirectional(self.links.add_edge(first_idx, second_idx, ())),
+                );
+            }
+            LinkType::Bidrectional => {
+                self.edges.insert(
+                    (first, second),
+                    EdgeType::Bidrectional(
+                        self.links.add_edge(first_idx, second_idx, ()),
+                        self.links.add_edge(second_idx, first_idx, ()),
+                    ),
+                );
+            }
+        }
 
         Ok(())
     }
@@ -156,22 +208,16 @@ impl<T: NetworkBackend> MessageFilter<T> {
             "link interfaces",
         );
 
-        let link_exists = self
-            .interfaces
-            .get_mut(&first)
-            .expect("entry to exist")
-            .links
-            .remove(&second);
-
-        assert_eq!(
-            self.interfaces
-                .get_mut(&second)
-                .expect("entry to exist")
-                .links
-                .remove(&first),
-            link_exists,
-            "state mismatch: link exists for only one of the interfaces",
-        );
+        match self.edges.remove(&(first, second)) {
+            Some(EdgeType::Unidirectional(edge)) => {
+                self.links.remove_edge(edge);
+            }
+            Some(EdgeType::Bidrectional(edge1, edge2)) => {
+                self.links.remove_edge(edge1);
+                self.links.remove_edge(edge2);
+            }
+            None => return Err(Error::LinkDoesntExist),
+        }
 
         Ok(())
     }
@@ -240,58 +286,40 @@ impl<T: NetworkBackend> MessageFilter<T> {
             "inject message",
         );
 
-        // special case (TODO: refactor into something more sensible)
-        if let FilterType::DropAll = self
-            .interfaces
-            .get(&interface)
-            .expect("entry to exist")
-            .filter
-        {
-            return Ok(vec![].into_iter());
-        }
+        let pairs = Dfs::new(
+            &self.links,
+            self.interfaces
+                .get(&interface)
+                .expect("interface to exist")
+                .index,
+        )
+        .iter(&self.links)
+        .map(|nx| {
+            let iface_id = self.links.node_weight(nx).expect("entry to exist");
+            let iface = self.interfaces.get(iface_id).expect("interface to exist");
 
-        // TODO: this needs some serious thought
-        let pairs = std::iter::once(&interface)
-            .chain(
-                self.interfaces
-                    .get(&interface)
-                    .expect("entry to exist")
-                    .links
-                    .iter(),
-            )
-            .filter_map(
-                |iface| match self.interfaces.get(iface).expect("filter to exist").filter {
-                    FilterType::DropAll => None,
-                    FilterType::FullBypass => Some(
-                        self.interfaces
-                            .get(&iface)
-                            .expect("entry to exist")
-                            .peers
-                            .iter()
-                            .filter_map(|&iface_peer| {
-                                if (iface_peer != peer && iface == &interface) {
-                                    return Some((*iface, iface_peer));
-                                } else if iface != &interface {
-                                    return Some((*iface, iface_peer));
-                                }
+            match iface.filter {
+                FilterType::DropAll => None,
+                FilterType::FullBypass => Some(
+                    iface
+                        .peers
+                        .iter()
+                        .filter_map(|&iface_peer| {
+                            if (iface_peer != peer && iface_id == &interface) {
+                                return Some((*iface_id, iface_peer));
+                            } else if iface_id != &interface {
+                                return Some((*iface_id, iface_peer));
+                            }
 
-                                None
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                },
-            )
-            .flatten()
-            .collect::<Vec<_>>();
-
-        tracing::event!(
-            target: LOG_TARGET,
-            Level::TRACE,
-            peer_id = ?peer,
-            interface_id = ?interface,
-            pairs = ?pairs,
-            "collected destinations for message"
-        );
+                            None
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            }
+        })
+        .flatten()
+        .flatten()
+        .collect::<Vec<_>>();
 
         Ok(pairs.into_iter())
     }

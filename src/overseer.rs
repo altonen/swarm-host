@@ -2,7 +2,7 @@
 
 use crate::{
     backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend},
-    filter::{FilterType, MessageFilter},
+    filter::{FilterType, LinkType, MessageFilter},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -20,6 +20,7 @@ use std::{
 };
 
 // TODO: get filter type from rpc
+// TODO: all links should not ben bidrectional
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
@@ -131,7 +132,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             "link interfaces",
                         );
 
-                        result.send(self.filter.link_interface(first, second));
+                        result.send(self.filter.link_interface(first, second, LinkType::Bidrectional));
                     }
                     OverseerEvent::UnlinkInterface { first, second, result } => {
                         tracing::debug!(

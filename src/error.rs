@@ -29,6 +29,9 @@ pub enum Error {
 
     #[error("Peer does not exist")]
     PeerDoesntExist,
+
+    #[error("Link does not exist")]
+    LinkDoesntExist,
 }
 
 impl From<io::Error> for Error {
