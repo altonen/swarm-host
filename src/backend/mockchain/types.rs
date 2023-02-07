@@ -34,6 +34,20 @@ impl Transaction {
             amount,
         }
     }
+
+    /// Get sender.
+    pub fn sender(&self) -> AccountId {
+        self.sender
+    }
+
+    /// Get receiver.
+    pub fn receiver(&self) -> AccountId {
+        self.receiver
+    }
+
+    pub fn amount(&self) -> u64 {
+        self.amount
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

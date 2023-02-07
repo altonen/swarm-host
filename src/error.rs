@@ -32,6 +32,9 @@ pub enum Error {
 
     #[error("Link does not exist")]
     LinkDoesntExist,
+
+    #[error("Filter already exists")]
+    FilterAlreadyExists,
 }
 
 impl From<io::Error> for Error {
@@ -62,6 +65,8 @@ impl PartialEq for Error {
             (Error::PeerAlreadyExists, Error::PeerAlreadyExists) => true,
             (Error::InterfaceDoesntExist, Error::InterfaceDoesntExist) => true,
             (Error::PeerDoesntExist, Error::PeerDoesntExist) => true,
+            (Error::LinkDoesntExist, Error::LinkDoesntExist) => true,
+            (Error::FilterAlreadyExists, Error::FilterAlreadyExists) => true,
             _ => false,
         }
     }

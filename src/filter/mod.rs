@@ -24,6 +24,7 @@ const LOG_TARGET: &'static str = "filter";
 // TODO: separate filter types for peers and interfaces
 // TODO: more complex filters?
 // TODO: differentiate between ingress and egress
+// TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
 // TODO: start using `mockall`
 // TODO: documentation
 // TODO: fuzzing
@@ -88,6 +89,15 @@ pub struct MessageFilter<T: NetworkBackend> {
     /// Linked interfaces.
     // TODO: store `Interface<T>` here?
     links: DiGraph<T::InterfaceId, ()>,
+
+    /// Packet filters.
+    filters: HashMap<
+        T::InterfaceId,
+        Box<
+            dyn Fn(T::InterfaceId, T::PeerId, T::InterfaceId, T::PeerId, &T::Message) -> bool
+                + Send,
+        >,
+    >,
 }
 
 impl<T: NetworkBackend> MessageFilter<T> {
@@ -98,6 +108,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
             interfaces: HashMap::new(),
             links: DiGraph::new(),
             edges: HashMap::new(),
+            filters: HashMap::new(),
         }
     }
 
@@ -256,6 +267,24 @@ impl<T: NetworkBackend> MessageFilter<T> {
         Ok(())
     }
 
+    /// Add custom packet filter.
+    pub fn add_filter(
+        &mut self,
+        interface: T::InterfaceId,
+        filter: Box<
+            dyn Fn(T::InterfaceId, T::PeerId, T::InterfaceId, T::PeerId, &T::Message) -> bool
+                + Send,
+        >,
+    ) -> crate::Result<()> {
+        match self.filters.entry(interface) {
+            Entry::Occupied(_) => Err(Error::FilterAlreadyExists),
+            Entry::Vacant(entry) => {
+                entry.insert(filter);
+                Ok(())
+            }
+        }
+    }
+
     /// Inject message into [`MessageFilter`].
     ///
     /// The message is processed based on the source peer and interface IDs and message type
@@ -269,57 +298,53 @@ impl<T: NetworkBackend> MessageFilter<T> {
         peer: T::PeerId,
         message: &T::Message,
     ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
-        ensure!(
-            self.interfaces.contains_key(&interface),
-            Error::InterfaceDoesntExist,
-        );
+        let iface_idx = self
+            .interfaces
+            .get(&interface)
+            .ok_or(Error::InterfaceDoesntExist)?
+            .index;
 
-        let span = tracing::span!(target: LOG_TARGET, Level::INFO, "inject_message");
-        let _guard = span.enter();
-
-        tracing::event!(
+        tracing::trace!(
             target: LOG_TARGET,
-            Level::TRACE,
             peer_id = ?peer,
             interface_id = ?interface,
             message = ?message,
             "inject message",
         );
 
-        let pairs = Dfs::new(
-            &self.links,
-            self.interfaces
-                .get(&interface)
-                .expect("interface to exist")
-                .index,
-        )
-        .iter(&self.links)
-        .map(|nx| {
-            let iface_id = self.links.node_weight(nx).expect("entry to exist");
-            let iface = self.interfaces.get(iface_id).expect("interface to exist");
+        let pairs = Dfs::new(&self.links, iface_idx)
+            .iter(&self.links)
+            .map(|nx| {
+                let iface_id = self.links.node_weight(nx).expect("entry to exist");
+                let iface = self.interfaces.get(iface_id).expect("interface to exist");
 
-            match iface.filter {
-                FilterType::DropAll => None,
-                FilterType::FullBypass => Some(
-                    iface
-                        .peers
-                        .iter()
-                        .filter_map(|&iface_peer| {
-                            if (iface_peer != peer && iface_id == &interface) {
-                                return Some((*iface_id, iface_peer));
-                            } else if iface_id != &interface {
-                                return Some((*iface_id, iface_peer));
-                            }
+                match iface.filter {
+                    FilterType::DropAll => None,
+                    FilterType::FullBypass => Some(
+                        iface
+                            .peers
+                            .iter()
+                            .filter_map(|&iface_peer| {
+                                // don't forward message to source
+                                if iface_id == &interface && iface_peer == peer {
+                                    return None;
+                                }
 
-                            None
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-            }
-        })
-        .flatten()
-        .flatten()
-        .collect::<Vec<_>>();
+                                self.filters.get(iface_id).map_or(
+                                    Some((*iface_id, iface_peer)),
+                                    |filter| {
+                                        filter(interface, peer, *iface_id, iface_peer, &message)
+                                            .then_some((*iface_id, iface_peer))
+                                    },
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                }
+            })
+            .flatten()
+            .flatten()
+            .collect::<Vec<_>>();
 
         Ok(pairs.into_iter())
     }
