@@ -2,6 +2,7 @@
 
 use crate::{
     backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend},
+    error::Error,
     filter::{FilterType, LinkType, MessageFilter},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
@@ -143,6 +144,26 @@ impl<T: NetworkBackend> Overseer<T> {
                         );
 
                         result.send(self.filter.unlink_interface(first, second));
+                    }
+                    OverseerEvent::AddFilter { interface, filter_name, result } => {
+                        tracing::debug!(
+                            target: LOG_TARGET,
+                            interface = ?interface,
+                            filter_name = filter_name,
+                            "add filter",
+                        );
+
+                        let call_result = self.interfaces.get(&interface).map_or(
+                            Err(Error::InterfaceDoesntExist),
+                            |iface| {
+                                match iface.filter(&filter_name) {
+                                    Some(filter) => self.filter.add_filter(interface, filter),
+                                    None => Err(Error::FilterDoesntExist),
+                                }
+                            }
+                        );
+
+                        result.send(call_result).expect("channel to stay open");
                     }
                 },
                 event = self.event_streams.next() => match event {

@@ -38,7 +38,7 @@ where
                 .parse::<SocketAddr>()
                 .map_err(|_| Error::Custom(String::from("Invalid socket address")))?;
 
-            tracing::trace!(
+            tracing::debug!(
                 target: LOG_TARGET,
                 address = ?address,
                 "create interface"
@@ -74,7 +74,7 @@ where
                 .next()
                 .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?;
 
-            tracing::trace!(
+            tracing::debug!(
                 target: LOG_TARGET,
                 interface = ?first,
                 interface = ?second,
@@ -112,7 +112,7 @@ where
                 .next()
                 .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?;
 
-            tracing::trace!(
+            tracing::debug!(
                 target: LOG_TARGET,
                 interface = ?first,
                 interface = ?second,
@@ -124,6 +124,44 @@ where
                 .send(OverseerEvent::UnlinkInterface {
                     first,
                     second,
+                    result: tx,
+                })
+                .await
+            {
+                Ok(_) => rx
+                    .await
+                    .map_err(|_| Error::Custom(String::from("Essential task closed")))?
+                    .map(|id| id)
+                    .map_err(|err| Error::Custom(err.to_string())),
+                Err(_) => {
+                    Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
+                }
+            }
+        })
+        .unwrap();
+
+    module
+        .register_async_method("add_filter", |params, ctx| async move {
+            let mut params = params.sequence();
+            let interface: T::InterfaceId = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("Interface ID missing")))?;
+            let filter_name: String = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("Filter name missing")))?;
+
+            tracing::debug!(
+                target: LOG_TARGET,
+                interface_id = ?interface,
+                filter_name = filter_name,
+                "add filter"
+            );
+
+            let (tx, rx) = oneshot::channel();
+            match ctx
+                .send(OverseerEvent::AddFilter {
+                    interface,
+                    filter_name,
                     result: tx,
                 })
                 .await

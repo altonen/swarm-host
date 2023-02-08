@@ -19,11 +19,6 @@ mod tests;
 
 const LOG_TARGET: &'static str = "filter";
 
-// TODO: interface chaining
-// TODO: filter should have apply method?
-// TODO: separate filter types for peers and interfaces
-// TODO: more complex filters?
-// TODO: differentiate between ingress and egress
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
 // TODO: start using `mockall`
 // TODO: documentation

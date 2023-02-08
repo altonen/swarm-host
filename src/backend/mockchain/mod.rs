@@ -266,6 +266,33 @@ impl Interface<MockchainBackend> for MockchainHandle {
         &self.id
     }
 
+    /// Get installed filter, if it exists.
+    fn filter(
+        &self,
+        filter_name: &String,
+    ) -> Option<
+        Box<
+            dyn Fn(
+                    <MockchainBackend as NetworkBackend>::InterfaceId,
+                    <MockchainBackend as NetworkBackend>::PeerId,
+                    <MockchainBackend as NetworkBackend>::InterfaceId,
+                    <MockchainBackend as NetworkBackend>::PeerId,
+                    &<MockchainBackend as NetworkBackend>::Message,
+                ) -> bool
+                + Send,
+        >,
+    > {
+        if filter_name == "test_filter" {
+            return Some(Box::new(
+                |src_iface, src_peer, dst_iface, dst_peer, message| {
+                    !matches!(message, Message::Vote(_))
+                },
+            ));
+        }
+
+        None
+    }
+
     /// Connect to peer.
     fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
         todo!();
