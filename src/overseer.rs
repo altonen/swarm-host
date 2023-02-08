@@ -92,7 +92,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             "create new interface",
                         );
 
-                        match self.backend.spawn_interface(address).await {
+                        match self.backend.spawn_interface(address, InterfaceType::Masquerade).await {
                             Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                                 Entry::Vacant(entry) => {
                                     tracing::trace!(

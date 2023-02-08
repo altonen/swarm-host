@@ -19,6 +19,7 @@ mod tests;
 
 const LOG_TARGET: &'static str = "filter";
 
+// TODO: study eBPF
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
 // TODO: start using `mockall`
 // TODO: documentation

@@ -2,6 +2,21 @@ from utils.swarm_host import SwarmHost
 from backend.mockchain import MockChain
 import time
 
+# TODO: think about possible attacks
+# TODO: think about possible test cases
+# TODO: how to express them in python?
+# TODO: think about how to observe network effects?
+
+# TODO: setup subfunctions
+def setup_swarm_host():
+    print("setup swarm host")
+
+def setup_nodes():
+    print("setup nodes")
+
+def run_test():
+    print("run test")
+
 def main():
     print("initializing test program")
     host = SwarmHost(8884, "mockchain")

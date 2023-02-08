@@ -11,13 +11,7 @@ use clap::Parser;
 
 use std::net::SocketAddr;
 
-// TODO: differentiate between pubsub and other messages
-//        - source: peer ID
-//        - destinnation:
-//        	- peer ID
-//        	- broadcast
-//      - InterfaceType::Masquerade vs InterfaceType::NodeBacked??
-//
+// TODO: implement node-backed interfaces
 // TODO: introduce more generic `NetworkBackend::Source` instead of `NetworkBackend::PeerId`
 // TODO: `InterfaceId` doesn't need to be part of `NetworkBackend`
 // TODO: add prometheus metrics

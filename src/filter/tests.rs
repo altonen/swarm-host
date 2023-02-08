@@ -1,7 +1,7 @@
 use super::*;
 use crate::backend::mockchain::{
-    types::{Message, Transaction},
-    InterfaceId, MockchainBackend, PeerId,
+    types::{InterfaceId, Message, PeerId, Transaction},
+    MockchainBackend,
 };
 use rand::Rng;
 

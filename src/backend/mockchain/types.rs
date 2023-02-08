@@ -8,6 +8,12 @@ use tokio::sync::oneshot;
 
 use std::net::IpAddr;
 
+/// Unique ID identifying the interface.
+pub type InterfaceId = usize;
+
+/// Unique ID identifying the peer.
+pub type PeerId = u64;
+
 /// Unique account ID.
 pub type AccountId = u64;
 
@@ -71,9 +77,6 @@ impl Block {
         }
     }
 }
-
-/// Unique peer ID.
-pub type PeerId = u64;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Vote {
@@ -164,4 +167,37 @@ impl Distribution<Message> for Standard {
             _ => todo!(),
         }
     }
+}
+
+/// Supported protocols.
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum ProtocolId {
+    /// Transaction protocol.
+    Transaction,
+
+    /// Block protocol.
+    Block,
+
+    /// Peer exchange protocol.
+    PeerExchange,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Handshake {
+    /// Unique ID of the peer.
+    pub peer: PeerId,
+
+    /// Supported protocols of the peer.
+    pub protocols: Vec<ProtocolId>,
+}
+
+#[derive(Debug)]
+pub enum ConnectionType {
+    /// Local node received a connection and is expecting to
+    /// read a handshake from the socket as first message.
+    Inbound,
+
+    /// Local node initiated the connection and must send a handshake
+    /// message to remote node before doing anything else.
+    Outbound,
 }

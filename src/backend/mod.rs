@@ -127,6 +127,7 @@ pub trait NetworkBackend {
     async fn spawn_interface(
         &mut self,
         address: SocketAddr,
+        interface_type: InterfaceType,
     ) -> crate::Result<(Self::InterfaceHandle, InterfaceEventStream<Self>)>
     where
         Self: Sized;

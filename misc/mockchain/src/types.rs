@@ -54,9 +54,6 @@ impl Block {
     }
 }
 
-/// Unique peer ID.
-pub type PeerId = u64;
-
 /// Commands send to P2P.
 #[derive(Debug)]
 pub enum Command {
