@@ -1,12 +1,15 @@
 use crate::backend::{Interface, InterfaceEventStream, InterfaceType, NetworkBackend};
 
-use sc_network::NetworkWorker;
+use sc_network::{NetworkService, NetworkWorker};
 use std::net::SocketAddr;
 
 // TODO: create `NetworkWorker`
 //        - copy code from substrate?
 //        - start `NetworkWorker`
 //        - what to do about syncing?
+
+// TODO: who own the `NetworkWorker` object?
+// TODO: `InterfaceHandle` contains `NetworkService`?
 
 #[derive(Debug, Copy, Clone)]
 pub enum ProtocolId {}
@@ -15,7 +18,9 @@ pub enum ProtocolId {}
 pub struct InterfaceHandle {}
 
 impl InterfaceHandle {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        // TODO: create `NetworkWorker` here
+
         Self {}
     }
 }
