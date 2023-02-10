@@ -3,11 +3,19 @@ use crate::backend::{Interface, InterfaceEventStream, InterfaceType, NetworkBack
 use sc_network::{NetworkService, NetworkWorker};
 use std::net::SocketAddr;
 
+// TODO: create some kind of plan of what to do?
+// TODO: how much of the code can be reused?
+// TODO: work on Substrate and remove all protocol-related processing from it
+// 		 and keep only the code that establishes connections?
+//  	 keep scraping code from the network while still testing if connections work
+
 // TODO: create `NetworkWorker`
 //        - copy code from substrate?
 //        - start `NetworkWorker`
 //        - what to do about syncing?
-
+// TODO: how to start node-backed network?
+//       create handshake parser?
+// TODO: how does substrate exchange node capabilities such as supported protocols over the network?
 // TODO: who own the `NetworkWorker` object?
 // TODO: `InterfaceHandle` contains `NetworkService`?
 
