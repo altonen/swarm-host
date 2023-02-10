@@ -8,6 +8,7 @@ use tokio::{io::AsyncWrite, sync::mpsc::Sender};
 use std::{fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin};
 
 pub mod mockchain;
+pub mod substrate;
 
 // TODO: `Message` -> `Packet`
 
@@ -18,6 +19,7 @@ pub type InterfaceEventStream<T> = Pin<Box<dyn Stream<Item = InterfaceEvent<T>> 
 #[derive(clap::ValueEnum, Clone)]
 pub enum NetworkBackendType {
     Mockchain,
+    Substrate,
 }
 
 // TODO: how to express capabilities in a generic way?
