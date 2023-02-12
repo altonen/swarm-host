@@ -945,8 +945,9 @@ pub mod tests {
 				Poll::Ready(Some(NotificationsSinkMessage::Notification { message })) =>
 					Poll::Ready(Some(message)),
 				Poll::Pending => Poll::Ready(None),
-				Poll::Ready(Some(NotificationsSinkMessage::ForceClose)) | Poll::Ready(None) =>
-					panic!("sink closed"),
+				Poll::Ready(Some(NotificationsSinkMessage::ForceClose)) | Poll::Ready(None) => {
+					panic!("sink closed")
+				},
 			})
 			.await
 		}
