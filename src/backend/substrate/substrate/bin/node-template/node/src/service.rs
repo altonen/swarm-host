@@ -1,5 +1,6 @@
 //! Service and ServiceFactory implementation. Specialized wrapper over substrate service.
 
+use futures::prelude::*;
 use node_template_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::BlockBackend;
 use sc_consensus_aura::ImportQueueParams;
@@ -166,13 +167,14 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	};
 
 	let (network_service, network_starter) = sc_service::build_network(params)?;
-
+	let mut event_stream = network_service.event_stream("test-event-stream");
 	network_starter.start_network();
-	let event_stream = network_service.event_stream("test-event-stream");
 
-	// while let Some(event) = event_stream.next() {
-	// 	println!("event: {event:?}");
-	// }
+	task_manager.spawn_handle().spawn("test-test", Some("test"), async move {
+		while let Some(event) = event_stream.next().await {
+			println!("event: {event:?}");
+		}
+	});
 
 	Ok(task_manager)
 }
