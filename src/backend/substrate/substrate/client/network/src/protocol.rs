@@ -98,43 +98,6 @@ mod rep {
 	pub const BAD_BLOCK_ANNOUNCEMENT: Rep = Rep::new(-(1 << 12), "Bad block announcement");
 }
 
-struct Metrics {
-	peers: Gauge<U64>,
-	queued_blocks: Gauge<U64>,
-	fork_targets: Gauge<U64>,
-	justifications: GaugeVec<U64>,
-}
-
-impl Metrics {
-	fn register(r: &Registry) -> Result<Self, PrometheusError> {
-		Ok(Self {
-			peers: {
-				let g = Gauge::new("substrate_sync_peers", "Number of peers we sync with")?;
-				register(g, r)?
-			},
-			queued_blocks: {
-				let g =
-					Gauge::new("substrate_sync_queued_blocks", "Number of blocks in import queue")?;
-				register(g, r)?
-			},
-			fork_targets: {
-				let g = Gauge::new("substrate_sync_fork_targets", "Number of fork sync targets")?;
-				register(g, r)?
-			},
-			justifications: {
-				let g = GaugeVec::new(
-					Opts::new(
-						"substrate_sync_extra_justifications",
-						"Number of extra justifications requests",
-					),
-					&["status"],
-				)?;
-				register(g, r)?
-			},
-		})
-	}
-}
-
 // Lock must always be taken in order declared here.
 pub struct Protocol<B: BlockT, Client> {
 	/// Interval at which we call `tick`.
@@ -174,8 +137,6 @@ pub struct Protocol<B: BlockT, Client> {
 	/// solve this, an entry is added to this map whenever an invalid handshake is received.
 	/// Entries are removed when the corresponding "substream closed" is later received.
 	bad_handshake_substreams: HashSet<(PeerId, sc_peerset::SetId)>,
-	/// Prometheus metrics.
-	metrics: Option<Metrics>,
 	/// The `PeerId`'s of all boot nodes.
 	boot_node_ids: HashSet<PeerId>,
 	/// A cache for the data that was associated to a block announcement.
@@ -211,7 +172,6 @@ where
 		roles: Roles,
 		chain: Arc<Client>,
 		network_config: &config::NetworkConfiguration,
-		metrics_registry: Option<&Registry>,
 		chain_sync: Box<dyn ChainSync<B>>,
 		block_announces_protocol: sc_network_common::config::NonDefaultSetConfig,
 	) -> error::Result<(Self, sc_peerset::PeersetHandle, Vec<(PeerId, Multiaddr)>)> {
@@ -357,11 +317,6 @@ where
 				.chain(network_config.extra_sets.iter().map(|s| s.notifications_protocol.clone()))
 				.collect(),
 			bad_handshake_substreams: Default::default(),
-			metrics: if let Some(r) = metrics_registry {
-				Some(Metrics::register(r)?)
-			} else {
-				None
-			},
 			boot_node_ids,
 			block_announce_data_cache,
 		};
@@ -483,13 +438,6 @@ where
 	/// Adjusts the reputation of a node.
 	pub fn report_peer(&self, who: PeerId, reputation: sc_peerset::ReputationChange) {
 		self.peerset_handle.report_peer(who, reputation)
-	}
-
-	/// Perform time based maintenance.
-	///
-	/// > **Note**: This method normally doesn't have to be called except for testing purposes.
-	pub fn tick(&mut self) {
-		self.report_metrics()
 	}
 
 	/// Called on the first connection between two peers on the default set, after their exchange
@@ -619,198 +567,6 @@ where
 		Ok(())
 	}
 
-	/// Make sure an important block is propagated to peers.
-	///
-	/// In chain-based consensus, we often need to make sure non-best forks are
-	/// at least temporarily synced.
-	pub fn announce_block(&mut self, hash: B::Hash, data: Option<Vec<u8>>) {
-		let header = match self.chain.header(hash) {
-			Ok(Some(header)) => header,
-			Ok(None) => {
-				warn!("Trying to announce unknown block: {}", hash);
-				return
-			},
-			Err(e) => {
-				warn!("Error reading block header {}: {}", hash, e);
-				return
-			},
-		};
-
-		// don't announce genesis block since it will be ignored
-		if header.number().is_zero() {
-			return
-		}
-
-		let is_best = self.chain.info().best_hash == hash;
-		debug!(target: "sync", "Reannouncing block {:?} is_best: {}", hash, is_best);
-
-		let data = data
-			.or_else(|| self.block_announce_data_cache.get(&hash).cloned())
-			.unwrap_or_default();
-
-		for (who, ref mut peer) in self.peers.iter_mut() {
-			let inserted = peer.known_blocks.insert(hash);
-			if inserted {
-				trace!(target: "sync", "Announcing block {:?} to {}", hash, who);
-				let message = BlockAnnounce {
-					header: header.clone(),
-					state: if is_best { Some(BlockState::Best) } else { Some(BlockState::Normal) },
-					data: Some(data.clone()),
-				};
-
-				self.behaviour
-					.write_notification(who, HARDCODED_PEERSETS_SYNC, message.encode());
-			}
-		}
-	}
-
-	/// Push a block announce validation.
-	///
-	/// It is required that [`ChainSync::poll_block_announce_validation`] is
-	/// called later to check for finished validations. The result of the validation
-	/// needs to be passed to [`Protocol::process_block_announce_validation_result`]
-	/// to finish the processing.
-	///
-	/// # Note
-	///
-	/// This will internally create a future, but this future will not be registered
-	/// in the task before being polled once. So, it is required to call
-	/// [`ChainSync::poll_block_announce_validation`] to ensure that the future is
-	/// registered properly and will wake up the task when being ready.
-	fn push_block_announce_validation(&mut self, who: PeerId, announce: BlockAnnounce<B::Header>) {
-		let hash = announce.header.hash();
-
-		let peer = match self.peers.get_mut(&who) {
-			Some(p) => p,
-			None => {
-				log::error!(target: "sync", "Received block announce from disconnected peer {}", who);
-				debug_assert!(false);
-				return
-			},
-		};
-
-		peer.known_blocks.insert(hash);
-
-		let is_best = match announce.state.unwrap_or(BlockState::Best) {
-			BlockState::Best => true,
-			BlockState::Normal => false,
-		};
-
-		if peer.info.roles.is_full() {
-			self.chain_sync.push_block_announce_validation(who, hash, announce, is_best);
-		}
-	}
-
-	/// Process the result of the block announce validation.
-	fn process_block_announce_validation_result(
-		&mut self,
-		validation_result: PollBlockAnnounceValidation<B::Header>,
-	) -> CustomMessageOutcome<B> {
-		let (header, is_best, who) = match validation_result {
-			PollBlockAnnounceValidation::Skip => return CustomMessageOutcome::None,
-			PollBlockAnnounceValidation::Nothing { is_best, who, announce } => {
-				self.update_peer_info(&who);
-
-				if let Some(data) = announce.data {
-					if !data.is_empty() {
-						self.block_announce_data_cache.put(announce.header.hash(), data);
-					}
-				}
-
-				// `on_block_announce` returns `OnBlockAnnounce::ImportHeader`
-				// when we have all data required to import the block
-				// in the BlockAnnounce message. This is only when:
-				// 1) we're on light client;
-				// AND
-				// 2) parent block is already imported and not pruned.
-				if is_best {
-					return CustomMessageOutcome::PeerNewBest(who, *announce.header.number())
-				} else {
-					return CustomMessageOutcome::None
-				}
-			},
-			PollBlockAnnounceValidation::ImportHeader { announce, is_best, who } => {
-				self.update_peer_info(&who);
-
-				if let Some(data) = announce.data {
-					if !data.is_empty() {
-						self.block_announce_data_cache.put(announce.header.hash(), data);
-					}
-				}
-
-				(announce.header, is_best, who)
-			},
-			PollBlockAnnounceValidation::Failure { who, disconnect } => {
-				if disconnect {
-					self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-				}
-
-				self.report_peer(who, rep::BAD_BLOCK_ANNOUNCEMENT);
-				return CustomMessageOutcome::None
-			},
-		};
-
-		let number = *header.number();
-
-		// to import header from announced block let's construct response to request that normally
-		// would have been sent over network (but it is not in our case)
-		let blocks_to_import = self.chain_sync.on_block_data(
-			&who,
-			None,
-			BlockResponse::<B> {
-				id: 0,
-				blocks: vec![BlockData::<B> {
-					hash: header.hash(),
-					header: Some(header),
-					body: None,
-					indexed_body: None,
-					receipt: None,
-					message_queue: None,
-					justification: None,
-					justifications: None,
-				}],
-			},
-		);
-		self.chain_sync.process_block_response_data(blocks_to_import);
-
-		if is_best {
-			self.pending_messages.push_back(CustomMessageOutcome::PeerNewBest(who, number));
-		}
-
-		CustomMessageOutcome::None
-	}
-
-	/// Call this when a block has been finalized. The sync layer may have some additional
-	/// requesting to perform.
-	pub fn on_block_finalized(&mut self, hash: B::Hash, header: &B::Header) {
-		self.chain_sync.on_block_finalized(&hash, *header.number())
-	}
-
-	/// Set whether the syncing peers set is in reserved-only mode.
-	pub fn set_reserved_only(&self, reserved_only: bool) {
-		self.peerset_handle.set_reserved_only(HARDCODED_PEERSETS_SYNC, reserved_only);
-	}
-
-	/// Removes a `PeerId` from the list of reserved peers for syncing purposes.
-	pub fn remove_reserved_peer(&self, peer: PeerId) {
-		self.peerset_handle.remove_reserved_peer(HARDCODED_PEERSETS_SYNC, peer);
-	}
-
-	/// Returns the list of reserved peers.
-	pub fn reserved_peers(&self) -> impl Iterator<Item = &PeerId> {
-		self.behaviour.reserved_peers(HARDCODED_PEERSETS_SYNC)
-	}
-
-	/// Adds a `PeerId` to the list of reserved peers for syncing purposes.
-	pub fn add_reserved_peer(&self, peer: PeerId) {
-		self.peerset_handle.add_reserved_peer(HARDCODED_PEERSETS_SYNC, peer);
-	}
-
-	/// Sets the list of reserved peers for syncing purposes.
-	pub fn set_reserved_peers(&self, peers: HashSet<PeerId>) {
-		self.peerset_handle.set_reserved_peers(HARDCODED_PEERSETS_SYNC, peers);
-	}
-
 	/// Sets the list of reserved peers for the given protocol/peerset.
 	pub fn set_reserved_peerset_peers(&self, protocol: ProtocolName, peers: HashSet<PeerId>) {
 		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
@@ -850,14 +606,14 @@ where
 		}
 	}
 
-	/// Notify the protocol that we have learned about the existence of nodes on the default set.
-	///
-	/// Can be called multiple times with the same `PeerId`s.
-	pub fn add_default_set_discovered_nodes(&mut self, peer_ids: impl Iterator<Item = PeerId>) {
-		for peer_id in peer_ids {
-			self.peerset_handle.add_to_peers_set(HARDCODED_PEERSETS_SYNC, peer_id);
-		}
-	}
+	// /// Notify the protocol that we have learned about the existence of nodes on the default set.
+	// ///
+	// /// Can be called multiple times with the same `PeerId`s.
+	// pub fn add_default_set_discovered_nodes(&mut self, peer_ids: impl Iterator<Item = PeerId>) {
+	// 	for peer_id in peer_ids {
+	// 		self.peerset_handle.add_to_peers_set(HARDCODED_PEERSETS_SYNC, peer_id);
+	// 	}
+	// }
 
 	/// Add a peer to a peers set.
 	pub fn add_to_peers_set(&self, protocol: ProtocolName, peer: PeerId) {
@@ -882,35 +638,6 @@ where
 				"remove_from_peers_set with unknown protocol: {}",
 				protocol
 			);
-		}
-	}
-
-	fn report_metrics(&self) {
-		if let Some(metrics) = &self.metrics {
-			let n = u64::try_from(self.peers.len()).unwrap_or(std::u64::MAX);
-			metrics.peers.set(n);
-
-			let m = self.chain_sync.metrics();
-
-			metrics.fork_targets.set(m.fork_targets.into());
-			metrics.queued_blocks.set(m.queued_blocks.into());
-
-			metrics
-				.justifications
-				.with_label_values(&["pending"])
-				.set(m.justifications.pending_requests.into());
-			metrics
-				.justifications
-				.with_label_values(&["active"])
-				.set(m.justifications.active_requests.into());
-			metrics
-				.justifications
-				.with_label_values(&["failed"])
-				.set(m.justifications.failed_requests.into());
-			metrics
-				.justifications
-				.with_label_values(&["importing"])
-				.set(m.justifications.importing_requests.into());
 		}
 	}
 }
@@ -990,25 +717,6 @@ where
 		cx: &mut std::task::Context,
 		params: &mut impl PollParameters,
 	) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-		if let Some(message) = self.pending_messages.pop_front() {
-			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(message))
-		}
-
-		// Advance the state of `ChainSync`
-		//
-		// Process any received requests received from `NetworkService` and
-		// check if there is any block announcement validation finished.
-		while let Poll::Ready(result) = self.chain_sync.poll(cx) {
-			match self.process_block_announce_validation_result(result) {
-				CustomMessageOutcome::None => {},
-				outcome => self.pending_messages.push_back(outcome),
-			}
-		}
-
-		while let Poll::Ready(Some(())) = self.tick_timeout.poll_next_unpin(cx) {
-			self.tick();
-		}
-
 		if let Some(message) = self.pending_messages.pop_front() {
 			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(message))
 		}
@@ -1166,41 +874,12 @@ where
 					}
 				}
 			},
-			NotificationsOut::Notification { peer_id, set_id, message } => match set_id {
-				HARDCODED_PEERSETS_SYNC if self.peers.contains_key(&peer_id) => {
-					if let Ok(announce) = BlockAnnounce::decode(&mut message.as_ref()) {
-						self.push_block_announce_validation(peer_id, announce);
-
-						// Make sure that the newly added block announce validation future was
-						// polled once to be registered in the task.
-						if let Poll::Ready(res) = self.chain_sync.poll_block_announce_validation(cx)
-						{
-							self.process_block_announce_validation_result(res)
-						} else {
-							CustomMessageOutcome::None
-						}
-					} else {
-						warn!(target: "sub-libp2p", "Failed to decode block announce");
-						CustomMessageOutcome::None
-					}
-				},
-				HARDCODED_PEERSETS_SYNC => {
-					trace!(
-						target: "sync",
-						"Received sync for peer earlier refused by sync layer: {}",
-						peer_id
-					);
-					CustomMessageOutcome::None
-				},
-				_ if self.bad_handshake_substreams.contains(&(peer_id, set_id)) =>
-					CustomMessageOutcome::None,
-				_ => {
-					let protocol_name = self.notification_protocols[usize::from(set_id)].clone();
-					CustomMessageOutcome::NotificationsReceived {
-						remote: peer_id,
-						messages: vec![(protocol_name, message.freeze())],
-					}
-				},
+			NotificationsOut::Notification { peer_id, set_id, message } => {
+				let protocol_name = self.notification_protocols[usize::from(set_id)].clone();
+				CustomMessageOutcome::NotificationsReceived {
+					remote: peer_id,
+					messages: vec![(protocol_name, message.freeze())],
+				}
 			},
 		};
 

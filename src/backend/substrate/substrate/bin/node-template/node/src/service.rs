@@ -2,14 +2,12 @@
 
 use node_template_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::BlockBackend;
-use sc_consensus_aura::{ImportQueueParams, SlotProportion, StartAuraParams};
+use sc_consensus_aura::ImportQueueParams;
 pub use sc_executor::NativeElseWasmExecutor;
-use sc_finality_grandpa::SharedVoterState;
-use sc_keystore::LocalKeystore;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_telemetry::{Telemetry, TelemetryWorker};
+use sc_telemetry::Telemetry;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 // Our native executor instance.
 pub struct ExecutorDispatch;
@@ -132,12 +130,12 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	let sc_service::PartialComponents {
 		client,
 		backend,
-		mut task_manager,
+		task_manager,
 		import_queue,
-		mut keystore_container,
-		select_chain,
+		keystore_container: _,
+		select_chain: _,
 		transaction_pool,
-		other: (block_import, grandpa_link, _),
+		other: (_, grandpa_link, _),
 	} = new_partial(&config)?;
 
 	let grandpa_protocol_name = sc_finality_grandpa::protocol_standard_name(
@@ -166,8 +164,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		warp_sync: Some(warp_sync),
 	};
 
-	let (network, system_rpc_tx, tx_handler_controller, network_starter) =
-		sc_service::build_network(params)?;
+	let (_network_service, _, _, network_starter) = sc_service::build_network(params)?;
 
 	network_starter.start_network();
 	Ok(task_manager)

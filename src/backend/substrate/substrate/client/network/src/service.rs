@@ -224,7 +224,6 @@ where
 			From::from(&params.role),
 			params.chain.clone(),
 			&params.network_config,
-			params.metrics_registry.as_ref(),
 			params.chain_sync,
 			params.block_announce_config,
 		)?;
@@ -545,14 +544,6 @@ where
 		&self.service
 	}
 
-	/// You must call this when a new block is finalized by the client.
-	pub fn on_block_finalized(&mut self, hash: B::Hash, header: B::Header) {
-		self.network_service
-			.behaviour_mut()
-			.user_protocol_mut()
-			.on_block_finalized(hash, &header);
-	}
-
 	/// Inform the network service about new best imported block.
 	pub fn new_best_block_imported(&mut self, hash: B::Hash, number: NumberFor<B>) {
 		self.network_service
@@ -672,21 +663,6 @@ where
 			.peers_info()
 			.map(|(id, info)| (*id, info.clone()))
 			.collect()
-	}
-
-	/// Removes a `PeerId` from the list of reserved peers.
-	pub fn remove_reserved_peer(&self, peer: PeerId) {
-		self.service.remove_reserved_peer(peer);
-	}
-
-	/// Adds a `PeerId` and its `Multiaddr` as reserved.
-	pub fn add_reserved_peer(&self, peer: MultiaddrWithPeerId) -> Result<(), String> {
-		self.service.add_reserved_peer(peer)
-	}
-
-	/// Returns the list of reserved peers.
-	pub fn reserved_peers(&self) -> impl Iterator<Item = &PeerId> {
-		self.network_service.behaviour().user_protocol().reserved_peers()
 	}
 }
 
@@ -1315,40 +1291,20 @@ where
 				Poll::Pending => break,
 			};
 			match msg {
-				ServiceToWorkerMsg::AnnounceBlock(hash, data) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.announce_block(hash, data),
+				ServiceToWorkerMsg::AnnounceBlock(hash, data) => todo!(),
 				ServiceToWorkerMsg::GetValue(key) =>
 					this.network_service.behaviour_mut().get_value(key),
 				ServiceToWorkerMsg::PutValue(key, value) =>
 					this.network_service.behaviour_mut().put_value(key, value),
-				ServiceToWorkerMsg::SetReservedOnly(reserved_only) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.set_reserved_only(reserved_only),
-				ServiceToWorkerMsg::SetReserved(peers) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.set_reserved_peers(peers),
+				ServiceToWorkerMsg::SetReservedOnly(reserved_only) => todo!(),
+				ServiceToWorkerMsg::SetReserved(peers) => todo!(),
 				ServiceToWorkerMsg::SetPeersetReserved(protocol, peers) => this
 					.network_service
 					.behaviour_mut()
 					.user_protocol_mut()
 					.set_reserved_peerset_peers(protocol, peers),
-				ServiceToWorkerMsg::AddReserved(peer_id) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.add_reserved_peer(peer_id),
-				ServiceToWorkerMsg::RemoveReserved(peer_id) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.remove_reserved_peer(peer_id),
+				ServiceToWorkerMsg::AddReserved(peer_id) => todo!(),
+				ServiceToWorkerMsg::RemoveReserved(peer_id) => todo!(),
 				ServiceToWorkerMsg::AddSetReserved(protocol, peer_id) => this
 					.network_service
 					.behaviour_mut()
@@ -1529,16 +1485,14 @@ where
 							.behaviour_mut()
 							.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
 					}
-					this.network_service
-						.behaviour_mut()
-						.user_protocol_mut()
-						.add_default_set_discovered_nodes(iter::once(peer_id));
 				},
 				Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Discovered(peer_id))) => {
-					this.network_service
-						.behaviour_mut()
-						.user_protocol_mut()
-						.add_default_set_discovered_nodes(iter::once(peer_id));
+					// TODO: zzz
+					println!("implement");
+					// this.network_service
+					// 	.behaviour_mut()
+					// 	.user_protocol_mut()
+					// 	.add_default_set_discovered_nodes(iter::once(peer_id));
 				},
 				Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::RandomKademliaStarted)) =>
 					if let Some(metrics) = this.metrics.as_ref() {

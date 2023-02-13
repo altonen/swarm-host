@@ -190,11 +190,6 @@ async fn build_network_future<
 				}
 			}
 
-			// List of blocks that the client has finalized.
-			notification = finality_notification_stream.select_next_some() => {
-				network.on_block_finalized(notification.hash, notification.header);
-			}
-
 			// Answer incoming RPC requests.
 			request = rpc_rx.select_next_some() => {
 				match request {
@@ -234,7 +229,8 @@ async fn build_network_future<
 					sc_rpc::system::Request::NetworkAddReservedPeer(peer_addr, sender) => {
 						let result = match MultiaddrWithPeerId::try_from(peer_addr) {
 							Ok(peer) => {
-								network.add_reserved_peer(peer)
+								todo!();
+								// network.add_reserved_peer(peer)
 							},
 							Err(err) => {
 								Err(err.to_string())
@@ -246,7 +242,8 @@ async fn build_network_future<
 					sc_rpc::system::Request::NetworkRemoveReservedPeer(peer_id, sender) => {
 						let _ = match peer_id.parse::<PeerId>() {
 							Ok(peer_id) => {
-								network.remove_reserved_peer(peer_id);
+								todo!();
+								// network.remove_reserved_peer(peer_id);
 								sender.send(Ok(()))
 							}
 							Err(e) => sender.send(Err(sc_rpc::system::error::Error::MalformattedPeerArg(
@@ -255,12 +252,12 @@ async fn build_network_future<
 						};
 					}
 					sc_rpc::system::Request::NetworkReservedPeers(sender) => {
-						let reserved_peers = network.reserved_peers();
-						let reserved_peers = reserved_peers
-							.map(|peer_id| peer_id.to_base58())
-							.collect();
-
-						let _ = sender.send(reserved_peers);
+						todo!();
+						// let reserved_peers = network.reserved_peers();
+						// let reserved_peers = reserved_peers
+						// 	.map(|peer_id| peer_id.to_base58())
+						// 	.collect();
+						// let _ = sender.send(reserved_peers);
 					}
 					sc_rpc::system::Request::NodeRoles(sender) => {
 						use sc_rpc::system::NodeRole;
