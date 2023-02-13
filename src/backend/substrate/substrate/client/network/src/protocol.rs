@@ -99,7 +99,7 @@ mod rep {
 }
 
 // Lock must always be taken in order declared here.
-pub struct Protocol<B: BlockT, Client> {
+pub struct Protocol<B: BlockT> {
 	/// Interval at which we call `tick`.
 	tick_timeout: Pin<Box<dyn Stream<Item = ()> + Send>>,
 	/// Pending list of messages to return from `poll` as a priority.
@@ -109,7 +109,6 @@ pub struct Protocol<B: BlockT, Client> {
 	genesis_hash: B::Hash,
 	// All connected peers. Contains both full and light node peers.
 	peers: HashMap<PeerId, Peer<B>>,
-	chain: Arc<Client>,
 	/// List of nodes for which we perform additional logging because they are important for the
 	/// user.
 	important_peers: HashSet<PeerId>,
@@ -159,20 +158,17 @@ pub struct PeerInfo<B: BlockT> {
 	pub best_number: <B::Header as HeaderT>::Number,
 }
 
-impl<B, Client> Protocol<B, Client>
+impl<B> Protocol<B>
 where
 	B: BlockT,
-	Client: HeaderBackend<B> + 'static,
 {
 	/// Create a new instance.
 	pub fn new(
 		roles: Roles,
-		chain: Arc<Client>,
 		network_config: &config::NetworkConfiguration,
 		block_announces_protocol: sc_network_common::config::NonDefaultSetConfig,
+		genesis_hash: B::Hash,
 	) -> error::Result<(Self, sc_peerset::PeersetHandle, Vec<(PeerId, Multiaddr)>)> {
-		let info = chain.info();
-
 		let boot_node_ids = {
 			let mut list = HashSet::new();
 			for node in &network_config.boot_nodes {
@@ -295,8 +291,7 @@ where
 			pending_messages: VecDeque::new(),
 			roles,
 			peers: HashMap::new(),
-			chain,
-			genesis_hash: info.genesis_hash,
+			genesis_hash,
 			important_peers,
 			default_peers_set_no_slot_peers,
 			default_peers_set_no_slot_connected_peers: HashSet::new(),
@@ -398,29 +393,6 @@ where
 			}
 
 			return Err(())
-		}
-
-		if self.roles.is_light() {
-			// we're not interested in light peers
-			if status.roles.is_light() {
-				debug!(target: "sync", "Peer {} is unable to serve light requests", who);
-				self.peerset_handle.report_peer(who, rep::BAD_ROLE);
-				self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-				return Err(())
-			}
-
-			// we don't interested in peers that are far behind us
-			let self_best_block = self.chain.info().best_number;
-			let blocks_difference = self_best_block
-				.checked_sub(&status.best_number)
-				.unwrap_or_else(Zero::zero)
-				.saturated_into::<u64>();
-			if blocks_difference > LIGHT_MAXIMAL_BLOCKS_DIFFERENCE {
-				debug!(target: "sync", "Peer {} is far behind us and will unable to serve light requests", who);
-				self.peerset_handle.report_peer(who, rep::PEER_BEHIND_US_LIGHT);
-				self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-				return Err(())
-			}
 		}
 
 		let no_slot_peer = self.default_peers_set_no_slot_peers.contains(&who);
@@ -554,10 +526,9 @@ pub enum CustomMessageOutcome<B: BlockT> {
 	None,
 }
 
-impl<B, Client> NetworkBehaviour for Protocol<B, Client>
+impl<B> NetworkBehaviour for Protocol<B>
 where
 	B: BlockT,
-	Client: HeaderBackend<B> + 'static,
 {
 	type ConnectionHandler = <Notifications as NetworkBehaviour>::ConnectionHandler;
 	type OutEvent = CustomMessageOutcome<B>;

@@ -153,7 +153,7 @@ async fn build_network_future<
 	H: sc_network_common::ExHashT,
 >(
 	role: Role,
-	mut network: sc_network::NetworkWorker<B, H, C>,
+	mut network: sc_network::NetworkWorker<B, H>,
 	client: Arc<C>,
 	mut rpc_rx: TracingUnboundedReceiver<sc_rpc::system::Request<B>>,
 	should_have_peers: bool,

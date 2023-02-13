@@ -50,13 +50,12 @@ pub use crate::request_responses::{InboundFailure, OutboundFailure, RequestId, R
 /// General behaviour of the network. Combines all protocols together.
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "BehaviourOut")]
-pub struct Behaviour<B, Client>
+pub struct Behaviour<B>
 where
 	B: BlockT,
-	Client: HeaderBackend<B> + 'static,
 {
 	/// All the substrate-specific protocols.
-	substrate: Protocol<B, Client>,
+	substrate: Protocol<B>,
 	/// Periodically pings and identifies the nodes we are connected to, and store information in a
 	/// cache.
 	peer_info: peer_info::PeerInfoBehaviour,
@@ -179,14 +178,13 @@ pub enum BehaviourOut {
 	None,
 }
 
-impl<B, Client> Behaviour<B, Client>
+impl<B> Behaviour<B>
 where
 	B: BlockT,
-	Client: HeaderBackend<B> + 'static,
 {
 	/// Builds a new `Behaviour`.
 	pub fn new(
-		substrate: Protocol<B, Client>,
+		substrate: Protocol<B>,
 		user_agent: String,
 		local_public_key: PublicKey,
 		disco_config: DiscoveryConfig,
@@ -254,12 +252,12 @@ where
 	}
 
 	/// Returns a shared reference to the user protocol.
-	pub fn user_protocol(&self) -> &Protocol<B, Client> {
+	pub fn user_protocol(&self) -> &Protocol<B> {
 		&self.substrate
 	}
 
 	/// Returns a mutable reference to the user protocol.
-	pub fn user_protocol_mut(&mut self) -> &mut Protocol<B, Client> {
+	pub fn user_protocol_mut(&mut self) -> &mut Protocol<B> {
 		&mut self.substrate
 	}
 
