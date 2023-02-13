@@ -119,8 +119,6 @@ pub struct NetworkService<B: BlockT + 'static, H: ExHashT> {
 	peerset: PeersetHandle,
 	/// Channel that sends messages to the actual worker.
 	to_worker: TracingUnboundedSender<ServiceToWorkerMsg<B>>,
-	/// Interface that can be used to delegate calls to `ChainSync`
-	chain_sync_service: Box<dyn ChainSyncInterface<B>>,
 	/// For each peer and protocol combination, an object that allows sending notifications to
 	/// that peer. Updated by the [`NetworkWorker`].
 	peers_notifications_sinks: Arc<Mutex<HashMap<(PeerId, ProtocolName), NotificationsSink>>>,
@@ -143,7 +141,7 @@ where
 	/// Returns a `NetworkWorker` that implements `Future` and must be regularly polled in order
 	/// for the network processing to advance. From it, you can extract a `NetworkService` using
 	/// `worker.service()`. The `NetworkService` can be shared through the codebase.
-	pub fn new(mut params: Params<B, Client>) -> Result<Self, Error> {
+	pub fn new(mut params: Params<Client>) -> Result<Self, Error> {
 		// Private and public keys configuration.
 		let local_identity = params.network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
@@ -224,7 +222,6 @@ where
 			From::from(&params.role),
 			params.chain.clone(),
 			&params.network_config,
-			params.chain_sync,
 			params.block_announce_config,
 		)?;
 
@@ -444,7 +441,6 @@ where
 			local_peer_id,
 			local_identity,
 			to_worker,
-			chain_sync_service: params.chain_sync_service,
 			peers_notifications_sinks: peers_notifications_sinks.clone(),
 			notifications_sizes_metric: metrics
 				.as_ref()
@@ -469,18 +465,7 @@ where
 
 	/// High-level network status information.
 	pub fn status(&self) -> NetworkStatus<B> {
-		let status = self.sync_state();
-		NetworkStatus {
-			sync_state: status.state,
-			best_seen_block: self.best_seen_block(),
-			num_sync_peers: self.num_sync_peers(),
-			num_connected_peers: self.num_connected_peers(),
-			num_active_peers: self.num_active_peers(),
-			total_bytes_inbound: self.total_bytes_inbound(),
-			total_bytes_outbound: self.total_bytes_outbound(),
-			state_sync: status.state_sync,
-			warp_sync: status.warp_sync,
-		}
+		todo!();
 	}
 
 	/// Returns the total number of bytes received so far.
@@ -496,41 +481,6 @@ where
 	/// Returns the number of peers we're connected to.
 	pub fn num_connected_peers(&self) -> usize {
 		self.network_service.behaviour().user_protocol().num_connected_peers()
-	}
-
-	/// Returns the number of peers we're connected to and that are being queried.
-	pub fn num_active_peers(&self) -> usize {
-		self.network_service.behaviour().user_protocol().num_active_peers()
-	}
-
-	/// Current global sync state.
-	pub fn sync_state(&self) -> SyncStatus<B> {
-		self.network_service.behaviour().user_protocol().sync_state()
-	}
-
-	/// Target sync block number.
-	pub fn best_seen_block(&self) -> Option<NumberFor<B>> {
-		self.network_service.behaviour().user_protocol().best_seen_block()
-	}
-
-	/// Number of peers participating in syncing.
-	pub fn num_sync_peers(&self) -> u32 {
-		self.network_service.behaviour().user_protocol().num_sync_peers()
-	}
-
-	/// Number of blocks in the import queue.
-	pub fn num_queued_blocks(&self) -> u32 {
-		self.network_service.behaviour().user_protocol().num_queued_blocks()
-	}
-
-	/// Returns the number of downloaded blocks.
-	pub fn num_downloaded_blocks(&self) -> usize {
-		self.network_service.behaviour().user_protocol().num_downloaded_blocks()
-	}
-
-	/// Number of active sync requests.
-	pub fn num_sync_requests(&self) -> usize {
-		self.network_service.behaviour().user_protocol().num_sync_requests()
 	}
 
 	/// Adds an address known to a node.
@@ -724,11 +674,11 @@ impl<B: BlockT, H: ExHashT> sc_consensus::JustificationSyncLink<B> for NetworkSe
 	/// On success, the justification will be passed to the import queue that was part at
 	/// initialization as part of the configuration.
 	fn request_justification(&self, hash: &B::Hash, number: NumberFor<B>) {
-		let _ = self.chain_sync_service.request_justification(hash, number);
+		todo!();
 	}
 
 	fn clear_justification_requests(&self) {
-		let _ = self.chain_sync_service.clear_justification_requests();
+		todo!();
 	}
 }
 
@@ -792,7 +742,7 @@ where
 	/// a stale fork missing.
 	/// Passing empty `peers` set effectively removes the sync request.
 	fn set_sync_fork_request(&self, peers: Vec<PeerId>, hash: B::Hash, number: NumberFor<B>) {
-		self.chain_sync_service.set_sync_fork_request(peers, hash, number);
+		todo!();
 	}
 }
 
@@ -1817,14 +1767,7 @@ where
 			*this.external_addresses.lock() = external_addresses;
 		}
 
-		let is_major_syncing = this
-			.network_service
-			.behaviour_mut()
-			.user_protocol_mut()
-			.sync_state()
-			.state
-			.is_major_syncing();
-
+		let is_major_syncing = false;
 		this.is_major_syncing.store(is_major_syncing, Ordering::Relaxed);
 
 		if let Some(metrics) = this.metrics.as_ref() {

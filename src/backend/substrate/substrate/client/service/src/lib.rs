@@ -274,11 +274,11 @@ async fn build_network_future<
 
 						let best_number = client.info().best_number;
 
-						let _ = sender.send(SyncState {
-							starting_block,
-							current_block: best_number,
-							highest_block: network.best_seen_block().unwrap_or(best_number),
-						});
+						// let _ = sender.send(SyncState {
+						// 	starting_block,
+						// 	current_block: best_number,
+						// 	highest_block: network.best_seen_block().unwrap_or(best_number),
+						// });
 					}
 				}
 			}

@@ -107,9 +107,6 @@ pub struct Protocol<B: BlockT, Client> {
 	/// Assigned roles.
 	roles: Roles,
 	genesis_hash: B::Hash,
-	/// State machine that handles the list of in-progress requests. Only full node peers are
-	/// registered.
-	chain_sync: Box<dyn ChainSync<B>>,
 	// All connected peers. Contains both full and light node peers.
 	peers: HashMap<PeerId, Peer<B>>,
 	chain: Arc<Client>,
@@ -172,7 +169,6 @@ where
 		roles: Roles,
 		chain: Arc<Client>,
 		network_config: &config::NetworkConfiguration,
-		chain_sync: Box<dyn ChainSync<B>>,
 		block_announces_protocol: sc_network_common::config::NonDefaultSetConfig,
 	) -> error::Result<(Self, sc_peerset::PeersetHandle, Vec<(PeerId, Multiaddr)>)> {
 		let info = chain.info();
@@ -301,7 +297,6 @@ where
 			peers: HashMap::new(),
 			chain,
 			genesis_hash: info.genesis_hash,
-			chain_sync,
 			important_peers,
 			default_peers_set_no_slot_peers,
 			default_peers_set_no_slot_connected_peers: HashSet::new(),
@@ -354,63 +349,9 @@ where
 		self.peers.len()
 	}
 
-	/// Returns the number of peers we're connected to and that are being queried.
-	pub fn num_active_peers(&self) -> usize {
-		self.chain_sync.num_active_peers()
-	}
-
-	/// Current global sync state.
-	pub fn sync_state(&self) -> SyncStatus<B> {
-		self.chain_sync.status()
-	}
-
-	/// Target sync block number.
-	pub fn best_seen_block(&self) -> Option<NumberFor<B>> {
-		self.chain_sync.status().best_seen_block
-	}
-
-	/// Number of peers participating in syncing.
-	pub fn num_sync_peers(&self) -> u32 {
-		self.chain_sync.status().num_peers
-	}
-
-	/// Number of blocks in the import queue.
-	pub fn num_queued_blocks(&self) -> u32 {
-		self.chain_sync.status().queued_blocks
-	}
-
-	/// Number of downloaded blocks.
-	pub fn num_downloaded_blocks(&self) -> usize {
-		self.chain_sync.num_downloaded_blocks()
-	}
-
-	/// Number of active sync requests.
-	pub fn num_sync_requests(&self) -> usize {
-		self.chain_sync.num_sync_requests()
-	}
-
 	/// Returns information about all the peers we are connected to after the handshake message.
 	pub fn peers_info(&self) -> impl Iterator<Item = (&PeerId, &PeerInfo<B>)> {
 		self.peers.iter().map(|(id, peer)| (id, &peer.info))
-	}
-
-	/// Called by peer when it is disconnecting.
-	///
-	/// Returns a result if the handshake of this peer was indeed accepted.
-	pub fn on_sync_peer_disconnected(&mut self, peer: PeerId) -> Result<(), ()> {
-		if self.important_peers.contains(&peer) {
-			warn!(target: "sync", "Reserved peer {} disconnected", peer);
-		} else {
-			debug!(target: "sync", "{} disconnected", peer);
-		}
-
-		if let Some(_peer_data) = self.peers.remove(&peer) {
-			self.chain_sync.peer_disconnected(&peer);
-			self.default_peers_set_no_slot_connected_peers.remove(&peer);
-			Ok(())
-		} else {
-			Err(())
-		}
 	}
 
 	/// Adjusts the reputation of a node.
@@ -485,26 +426,6 @@ where
 		let no_slot_peer = self.default_peers_set_no_slot_peers.contains(&who);
 		let this_peer_reserved_slot: usize = if no_slot_peer { 1 } else { 0 };
 
-		if status.roles.is_full() &&
-			self.chain_sync.num_peers() >=
-				self.default_peers_set_num_full +
-					self.default_peers_set_no_slot_connected_peers.len() +
-					this_peer_reserved_slot
-		{
-			debug!(target: "sync", "Too many full nodes, rejecting {}", who);
-			self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-			return Err(())
-		}
-
-		if status.roles.is_light() &&
-			(self.peers.len() - self.chain_sync.num_peers()) >= self.default_peers_set_num_light
-		{
-			// Make sure that not all slots are occupied by light clients.
-			debug!(target: "sync", "Too many light nodes, rejecting {}", who);
-			self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-			return Err(())
-		}
-
 		let peer = Peer {
 			info: PeerInfo {
 				roles: status.roles,
@@ -516,19 +437,6 @@ where
 			),
 		};
 
-		let req = if peer.info.roles.is_full() {
-			match self.chain_sync.new_peer(who, peer.info.best_hash, peer.info.best_number) {
-				Ok(req) => req,
-				Err(BadPeer(id, repu)) => {
-					self.behaviour.disconnect_peer(&id, HARDCODED_PEERSETS_SYNC);
-					self.peerset_handle.report_peer(id, repu);
-					return Err(())
-				},
-			}
-		} else {
-			None
-		};
-
 		debug!(target: "sync", "Connected {}", who);
 
 		self.peers.insert(who, peer);
@@ -537,10 +445,6 @@ where
 		}
 		self.pending_messages
 			.push_back(CustomMessageOutcome::PeerNewBest(who, status.best_number));
-
-		if let Some(req) = req {
-			self.chain_sync.send_block_request(who, req);
-		}
 
 		Ok(())
 	}
@@ -824,16 +728,8 @@ where
 			NotificationsOut::CustomProtocolClosed { peer_id, set_id } => {
 				// Set number 0 is hardcoded the default set of peers we sync from.
 				if set_id == HARDCODED_PEERSETS_SYNC {
-					if self.on_sync_peer_disconnected(peer_id).is_ok() {
-						CustomMessageOutcome::SyncDisconnected(peer_id)
-					} else {
-						log::trace!(
-							target: "sync",
-							"Disconnected peer which had earlier been refused by on_sync_peer_connected {}",
-							peer_id
-						);
-						CustomMessageOutcome::None
-					}
+					self.peers.remove(&peer_id);
+					CustomMessageOutcome::None
 				} else if self.bad_handshake_substreams.remove(&(peer_id, set_id)) {
 					// The substream that has just been closed had been opened with a bad
 					// handshake. The outer layers have never received an opening event about this

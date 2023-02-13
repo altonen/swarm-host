@@ -866,6 +866,8 @@ where
 		protocol_config
 	};
 
+	// TODO: create block announce protocol config
+
 	let (chain_sync_network_provider, chain_sync_network_handle) = NetworkServiceProvider::new();
 	let (chain_sync, chain_sync_service, block_announce_config) = ChainSync::new(
 		match config.network.sync_mode {
@@ -907,8 +909,6 @@ where
 		chain: client.clone(),
 		protocol_id: protocol_id.clone(),
 		fork_id: config.chain_spec.fork_id().map(ToOwned::to_owned),
-		chain_sync: Box::new(chain_sync),
-		chain_sync_service: Box::new(chain_sync_service.clone()),
 		metrics_registry: config.prometheus_config.as_ref().map(|config| config.registry.clone()),
 		block_announce_config,
 		request_response_protocol_configs: request_response_protocol_configs
