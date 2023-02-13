@@ -118,6 +118,8 @@ pub enum BehaviourOut {
 		notifications_sink: NotificationsSink,
 		/// Role of the remote.
 		role: ObservedRole,
+		/// Received handshake.
+		handshake: Vec<u8>,
 	},
 
 	/// The [`NotificationsSink`] object used to send notifications with the given peer must be
@@ -304,12 +306,14 @@ impl<B: BlockT> From<CustomMessageOutcome<B>> for BehaviourOut {
 				negotiated_fallback,
 				roles,
 				notifications_sink,
+				handshake,
 			} => BehaviourOut::NotificationStreamOpened {
 				remote,
 				protocol,
 				negotiated_fallback,
 				role: reported_roles_to_observed_role(roles),
 				notifications_sink,
+				handshake,
 			},
 			CustomMessageOutcome::NotificationStreamReplaced {
 				remote,

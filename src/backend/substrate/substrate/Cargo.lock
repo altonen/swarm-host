@@ -4953,15 +4953,9 @@ name = "node-template"
 version = "4.0.0-dev"
 dependencies = [
  "clap 4.1.4",
- "frame-benchmarking",
- "frame-benchmarking-cli",
- "frame-system",
  "futures",
  "jsonrpsee",
  "node-template-runtime",
- "pallet-transaction-payment",
- "pallet-transaction-payment-rpc",
- "sc-basic-authorship",
  "sc-cli",
  "sc-client-api",
  "sc-consensus",
@@ -4969,6 +4963,7 @@ dependencies = [
  "sc-executor",
  "sc-finality-grandpa",
  "sc-keystore",
+ "sc-network-common",
  "sc-rpc",
  "sc-rpc-api",
  "sc-service",
@@ -4976,8 +4971,6 @@ dependencies = [
  "sc-transaction-pool",
  "sc-transaction-pool-api",
  "sp-api",
- "sp-block-builder",
- "sp-blockchain",
  "sp-consensus",
  "sp-consensus-aura",
  "sp-core",
@@ -4987,9 +4980,6 @@ dependencies = [
  "sp-keyring",
  "sp-runtime",
  "sp-timestamp",
- "substrate-build-script-utils",
- "substrate-frame-rpc-system",
- "try-runtime-cli",
 ]
 
 [[package]]

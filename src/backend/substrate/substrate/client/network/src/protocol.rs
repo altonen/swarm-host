@@ -389,28 +389,6 @@ where
 		self.chain_sync.num_sync_requests()
 	}
 
-	/// Inform sync about new best imported block.
-	pub fn new_best_block_imported(&mut self, hash: B::Hash, number: NumberFor<B>) {
-		debug!(target: "sync", "New best block imported {:?}/#{}", hash, number);
-
-		self.chain_sync.update_chain_info(&hash, number);
-
-		self.behaviour.set_notif_protocol_handshake(
-			HARDCODED_PEERSETS_SYNC,
-			BlockAnnouncesHandshake::<B>::build(self.roles, number, hash, self.genesis_hash)
-				.encode(),
-		);
-	}
-
-	fn update_peer_info(&mut self, who: &PeerId) {
-		if let Some(info) = self.chain_sync.peer_info(who) {
-			if let Some(ref mut peer) = self.peers.get_mut(who) {
-				peer.info.best_hash = info.best_hash;
-				peer.info.best_number = info.best_number;
-			}
-		}
-	}
-
 	/// Returns information about all the peers we are connected to after the handshake message.
 	pub fn peers_info(&self) -> impl Iterator<Item = (&PeerId, &PeerInfo<B>)> {
 		self.peers.iter().map(|(id, peer)| (id, &peer.info))
@@ -606,15 +584,6 @@ where
 		}
 	}
 
-	// /// Notify the protocol that we have learned about the existence of nodes on the default set.
-	// ///
-	// /// Can be called multiple times with the same `PeerId`s.
-	// pub fn add_default_set_discovered_nodes(&mut self, peer_ids: impl Iterator<Item = PeerId>) {
-	// 	for peer_id in peer_ids {
-	// 		self.peerset_handle.add_to_peers_set(HARDCODED_PEERSETS_SYNC, peer_id);
-	// 	}
-	// }
-
 	/// Add a peer to a peers set.
 	pub fn add_to_peers_set(&self, protocol: ProtocolName, peer: PeerId) {
 		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
@@ -654,6 +623,7 @@ pub enum CustomMessageOutcome<B: BlockT> {
 		negotiated_fallback: Option<ProtocolName>,
 		roles: Roles,
 		notifications_sink: NotificationsSink,
+		handshake: Vec<u8>,
 	},
 	/// The [`NotificationsSink`] of some notification protocols need an update.
 	NotificationStreamReplaced {
@@ -813,6 +783,7 @@ where
 							negotiated_fallback,
 							roles,
 							notifications_sink,
+							handshake: received_handshake,
 						},
 						(Err(_), Some(peer)) if received_handshake.is_empty() => {
 							// As a convenience, we allow opening substreams for "external"
@@ -825,6 +796,7 @@ where
 								negotiated_fallback,
 								roles: peer.info.roles,
 								notifications_sink,
+								handshake: received_handshake,
 							}
 						},
 						(Err(err), _) => {

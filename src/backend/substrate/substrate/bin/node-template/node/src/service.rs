@@ -4,6 +4,7 @@ use node_template_runtime::{self, opaque::Block, RuntimeApi};
 use sc_client_api::BlockBackend;
 use sc_consensus_aura::ImportQueueParams;
 pub use sc_executor::NativeElseWasmExecutor;
+use sc_network_common::service::NetworkEventStream;
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
 use sc_telemetry::Telemetry;
 use sp_consensus_aura::sr25519::AuthorityPair as AuraPair;
@@ -164,8 +165,14 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		warp_sync: Some(warp_sync),
 	};
 
-	let (_network_service, _, _, network_starter) = sc_service::build_network(params)?;
+	let (network_service, network_starter) = sc_service::build_network(params)?;
 
 	network_starter.start_network();
+	let event_stream = network_service.event_stream("test-event-stream");
+
+	// while let Some(event) = event_stream.next() {
+	// 	println!("event: {event:?}");
+	// }
+
 	Ok(task_manager)
 }

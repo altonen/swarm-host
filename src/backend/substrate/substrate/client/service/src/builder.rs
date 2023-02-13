@@ -765,15 +765,7 @@ pub struct BuildNetworkParams<'a, TBl: BlockT, TExPool, TImpQu, TCl> {
 /// Build the network service, the network status sinks and an RPC sender.
 pub fn build_network<TBl, TExPool, TImpQu, TCl>(
 	params: BuildNetworkParams<TBl, TExPool, TImpQu, TCl>,
-) -> Result<
-	(
-		Arc<NetworkService<TBl, <TBl as BlockT>::Hash>>,
-		TracingUnboundedSender<sc_rpc::system::Request<TBl>>,
-		sc_network_transactions::TransactionsHandlerController<<TBl as BlockT>::Hash>,
-		NetworkStarter,
-	),
-	Error,
->
+) -> Result<(Arc<NetworkService<TBl, <TBl as BlockT>::Hash>>, NetworkStarter), Error>
 where
 	TBl: BlockT,
 	TCl: ProvideRuntimeApi<TBl>
@@ -975,29 +967,8 @@ where
 		config.announce_block,
 	);
 
-	// TODO: Normally, one is supposed to pass a list of notifications protocols supported by the
-	// node through the `NetworkConfiguration` struct. But because this function doesn't know in
-	// advance which components, such as GrandPa or Polkadot, will be plugged on top of the
-	// service, it is unfortunately not possible to do so without some deep refactoring. To bypass
-	// this problem, the `NetworkService` provides a `register_notifications_protocol` method that
-	// can be called even after the network has been initialized. However, we want to avoid the
-	// situation where `register_notifications_protocol` is called *after* the network actually
-	// connects to other peers. For this reason, we delay the process of the network future until
-	// the user calls `NetworkStarter::start_network`.
-	//
-	// This entire hack should eventually be removed in favour of passing the list of protocols
-	// through the configuration.
-	//
-	// See also https://github.com/paritytech/substrate/issues/6827
 	let (network_start_tx, network_start_rx) = oneshot::channel();
 
-	// The network worker is responsible for gathering all network messages and processing
-	// them. This is quite a heavy task, and at the time of the writing of this comment it
-	// frequently happens that this future takes several seconds or in some situations
-	// even more than a minute until it has processed its entire queue. This is clearly an
-	// issue, and ideally we would like to fix the network future to take as little time as
-	// possible, but we also take the extra harm-prevention measure to execute the networking
-	// future using `spawn_blocking`.
 	spawn_handle.spawn_blocking("network-worker", Some("networking"), async move {
 		if network_start_rx.await.is_err() {
 			log::warn!(
@@ -1011,7 +982,7 @@ where
 		future.await
 	});
 
-	Ok((network, system_rpc_tx, tx_handler_controller, NetworkStarter(network_start_tx)))
+	Ok((network, NetworkStarter(network_start_tx)))
 }
 
 /// Object used to start the network.

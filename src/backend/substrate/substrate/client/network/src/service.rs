@@ -544,14 +544,6 @@ where
 		&self.service
 	}
 
-	/// Inform the network service about new best imported block.
-	pub fn new_best_block_imported(&mut self, hash: B::Hash, number: NumberFor<B>) {
-		self.network_service
-			.behaviour_mut()
-			.user_protocol_mut()
-			.new_best_block_imported(hash, number);
-	}
-
 	/// Returns the local `PeerId`.
 	pub fn local_peer_id(&self) -> &PeerId {
 		Swarm::<Behaviour<B, Client>>::local_peer_id(&self.network_service)
@@ -1354,11 +1346,7 @@ where
 					.behaviour_mut()
 					.user_protocol_mut()
 					.disconnect_peer(&who, protocol_name),
-				ServiceToWorkerMsg::NewBestBlockImported(hash, number) => this
-					.network_service
-					.behaviour_mut()
-					.user_protocol_mut()
-					.new_best_block_imported(hash, number),
+				ServiceToWorkerMsg::NewBestBlockImported(hash, number) => todo!(),
 			}
 		}
 
@@ -1504,6 +1492,7 @@ where
 					negotiated_fallback,
 					notifications_sink,
 					role,
+					handshake,
 				})) => {
 					if let Some(metrics) = this.metrics.as_ref() {
 						metrics

@@ -11,15 +11,15 @@ impl SubstrateCli for Cli {
 	}
 
 	fn impl_version() -> String {
-		env!("SUBSTRATE_CLI_IMPL_VERSION").into()
+		"".into()
 	}
 
 	fn description() -> String {
-		env!("CARGO_PKG_DESCRIPTION").into()
+		"".into()
 	}
 
 	fn author() -> String {
-		env!("CARGO_PKG_AUTHORS").into()
+		"".into()
 	}
 
 	fn support_url() -> String {
