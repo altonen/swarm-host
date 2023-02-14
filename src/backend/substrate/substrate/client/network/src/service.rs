@@ -100,6 +100,637 @@ mod tests;
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 use sc_network_common::service::{NetworkBlock, NetworkRequest};
 
+pub struct SubstrateNetwork<B: BlockT> {
+	swarm: Swarm<Behaviour<B>>,
+}
+
+impl<B: BlockT> SubstrateNetwork<B> {
+	pub fn new(
+		params: Params<B>,
+		genesis_hash: B::Hash,
+		fork_id: Option<&String>,
+	) -> Result<Self, Error> {
+		let local_identity = params.network_config.node_key.clone().into_keypair()?;
+		let local_public = local_identity.public();
+		let local_peer_id = local_public.to_peer_id();
+
+		let (protocol, peerset_handle, mut known_addresses) = Protocol::<B>::new(
+			From::from(&params.role),
+			&params.network_config,
+			params.block_announce_config,
+			genesis_hash,
+			// params.chain.info().genesis_hash,
+		)?;
+
+		// List of multiaddresses that we know in the network.
+		let mut boot_node_ids = HashSet::new();
+
+		// Process the bootnodes.
+		for bootnode in params.network_config.boot_nodes.iter() {
+			boot_node_ids.insert(bootnode.peer_id);
+			known_addresses.push((bootnode.peer_id, bootnode.multiaddr.clone()));
+		}
+
+		let boot_node_ids = Arc::new(boot_node_ids);
+
+		// Check for duplicate bootnodes.
+		params.network_config.boot_nodes.iter().try_for_each(|bootnode| {
+			if let Some(other) = params
+				.network_config
+				.boot_nodes
+				.iter()
+				.filter(|o| o.multiaddr == bootnode.multiaddr)
+				.find(|o| o.peer_id != bootnode.peer_id)
+			{
+				Err(Error::DuplicateBootnode {
+					address: bootnode.multiaddr.clone(),
+					first_id: bootnode.peer_id,
+					second_id: other.peer_id,
+				})
+			} else {
+				Ok(())
+			}
+		})?;
+
+		let (mut swarm, bandwidth): (Swarm<Behaviour<B>>, _) = {
+			let user_agent = format!(
+				"{} ({})",
+				params.network_config.client_version, params.network_config.node_name
+			);
+
+			let discovery_config = {
+				let mut config = DiscoveryConfig::new(local_public.clone());
+				config.with_permanent_addresses(known_addresses);
+				config.discovery_limit(
+					u64::from(params.network_config.default_peers_set.out_peers) + 15,
+				);
+				config.with_kademlia(genesis_hash, params.fork_id.as_deref(), &params.protocol_id);
+				config.with_dht_random_walk(params.network_config.enable_dht_random_walk);
+				config.allow_non_globals_in_dht(params.network_config.allow_non_globals_in_dht);
+				config.use_kademlia_disjoint_query_paths(
+					params.network_config.kademlia_disjoint_query_paths,
+				);
+
+				match params.network_config.transport {
+					TransportConfig::MemoryOnly => {
+						config.with_mdns(false);
+						config.allow_private_ip(false);
+					},
+					TransportConfig::Normal {
+						enable_mdns,
+						allow_private_ip: allow_private_ipv4,
+						..
+					} => {
+						config.with_mdns(enable_mdns);
+						config.allow_private_ip(allow_private_ipv4);
+					},
+				}
+
+				config
+			};
+
+			let (transport, bandwidth) = {
+				// The yamux buffer size limit is configured to be equal to the maximum frame size
+				// of all protocols. 10 bytes are added to each limit for the length prefix that
+				// is not included in the upper layer protocols limit but is still present in the
+				// yamux buffer. These 10 bytes correspond to the maximum size required to encode
+				// a variable-length-encoding 64bits number. In other words, we make the
+				// assumption that no notification larger than 2^64 will ever be sent.
+				let yamux_maximum_buffer_size = {
+					let requests_max = params
+						.network_config
+						.request_response_protocols
+						.iter()
+						.map(|cfg| usize::try_from(cfg.max_request_size).unwrap_or(usize::MAX));
+					let responses_max =
+						params.network_config.request_response_protocols.iter().map(|cfg| {
+							usize::try_from(cfg.max_response_size).unwrap_or(usize::MAX)
+						});
+					let notifs_max = params.network_config.extra_sets.iter().map(|cfg| {
+						usize::try_from(cfg.max_notification_size).unwrap_or(usize::MAX)
+					});
+
+					// A "default" max is added to cover all the other protocols: ping, identify,
+					// kademlia, block announces, and transactions.
+					let default_max = cmp::max(
+						1024 * 1024,
+						usize::try_from(protocol::BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE)
+							.unwrap_or(usize::MAX),
+					);
+
+					iter::once(default_max)
+						.chain(requests_max)
+						.chain(responses_max)
+						.chain(notifs_max)
+						.max()
+						.expect("iterator known to always yield at least one element; qed")
+						.saturating_add(10)
+				};
+
+				transport::build_transport(
+					local_identity.clone(),
+					false,
+					params.network_config.yamux_window_size,
+					yamux_maximum_buffer_size,
+				)
+			};
+
+			let behaviour = {
+				let result = Behaviour::new(
+					protocol,
+					user_agent,
+					local_public,
+					discovery_config,
+					params.network_config.request_response_protocols,
+					peerset_handle.clone(),
+				);
+
+				match result {
+					Ok(b) => b,
+					Err(crate::request_responses::RegisterError::DuplicateProtocol(proto)) =>
+						return Err(Error::DuplicateRequestResponseProtocol { protocol: proto }),
+				}
+			};
+
+			let builder = {
+				struct SpawnImpl<F>(F);
+				impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for SpawnImpl<F> {
+					fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
+						(self.0)(f)
+					}
+				}
+				SwarmBuilder::with_executor(
+					transport,
+					behaviour,
+					local_peer_id,
+					SpawnImpl(params.executor),
+				)
+			};
+			let builder = builder
+				.connection_limits(
+					ConnectionLimits::default()
+						.with_max_established_per_peer(Some(crate::MAX_CONNECTIONS_PER_PEER as u32))
+						.with_max_established_incoming(Some(
+							crate::MAX_CONNECTIONS_ESTABLISHED_INCOMING,
+						)),
+				)
+				.substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+				.notify_handler_buffer_size(NonZeroUsize::new(32).expect("32 != 0; qed"))
+				.connection_event_buffer_size(1024)
+				.max_negotiating_inbound_streams(2048);
+
+			(builder.build(), bandwidth)
+		};
+
+		Ok(Self { swarm })
+	}
+
+	pub async fn run(mut self) {
+		// loop {
+		// 	let next_event = self.network_service.select_next_some();
+		// 	futures::pin_mut!(next_event);
+		// 	let poll_value = next_event.poll_unpin(cx);
+
+		// 	match poll_value {
+		// 		Poll::Pending => break,
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::InboundRequest {
+		// 			protocol,
+		// 			result,
+		// 			..
+		// 		})) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				match result {
+		// 					Ok(serve_time) => {
+		// 						metrics
+		// 							.requests_in_success_total
+		// 							.with_label_values(&[&protocol])
+		// 							.observe(serve_time.as_secs_f64());
+		// 					},
+		// 					Err(err) => {
+		// 						let reason = match err {
+		// 							ResponseFailure::Network(InboundFailure::Timeout) => "timeout",
+		// 							ResponseFailure::Network(
+		// 								InboundFailure::UnsupportedProtocols,
+		// 							) =>
+		// 							// `UnsupportedProtocols` is reported for every single
+		// 							// inbound request whenever a request with an unsupported
+		// 							// protocol is received. This is not reported in order to
+		// 							// avoid confusions.
+		// 								continue,
+		// 							ResponseFailure::Network(InboundFailure::ResponseOmission) =>
+		// 								"busy-omitted",
+		// 							ResponseFailure::Network(InboundFailure::ConnectionClosed) =>
+		// 								"connection-closed",
+		// 						};
+
+		// 						metrics
+		// 							.requests_in_failure_total
+		// 							.with_label_values(&[&protocol, reason])
+		// 							.inc();
+		// 					},
+		// 				}
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::RequestFinished {
+		// 			protocol,
+		// 			duration,
+		// 			result,
+		// 			..
+		// 		})) =>
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				match result {
+		// 					Ok(_) => {
+		// 						metrics
+		// 							.requests_out_success_total
+		// 							.with_label_values(&[&protocol])
+		// 							.observe(duration.as_secs_f64());
+		// 					},
+		// 					Err(err) => {
+		// 						let reason = match err {
+		// 							RequestFailure::NotConnected => "not-connected",
+		// 							RequestFailure::UnknownProtocol => "unknown-protocol",
+		// 							RequestFailure::Refused => "refused",
+		// 							RequestFailure::Obsolete => "obsolete",
+		// 							RequestFailure::Network(OutboundFailure::DialFailure) =>
+		// 								"dial-failure",
+		// 							RequestFailure::Network(OutboundFailure::Timeout) => "timeout",
+		// 							RequestFailure::Network(OutboundFailure::ConnectionClosed) =>
+		// 								"connection-closed",
+		// 							RequestFailure::Network(
+		// 								OutboundFailure::UnsupportedProtocols,
+		// 							) => "unsupported",
+		// 						};
+
+		// 						metrics
+		// 							.requests_out_failure_total
+		// 							.with_label_values(&[&protocol, reason])
+		// 							.inc();
+		// 					},
+		// 				}
+		// 			},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::ReputationChanges {
+		// 			peer,
+		// 			changes,
+		// 		})) =>
+		// 			for change in changes {
+		// 				this.network_service.behaviour().user_protocol().report_peer(peer, change);
+		// 			},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::PeerIdentify {
+		// 			peer_id,
+		// 			info:
+		// 				IdentifyInfo {
+		// 					protocol_version,
+		// 					agent_version,
+		// 					mut listen_addrs,
+		// 					protocols,
+		// 					..
+		// 				},
+		// 		})) => {
+		// 			if listen_addrs.len() > 30 {
+		// 				debug!(
+		// 					target: "sub-libp2p",
+		// 					"Node {:?} has reported more than 30 addresses; it is identified by {:?} and {:?}",
+		// 					peer_id, protocol_version, agent_version
+		// 				);
+		// 				listen_addrs.truncate(30);
+		// 			}
+		// 			for addr in listen_addrs {
+		// 				this.network_service
+		// 					.behaviour_mut()
+		// 					.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Discovered(peer_id))) => {
+		// 			// TODO: zzz
+		// 			println!("implement");
+		// 			// this.network_service
+		// 			// 	.behaviour_mut()
+		// 			// 	.user_protocol_mut()
+		// 			// 	.add_default_set_discovered_nodes(iter::once(peer_id));
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::RandomKademliaStarted)) =>
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.kademlia_random_queries_total.inc();
+		// 			},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::NotificationStreamOpened {
+		// 			remote,
+		// 			protocol,
+		// 			negotiated_fallback,
+		// 			notifications_sink,
+		// 			role,
+		// 			handshake,
+		// 		})) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics
+		// 					.notifications_streams_opened_total
+		// 					.with_label_values(&[&protocol])
+		// 					.inc();
+		// 			}
+		// 			{
+		// 				let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+		// 				let _previous_value = peers_notifications_sinks
+		// 					.insert((remote, protocol.clone()), notifications_sink);
+		// 				debug_assert!(_previous_value.is_none());
+		// 			}
+		// 			this.event_streams.send(Event::NotificationStreamOpened {
+		// 				remote,
+		// 				protocol,
+		// 				negotiated_fallback,
+		// 				role,
+		// 			});
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::NotificationStreamReplaced {
+		// 			remote,
+		// 			protocol,
+		// 			notifications_sink,
+		// 		})) => {
+		// 			let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+		// 			if let Some(s) = peers_notifications_sinks.get_mut(&(remote, protocol)) {
+		// 				*s = notifications_sink;
+		// 			} else {
+		// 				error!(
+		// 					target: "sub-libp2p",
+		// 					"NotificationStreamReplaced for non-existing substream"
+		// 				);
+		// 				debug_assert!(false);
+		// 			}
+
+		// 			// TODO: Notifications might have been lost as a result of the previous
+		// 			// connection being dropped, and as a result it would be preferable to notify
+		// 			// the users of this fact by simulating the substream being closed then
+		// 			// reopened.
+		// 			// The code below doesn't compile because `role` is unknown. Propagating the
+		// 			// handshake of the secondary connections is quite an invasive change and
+		// 			// would conflict with https://github.com/paritytech/substrate/issues/6403.
+		// 			// Considering that dropping notifications is generally regarded as
+		// 			// acceptable, this bug is at the moment intentionally left there and is
+		// 			// intended to be fixed at the same time as
+		// 			// https://github.com/paritytech/substrate/issues/6403.
+		// 			// this.event_streams.send(Event::NotificationStreamClosed {
+		// 			// remote,
+		// 			// protocol,
+		// 			// });
+		// 			// this.event_streams.send(Event::NotificationStreamOpened {
+		// 			// remote,
+		// 			// protocol,
+		// 			// role,
+		// 			// });
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::NotificationStreamClosed {
+		// 			remote,
+		// 			protocol,
+		// 		})) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics
+		// 					.notifications_streams_closed_total
+		// 					.with_label_values(&[&protocol[..]])
+		// 					.inc();
+		// 			}
+		// 			this.event_streams.send(Event::NotificationStreamClosed {
+		// 				remote,
+		// 				protocol: protocol.clone(),
+		// 			});
+		// 			{
+		// 				let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+		// 				let _previous_value = peers_notifications_sinks.remove(&(remote, protocol));
+		// 				debug_assert!(_previous_value.is_some());
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::NotificationsReceived {
+		// 			remote,
+		// 			messages,
+		// 		})) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				for (protocol, message) in &messages {
+		// 					metrics
+		// 						.notifications_sizes
+		// 						.with_label_values(&["in", protocol])
+		// 						.observe(message.len() as f64);
+		// 				}
+		// 			}
+		// 			this.event_streams.send(Event::NotificationsReceived { remote, messages });
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::SyncConnected(remote))) => {
+		// 			this.event_streams.send(Event::SyncConnected { remote });
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::SyncDisconnected(remote))) => {
+		// 			this.event_streams.send(Event::SyncDisconnected { remote });
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Dht(event, duration))) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				let query_type = match event {
+		// 					DhtEvent::ValueFound(_) => "value-found",
+		// 					DhtEvent::ValueNotFound(_) => "value-not-found",
+		// 					DhtEvent::ValuePut(_) => "value-put",
+		// 					DhtEvent::ValuePutFailed(_) => "value-put-failed",
+		// 				};
+		// 				metrics
+		// 					.kademlia_query_duration
+		// 					.with_label_values(&[query_type])
+		// 					.observe(duration.as_secs_f64());
+		// 			}
+
+		// 			this.event_streams.send(Event::Dht(event));
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::None)) => {
+		// 			// Ignored event from lower layers.
+		// 		},
+		// 		Poll::Ready(SwarmEvent::ConnectionEstablished {
+		// 			peer_id,
+		// 			endpoint,
+		// 			num_established,
+		// 			concurrent_dial_errors,
+		// 		}) => {
+		// 			if let Some(errors) = concurrent_dial_errors {
+		// 				debug!(target: "sub-libp2p", "Libp2p => Connected({:?}) with errors: {:?}", peer_id,
+		// errors); 			} else {
+		// 				debug!(target: "sub-libp2p", "Libp2p => Connected({:?})", peer_id);
+		// 			}
+
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				let direction = match endpoint {
+		// 					ConnectedPoint::Dialer { .. } => "out",
+		// 					ConnectedPoint::Listener { .. } => "in",
+		// 				};
+		// 				metrics.connections_opened_total.with_label_values(&[direction]).inc();
+
+		// 				if num_established.get() == 1 {
+		// 					metrics.distinct_peers_connections_opened_total.inc();
+		// 				}
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::ConnectionClosed {
+		// 			peer_id,
+		// 			cause,
+		// 			endpoint,
+		// 			num_established,
+		// 		}) => {
+		// 			debug!(target: "sub-libp2p", "Libp2p => Disconnected({:?}, {:?})", peer_id, cause);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				let direction = match endpoint {
+		// 					ConnectedPoint::Dialer { .. } => "out",
+		// 					ConnectedPoint::Listener { .. } => "in",
+		// 				};
+		// 				let reason = match cause {
+		// 					Some(ConnectionError::IO(_)) => "transport-error",
+		// 					Some(ConnectionError::Handler(EitherError::A(EitherError::A(
+		// 						EitherError::B(EitherError::A(PingFailure::Timeout)),
+		// 					)))) => "ping-timeout",
+		// 					Some(ConnectionError::Handler(EitherError::A(EitherError::A(
+		// 						EitherError::A(NotifsHandlerError::SyncNotificationsClogged),
+		// 					)))) => "sync-notifications-clogged",
+		// 					Some(ConnectionError::Handler(_)) => "protocol-error",
+		// 					Some(ConnectionError::KeepAliveTimeout) => "keep-alive-timeout",
+		// 					None => "actively-closed",
+		// 				};
+		// 				metrics
+		// 					.connections_closed_total
+		// 					.with_label_values(&[direction, reason])
+		// 					.inc();
+
+		// 				// `num_established` represents the number of *remaining* connections.
+		// 				if num_established == 0 {
+		// 					metrics.distinct_peers_connections_closed_total.inc();
+		// 				}
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::NewListenAddr { address, .. }) => {
+		// 			trace!(target: "sub-libp2p", "Libp2p => NewListenAddr({})", address);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.listeners_local_addresses.inc();
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::ExpiredListenAddr { address, .. }) => {
+		// 			info!(target: "sub-libp2p", "📪 No longer listening on {}", address);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.listeners_local_addresses.dec();
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::OutgoingConnectionError { peer_id, error }) => {
+		// 			if let Some(peer_id) = peer_id {
+		// 				trace!(
+		// 					target: "sub-libp2p",
+		// 					"Libp2p => Failed to reach {:?}: {}",
+		// 					peer_id, error,
+		// 				);
+
+		// 				if this.boot_node_ids.contains(&peer_id) {
+		// 					if let DialError::WrongPeerId { obtained, endpoint } = &error {
+		// 						if let ConnectedPoint::Dialer { address, role_override: _ } =
+		// 							endpoint
+		// 						{
+		// 							warn!(
+		// 								"💔 The bootnode you want to connect to at `{}` provided a different peer ID `{}` than
+		// the one you expect `{}`.", 								address,
+		// 								obtained,
+		// 								peer_id,
+		// 							);
+		// 						}
+		// 					}
+		// 				}
+		// 			}
+
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				let reason = match error {
+		// 					DialError::ConnectionLimit(_) => Some("limit-reached"),
+		// 					DialError::InvalidPeerId(_) => Some("invalid-peer-id"),
+		// 					DialError::Transport(_) | DialError::ConnectionIo(_) =>
+		// 						Some("transport-error"),
+		// 					DialError::Banned |
+		// 					DialError::LocalPeerId |
+		// 					DialError::NoAddresses |
+		// 					DialError::DialPeerConditionFalse(_) |
+		// 					DialError::WrongPeerId { .. } |
+		// 					DialError::Aborted => None, // ignore them
+		// 				};
+		// 				if let Some(reason) = reason {
+		// 					metrics
+		// 						.pending_connections_errors_total
+		// 						.with_label_values(&[reason])
+		// 						.inc();
+		// 				}
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::Dialing(peer_id)) => {
+		// 			trace!(target: "sub-libp2p", "Libp2p => Dialing({:?})", peer_id)
+		// 		},
+		// 		Poll::Ready(SwarmEvent::IncomingConnection { local_addr, send_back_addr }) => {
+		// 			trace!(target: "sub-libp2p", "Libp2p => IncomingConnection({},{}))",
+		// 				local_addr, send_back_addr);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.incoming_connections_total.inc();
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::IncomingConnectionError {
+		// 			local_addr,
+		// 			send_back_addr,
+		// 			error,
+		// 		}) => {
+		// 			debug!(
+		// 				target: "sub-libp2p",
+		// 				"Libp2p => IncomingConnectionError({},{}): {}",
+		// 				local_addr, send_back_addr, error,
+		// 			);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				let reason = match error {
+		// 					PendingConnectionError::ConnectionLimit(_) => Some("limit-reached"),
+		// 					PendingConnectionError::WrongPeerId { .. } => Some("invalid-peer-id"),
+		// 					PendingConnectionError::Transport(_) |
+		// 					PendingConnectionError::IO(_) => Some("transport-error"),
+		// 					PendingConnectionError::Aborted => None, // ignore it
+		// 				};
+
+		// 				if let Some(reason) = reason {
+		// 					metrics
+		// 						.incoming_connections_errors_total
+		// 						.with_label_values(&[reason])
+		// 						.inc();
+		// 				}
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::BannedPeer { peer_id, endpoint }) => {
+		// 			debug!(
+		// 				target: "sub-libp2p",
+		// 				"Libp2p => BannedPeer({}). Connected via {:?}.",
+		// 				peer_id, endpoint,
+		// 			);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics
+		// 					.incoming_connections_errors_total
+		// 					.with_label_values(&["banned"])
+		// 					.inc();
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::ListenerClosed { reason, addresses, .. }) => {
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.listeners_local_addresses.sub(addresses.len() as u64);
+		// 			}
+		// 			let addrs =
+		// 				addresses.into_iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ");
+		// 			match reason {
+		// 				Ok(()) => error!(
+		// 					target: "sub-libp2p",
+		// 					"📪 Libp2p listener ({}) closed gracefully",
+		// 					addrs
+		// 				),
+		// 				Err(e) => error!(
+		// 					target: "sub-libp2p",
+		// 					"📪 Libp2p listener ({}) closed: {}",
+		// 					addrs, e
+		// 				),
+		// 			}
+		// 		},
+		// 		Poll::Ready(SwarmEvent::ListenerError { error, .. }) => {
+		// 			debug!(target: "sub-libp2p", "Libp2p => ListenerError: {}", error);
+		// 			if let Some(metrics) = this.metrics.as_ref() {
+		// 				metrics.listeners_errors_total.inc();
+		// 			}
+		// 		},
+		// 	}
+		// }
+	}
+}
+
 /// Substrate network service. Handles network IO and manages connectivity.
 pub struct NetworkService<B: BlockT + 'static, H: ExHashT> {
 	/// Number of peers we're connected to.
