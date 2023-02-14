@@ -119,7 +119,6 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			&params.network_config,
 			params.block_announce_config,
 			genesis_hash,
-			// params.chain.info().genesis_hash,
 		)?;
 
 		// List of multiaddresses that we know in the network.
@@ -285,11 +284,236 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		Ok(Self { swarm })
 	}
 
-	pub async fn _run(self) {
-		// loop {
-		// 	let next_event = self.network_service.select_next_some();
-		// 	futures::pin_mut!(next_event);
-		// 	let poll_value = next_event.poll_unpin(cx);
+	pub async fn _run(mut self) {
+		loop {
+			match self.swarm.select_next_some().await {
+				SwarmEvent::Behaviour(BehaviourOut::InboundRequest {
+					protocol: _,
+					result: _,
+					..
+				}) => {
+					println!("metrics");
+				},
+				SwarmEvent::Behaviour(BehaviourOut::RequestFinished {
+					protocol: _,
+					duration: _,
+					result: _,
+					..
+				}) => {
+					println!("metrics");
+				},
+				SwarmEvent::Behaviour(BehaviourOut::ReputationChanges { peer, changes }) => {
+					for change in changes {
+						self.swarm.behaviour().user_protocol().report_peer(peer, change);
+					}
+				},
+				SwarmEvent::Behaviour(BehaviourOut::PeerIdentify {
+					peer_id,
+					info:
+						IdentifyInfo {
+							protocol_version,
+							agent_version,
+							mut listen_addrs,
+							protocols: _,
+							..
+						},
+				}) => {
+					if listen_addrs.len() > 30 {
+						debug!(
+							target: "sub-libp2p",
+							"Node {:?} has reported more than 30 addresses; it is identified by {:?} and {:?}",
+							peer_id, protocol_version, agent_version
+						);
+						listen_addrs.truncate(30);
+					}
+					for _addr in listen_addrs {
+						// self.swarm
+						// 	.behaviour_mut()
+						// 	.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
+					}
+				},
+				SwarmEvent::Behaviour(BehaviourOut::Discovered(_peer_id)) => {
+					// TODO: zzz
+					println!("implement");
+					// self.swarm
+					// 	.behaviour_mut()
+					// 	.user_protocol_mut()
+					// 	.add_default_set_discovered_nodes(iter::once(peer_id));
+				},
+				SwarmEvent::Behaviour(BehaviourOut::RandomKademliaStarted) => {
+					println!("metrics")
+				},
+				SwarmEvent::Behaviour(BehaviourOut::NotificationStreamOpened {
+					remote: _,
+					protocol: _,
+					negotiated_fallback: _,
+					notifications_sink: _,
+					role: _,
+					handshake: _,
+				}) => {
+					// TODO: fix this
+					// {
+					// 	let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+					// 	let _previous_value = peers_notifications_sinks
+					// 		.insert((remote, protocol.clone()), notifications_sink);
+					// 	debug_assert!(_previous_value.is_none());
+					// }
+					// this.event_streams.send(Event::NotificationStreamOpened {
+					// 	remote,
+					// 	protocol,
+					// 	negotiated_fallback,
+					// 	role,
+					// });
+				},
+				SwarmEvent::Behaviour(BehaviourOut::NotificationStreamReplaced {
+					remote: _,
+					protocol: _,
+					notifications_sink: _,
+				}) => {
+					// TODO: fix this
+					// let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+					// if let Some(s) = peers_notifications_sinks.get_mut(&(remote, protocol)) {
+					// 	*s = notifications_sink;
+					// } else {
+					// 	error!(
+					// 		target: "sub-libp2p",
+					// 		"NotificationStreamReplaced for non-existing substream"
+					// 	);
+					// 	debug_assert!(false);
+					// }
+
+					// TODO: Notifications might have been lost as a result of the previous
+					// connection being dropped, and as a result it would be preferable to notify
+					// the users of this fact by simulating the substream being closed then
+					// reopened.
+					// The code below doesn't compile because `role` is unknown. Propagating the
+					// handshake of the secondary connections is quite an invasive change and
+					// would conflict with https://github.com/paritytech/substrate/issues/6403.
+					// Considering that dropping notifications is generally regarded as
+					// acceptable, this bug is at the moment intentionally left there and is
+					// intended to be fixed at the same time as
+					// https://github.com/paritytech/substrate/issues/6403.
+					// this.event_streams.send(Event::NotificationStreamClosed {
+					// remote,
+					// protocol,
+					// });
+					// this.event_streams.send(Event::NotificationStreamOpened {
+					// remote,
+					// protocol,
+					// role,
+					// });
+				},
+				SwarmEvent::Behaviour(BehaviourOut::NotificationStreamClosed {
+					remote: _,
+					protocol: _,
+				}) => {
+					// this.event_streams.send(Event::NotificationStreamClosed {
+					// 	remote,
+					// 	protocol: protocol.clone(),
+					// });
+					// {
+					// 	let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
+					// 	let _previous_value = peers_notifications_sinks.remove(&(remote, protocol));
+					// 	debug_assert!(_previous_value.is_some());
+					// }
+				},
+				SwarmEvent::Behaviour(BehaviourOut::NotificationsReceived {
+					remote: _,
+					messages: _,
+				}) => {
+					// this.event_streams.send(Event::NotificationsReceived { remote, messages });
+				},
+				SwarmEvent::Behaviour(BehaviourOut::SyncConnected(_remote)) => {
+					// this.event_streams.send(Event::SyncConnected { remote });
+				},
+				SwarmEvent::Behaviour(BehaviourOut::SyncDisconnected(_remote)) => {
+					// this.event_streams.send(Event::SyncDisconnected { remote });
+				},
+				SwarmEvent::Behaviour(BehaviourOut::Dht(_event, _duration)) => {
+					// this.event_streams.send(Event::Dht(event));
+				},
+				SwarmEvent::Behaviour(BehaviourOut::None) => {
+					// Ignored event from lower layers.
+				},
+				SwarmEvent::ConnectionEstablished {
+					peer_id,
+					endpoint: _,
+					num_established: _,
+					concurrent_dial_errors,
+				} =>
+					if let Some(errors) = concurrent_dial_errors {
+						debug!(target: "sub-libp2p", "Libp2p => Connected({:?}) with errors: {:?}", peer_id,
+		errors);
+					} else {
+						debug!(target: "sub-libp2p", "Libp2p => Connected({:?})", peer_id);
+					},
+				SwarmEvent::ConnectionClosed {
+					peer_id,
+					cause,
+					endpoint: _,
+					num_established: _,
+				} => {
+					debug!(target: "sub-libp2p", "Libp2p => Disconnected({:?}, {:?})", peer_id, cause);
+				},
+				SwarmEvent::NewListenAddr { address, .. } => {
+					trace!(target: "sub-libp2p", "Libp2p => NewListenAddr({})", address);
+				},
+				SwarmEvent::ExpiredListenAddr { address, .. } => {
+					info!(target: "sub-libp2p", "📪 No longer listening on {}", address);
+				},
+				SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+					if let Some(peer_id) = peer_id {
+						trace!(
+							target: "sub-libp2p",
+							"Libp2p => Failed to reach {:?}: {}",
+							peer_id, error,
+						);
+					}
+				},
+				SwarmEvent::Dialing(peer_id) => {
+					trace!(target: "sub-libp2p", "Libp2p => Dialing({:?})", peer_id)
+				},
+				SwarmEvent::IncomingConnection { local_addr, send_back_addr } => {
+					trace!(target: "sub-libp2p", "Libp2p => IncomingConnection({},{}))",
+						local_addr, send_back_addr);
+				},
+				SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error } => {
+					debug!(
+						target: "sub-libp2p",
+						"Libp2p => IncomingConnectionError({},{}): {}",
+						local_addr, send_back_addr, error,
+					);
+				},
+				SwarmEvent::BannedPeer { peer_id, endpoint } => {
+					debug!(
+						target: "sub-libp2p",
+						"Libp2p => BannedPeer({}). Connected via {:?}.",
+						peer_id, endpoint,
+					);
+				},
+				SwarmEvent::ListenerClosed { reason, addresses, .. } => {
+					let addrs =
+						addresses.into_iter().map(|a| a.to_string()).collect::<Vec<_>>().join(", ");
+					match reason {
+						Ok(()) => error!(
+							target: "sub-libp2p",
+							"📪 Libp2p listener ({}) closed gracefully",
+							addrs
+						),
+						Err(e) => error!(
+							target: "sub-libp2p",
+							"📪 Libp2p listener ({}) closed: {}",
+							addrs, e
+						),
+					}
+				},
+				SwarmEvent::ListenerError { error, .. } => {
+					debug!(target: "sub-libp2p", "Libp2p => ListenerError: {}", error);
+				},
+			}
+			// futures::pin_mut!(next_event);
+			// let poll_value = next_event.poll_unpin(cx);
+		}
 
 		// 	match poll_value {
 		// 		Poll::Pending => break,
@@ -373,7 +597,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		// 			changes,
 		// 		})) =>
 		// 			for change in changes {
-		// 				this.network_service.behaviour().user_protocol().report_peer(peer, change);
+		// 				self.swarm.behaviour().user_protocol().report_peer(peer, change);
 		// 			},
 		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::PeerIdentify {
 		// 			peer_id,
@@ -395,7 +619,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		// 				listen_addrs.truncate(30);
 		// 			}
 		// 			for addr in listen_addrs {
-		// 				this.network_service
+		// 				self.swarm
 		// 					.behaviour_mut()
 		// 					.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
 		// 			}
@@ -403,7 +627,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		// 		Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Discovered(peer_id))) => {
 		// 			// TODO: zzz
 		// 			println!("implement");
-		// 			// this.network_service
+		// 			// self.swarm
 		// 			// 	.behaviour_mut()
 		// 			// 	.user_protocol_mut()
 		// 			// 	.add_default_set_discovered_nodes(iter::once(peer_id));
