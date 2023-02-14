@@ -35,7 +35,7 @@ use crate::{
 		NetworkState, NotConnectedPeer as NetworkStateNotConnectedPeer, Peer as NetworkStatePeer,
 	},
 	protocol::{self, NotificationsSink, NotifsHandlerError, PeerInfo, Protocol, Ready},
-	transport, ChainSyncInterface, ReputationChange,
+	transport, ReputationChange,
 };
 
 use futures::{channel::oneshot, prelude::*};
@@ -68,7 +68,6 @@ use sc_network_common::{
 		NotificationSender as NotificationSenderT, NotificationSenderError,
 		NotificationSenderReady as NotificationSenderReadyT, Signature, SigningError,
 	},
-	sync::SyncStatus,
 	ExHashT,
 };
 use sc_peerset::PeersetHandle;
@@ -100,15 +99,16 @@ mod tests;
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 use sc_network_common::service::{NetworkBlock, NetworkRequest};
 
+#[allow(unused)]
 pub struct SubstrateNetwork<B: BlockT> {
 	swarm: Swarm<Behaviour<B>>,
 }
 
 impl<B: BlockT> SubstrateNetwork<B> {
-	pub fn new(
+	pub fn _new(
 		params: Params<B>,
 		genesis_hash: B::Hash,
-		fork_id: Option<&String>,
+		_fork_id: Option<&String>,
 	) -> Result<Self, Error> {
 		let local_identity = params.network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
@@ -131,7 +131,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			known_addresses.push((bootnode.peer_id, bootnode.multiaddr.clone()));
 		}
 
-		let boot_node_ids = Arc::new(boot_node_ids);
+		let _boot_node_ids = Arc::new(boot_node_ids);
 
 		// Check for duplicate bootnodes.
 		params.network_config.boot_nodes.iter().try_for_each(|bootnode| {
@@ -152,7 +152,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			}
 		})?;
 
-		let (mut swarm, bandwidth): (Swarm<Behaviour<B>>, _) = {
+		let (swarm, _bandwidth): (Swarm<Behaviour<B>>, _) = {
 			let user_agent = format!(
 				"{} ({})",
 				params.network_config.client_version, params.network_config.node_name
@@ -285,7 +285,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		Ok(Self { swarm })
 	}
 
-	pub async fn run(mut self) {
+	pub async fn _run(self) {
 		// loop {
 		// 	let next_event = self.network_service.select_next_some();
 		// 	futures::pin_mut!(next_event);
@@ -1305,7 +1305,7 @@ impl<B: BlockT, H: ExHashT> sc_consensus::JustificationSyncLink<B> for NetworkSe
 	///
 	/// On success, the justification will be passed to the import queue that was part at
 	/// initialization as part of the configuration.
-	fn request_justification(&self, hash: &B::Hash, number: NumberFor<B>) {
+	fn request_justification(&self, _hash: &B::Hash, _number: NumberFor<B>) {
 		todo!();
 	}
 
@@ -1373,7 +1373,7 @@ where
 	/// `set_sync_fork_request` should only be used if external code detects that there's
 	/// a stale fork missing.
 	/// Passing empty `peers` set effectively removes the sync request.
-	fn set_sync_fork_request(&self, peers: Vec<PeerId>, hash: B::Hash, number: NumberFor<B>) {
+	fn set_sync_fork_request(&self, _peers: Vec<PeerId>, _hash: B::Hash, _number: NumberFor<B>) {
 		todo!();
 	}
 }
@@ -1863,20 +1863,20 @@ where
 				Poll::Pending => break,
 			};
 			match msg {
-				ServiceToWorkerMsg::AnnounceBlock(hash, data) => todo!(),
+				ServiceToWorkerMsg::AnnounceBlock(_hash, _data) => todo!(),
 				ServiceToWorkerMsg::GetValue(key) =>
 					this.network_service.behaviour_mut().get_value(key),
 				ServiceToWorkerMsg::PutValue(key, value) =>
 					this.network_service.behaviour_mut().put_value(key, value),
-				ServiceToWorkerMsg::SetReservedOnly(reserved_only) => todo!(),
-				ServiceToWorkerMsg::SetReserved(peers) => todo!(),
+				ServiceToWorkerMsg::SetReservedOnly(_reserved_only) => todo!(),
+				ServiceToWorkerMsg::SetReserved(_peers) => todo!(),
 				ServiceToWorkerMsg::SetPeersetReserved(protocol, peers) => this
 					.network_service
 					.behaviour_mut()
 					.user_protocol_mut()
 					.set_reserved_peerset_peers(protocol, peers),
-				ServiceToWorkerMsg::AddReserved(peer_id) => todo!(),
-				ServiceToWorkerMsg::RemoveReserved(peer_id) => todo!(),
+				ServiceToWorkerMsg::AddReserved(_peer_id) => todo!(),
+				ServiceToWorkerMsg::RemoveReserved(_peer_id) => todo!(),
 				ServiceToWorkerMsg::AddSetReserved(protocol, peer_id) => this
 					.network_service
 					.behaviour_mut()
@@ -1926,7 +1926,7 @@ where
 					.behaviour_mut()
 					.user_protocol_mut()
 					.disconnect_peer(&who, protocol_name),
-				ServiceToWorkerMsg::NewBestBlockImported(hash, number) => todo!(),
+				ServiceToWorkerMsg::NewBestBlockImported(_hash, _number) => todo!(),
 			}
 		}
 
@@ -2054,7 +2054,7 @@ where
 							.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
 					}
 				},
-				Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Discovered(peer_id))) => {
+				Poll::Ready(SwarmEvent::Behaviour(BehaviourOut::Discovered(_peer_id))) => {
 					// TODO: zzz
 					println!("implement");
 					// this.network_service
@@ -2072,7 +2072,7 @@ where
 					negotiated_fallback,
 					notifications_sink,
 					role,
-					handshake,
+					handshake: _, // TODO: fix this
 				})) => {
 					if let Some(metrics) = this.metrics.as_ref() {
 						metrics

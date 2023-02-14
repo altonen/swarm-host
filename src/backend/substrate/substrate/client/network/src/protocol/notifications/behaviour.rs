@@ -383,20 +383,6 @@ impl Notifications {
 		}
 	}
 
-	/// Modifies the handshake of the given notifications protocol.
-	pub fn set_notif_protocol_handshake(
-		&mut self,
-		set_id: sc_peerset::SetId,
-		handshake_message: impl Into<Vec<u8>>,
-	) {
-		if let Some(p) = self.notif_protocols.get_mut(usize::from(set_id)) {
-			*p.handshake.write() = handshake_message.into();
-		} else {
-			log::error!(target: "sub-libp2p", "Unknown handshake change set: {:?}", set_id);
-			debug_assert!(false);
-		}
-	}
-
 	/// Returns the number of discovered nodes that we keep in memory.
 	pub fn num_discovered_peers(&self) -> usize {
 		self.peerset.num_discovered_peers()
@@ -549,53 +535,6 @@ impl Notifications {
 				error!(target: "sub-libp2p", "State of {:?} is poisoned", peer_id)
 			},
 		}
-	}
-
-	/// Returns the list of reserved peers.
-	pub fn reserved_peers(&self, set_id: sc_peerset::SetId) -> impl Iterator<Item = &PeerId> {
-		self.peerset.reserved_peers(set_id)
-	}
-
-	/// Sends a notification to a peer.
-	///
-	/// Has no effect if the custom protocol is not open with the given peer.
-	///
-	/// Also note that even if we have a valid open substream, it may in fact be already closed
-	/// without us knowing, in which case the packet will not be received.
-	///
-	/// The `fallback` parameter is used for backwards-compatibility reason if the remote doesn't
-	/// support our protocol. One needs to pass the equivalent of what would have been passed
-	/// with `send_packet`.
-	pub fn write_notification(
-		&mut self,
-		target: &PeerId,
-		set_id: sc_peerset::SetId,
-		message: impl Into<Vec<u8>>,
-	) {
-		let notifs_sink = match self.peers.get(&(*target, set_id)).and_then(|p| p.get_open()) {
-			None => {
-				trace!(
-					target: "sub-libp2p",
-					"Tried to sent notification to {:?} without an open channel.",
-					target,
-				);
-				return
-			},
-			Some(sink) => sink,
-		};
-
-		let message = message.into();
-
-		trace!(
-			target: "sub-libp2p",
-			"External API => Notification({:?}, {:?}, {} bytes)",
-			target,
-			set_id,
-			message.len(),
-		);
-		trace!(target: "sub-libp2p", "Handler({:?}) <= Sync notification", target);
-
-		notifs_sink.send_sync_notification(message);
 	}
 
 	/// Returns the state of the peerset manager, for debugging purposes.

@@ -869,7 +869,7 @@ where
 	// TODO: create block announce protocol config
 
 	let (chain_sync_network_provider, chain_sync_network_handle) = NetworkServiceProvider::new();
-	let (chain_sync, chain_sync_service, block_announce_config) = ChainSync::new(
+	let (_chain_sync, chain_sync_service, block_announce_config) = ChainSync::new(
 		match config.network.sync_mode {
 			SyncMode::Full => sc_network_common::sync::SyncMode::Full,
 			SyncMode::Fast { skip_proofs, storage_chain_mode } =>
@@ -942,7 +942,7 @@ where
 	let network_mut = sc_network::NetworkWorker::new(network_params)?;
 	let network = network_mut.service().clone();
 
-	let (tx_handler, tx_handler_controller) = transactions_handler_proto.build(
+	let (tx_handler, _tx_handler_controller) = transactions_handler_proto.build(
 		network.clone(),
 		Arc::new(TransactionPoolAdapter { pool: transaction_pool, client: client.clone() }),
 		config.prometheus_config.as_ref().map(|config| &config.registry),
@@ -956,7 +956,7 @@ where
 	);
 	spawn_handle.spawn("import-queue", None, import_queue.run(Box::new(chain_sync_service)));
 
-	let (system_rpc_tx, system_rpc_rx) = tracing_unbounded("mpsc_system_rpc", 10_000);
+	let (_system_rpc_tx, system_rpc_rx) = tracing_unbounded("mpsc_system_rpc", 10_000);
 
 	let future = build_network_future(
 		config.role.clone(),

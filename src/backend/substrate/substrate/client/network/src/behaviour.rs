@@ -41,7 +41,6 @@ use sc_network_common::{
 	request_responses::{IfDisconnected, ProtocolConfig, RequestFailure},
 };
 use sc_peerset::{PeersetHandle, ReputationChange};
-use sp_blockchain::HeaderBackend;
 use sp_runtime::traits::Block as BlockT;
 use std::{collections::HashSet, time::Duration};
 
@@ -324,7 +323,7 @@ impl<B: BlockT> From<CustomMessageOutcome<B>> for BehaviourOut {
 				BehaviourOut::NotificationsReceived { remote, messages },
 			CustomMessageOutcome::PeerNewBest(_peer_id, _number) => BehaviourOut::None,
 			CustomMessageOutcome::SyncConnected(peer_id) => BehaviourOut::SyncConnected(peer_id),
-			CustomMessageOutcome::SyncDisconnected(peer_id) =>
+			CustomMessageOutcome::_SyncDisconnected(peer_id) =>
 				BehaviourOut::SyncDisconnected(peer_id),
 			CustomMessageOutcome::None => BehaviourOut::None,
 		}

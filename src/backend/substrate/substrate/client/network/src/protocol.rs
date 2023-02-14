@@ -19,8 +19,7 @@
 use crate::config;
 
 use bytes::Bytes;
-use codec::{Decode, DecodeAll, Encode};
-use futures::prelude::*;
+use codec::{DecodeAll, Encode};
 use libp2p::{
 	core::connection::ConnectionId,
 	swarm::{
@@ -30,31 +29,19 @@ use libp2p::{
 	Multiaddr, PeerId,
 };
 use log::{debug, error, log, trace, warn, Level};
-use lru::LruCache;
 use message::{generic::Message as GenericMessage, Message};
 use notifications::{Notifications, NotificationsOut};
-use prometheus_endpoint::{register, Gauge, GaugeVec, Opts, PrometheusError, Registry, U64};
-use sc_client_api::HeaderBackend;
 use sc_network_common::{
 	config::NonReservedPeerMode,
 	error,
 	protocol::{role::Roles, ProtocolName},
-	sync::{
-		message::{BlockAnnounce, BlockAnnouncesHandshake, BlockData, BlockResponse, BlockState},
-		BadPeer, ChainSync, PollBlockAnnounceValidation, SyncStatus,
-	},
-	utils::{interval, LruHashSet},
+	sync::message::BlockAnnouncesHandshake,
 };
-use sp_arithmetic::traits::SaturatedConversion;
-use sp_runtime::traits::{Block as BlockT, CheckedSub, Header as HeaderT, NumberFor, Zero};
+use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use std::{
 	collections::{HashMap, HashSet, VecDeque},
 	iter,
-	num::NonZeroUsize,
-	pin::Pin,
-	sync::Arc,
 	task::Poll,
-	time,
 };
 
 mod notifications;
@@ -62,12 +49,6 @@ mod notifications;
 pub mod message;
 
 pub use notifications::{NotificationsSink, NotifsHandlerError, Ready};
-
-/// Interval at which we perform time based maintenance
-const TICK_TIMEOUT: time::Duration = time::Duration::from_millis(1100);
-
-/// Maximum number of known block hashes to keep for a peer.
-const MAX_KNOWN_BLOCKS: usize = 1024; // ~32kb per peer + LruHashSet overhead
 
 /// Maximum size used for notifications in the block announce and transaction protocols.
 // Must be equal to `max(MAX_BLOCK_ANNOUNCE_SIZE, MAX_TRANSACTIONS_SIZE)`.
@@ -79,33 +60,18 @@ const HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
 /// superior to this value corresponds to a user-defined protocol.
 const NUM_HARDCODED_PEERSETS: usize = 1;
 
-/// When light node connects to the full node and the full node is behind light node
-/// for at least `LIGHT_MAXIMAL_BLOCKS_DIFFERENCE` blocks, we consider it not useful
-/// and disconnect to free connection slot.
-const LIGHT_MAXIMAL_BLOCKS_DIFFERENCE: u64 = 8192;
-
 mod rep {
 	use sc_peerset::ReputationChange as Rep;
-	/// Reputation change when we are a light client and a peer is behind us.
-	pub const PEER_BEHIND_US_LIGHT: Rep = Rep::new(-(1 << 8), "Useless for a light peer");
 	/// We received a message that failed to decode.
 	pub const BAD_MESSAGE: Rep = Rep::new(-(1 << 12), "Bad message");
 	/// Peer has different genesis.
 	pub const GENESIS_MISMATCH: Rep = Rep::new_fatal("Genesis mismatch");
-	/// Peer role does not match (e.g. light peer connecting to another light peer).
-	pub const BAD_ROLE: Rep = Rep::new_fatal("Unsupported role");
-	/// Peer send us a block announcement that failed at validation.
-	pub const BAD_BLOCK_ANNOUNCEMENT: Rep = Rep::new(-(1 << 12), "Bad block announcement");
 }
 
 // Lock must always be taken in order declared here.
 pub struct Protocol<B: BlockT> {
-	/// Interval at which we call `tick`.
-	tick_timeout: Pin<Box<dyn Stream<Item = ()> + Send>>,
 	/// Pending list of messages to return from `poll` as a priority.
 	pending_messages: VecDeque<CustomMessageOutcome<B>>,
-	/// Assigned roles.
-	roles: Roles,
 	genesis_hash: B::Hash,
 	// All connected peers. Contains both full and light node peers.
 	peers: HashMap<PeerId, Peer<B>>,
@@ -116,10 +82,6 @@ pub struct Protocol<B: BlockT> {
 	default_peers_set_no_slot_peers: HashSet<PeerId>,
 	/// Actual list of connected no-slot nodes.
 	default_peers_set_no_slot_connected_peers: HashSet<PeerId>,
-	/// Value that was passed as part of the configuration. Used to cap the number of full nodes.
-	default_peers_set_num_full: usize,
-	/// Number of slots to allocate to light nodes.
-	default_peers_set_num_light: usize,
 	/// Used to report reputation changes.
 	peerset_handle: sc_peerset::PeersetHandle,
 	/// Handles opening the unique substream and sending and receiving raw messages.
@@ -135,16 +97,12 @@ pub struct Protocol<B: BlockT> {
 	bad_handshake_substreams: HashSet<(PeerId, sc_peerset::SetId)>,
 	/// The `PeerId`'s of all boot nodes.
 	boot_node_ids: HashSet<PeerId>,
-	/// A cache for the data that was associated to a block announcement.
-	block_announce_data_cache: LruCache<B::Hash, Vec<u8>>,
 }
 
 /// Peer information
 #[derive(Debug)]
 struct Peer<B: BlockT> {
 	info: PeerInfo<B>,
-	/// Holds a set of blocks known to this peer.
-	known_blocks: LruHashSet<B::Hash>,
 }
 
 /// Info about a peer's known state.
@@ -278,29 +236,13 @@ where
 			)
 		};
 
-		let cache_capacity = NonZeroUsize::new(
-			(network_config.default_peers_set.in_peers as usize +
-				network_config.default_peers_set.out_peers as usize)
-				.max(1),
-		)
-		.expect("cache capacity is not zero");
-		let block_announce_data_cache = LruCache::new(cache_capacity);
-
 		let protocol = Self {
-			tick_timeout: Box::pin(interval(TICK_TIMEOUT)),
 			pending_messages: VecDeque::new(),
-			roles,
 			peers: HashMap::new(),
 			genesis_hash,
 			important_peers,
 			default_peers_set_no_slot_peers,
 			default_peers_set_no_slot_connected_peers: HashSet::new(),
-			default_peers_set_num_full: network_config.default_peers_set_num_full as usize,
-			default_peers_set_num_light: {
-				let total = network_config.default_peers_set.out_peers +
-					network_config.default_peers_set.in_peers;
-				total.saturating_sub(network_config.default_peers_set_num_full) as usize
-			},
 			peerset_handle: peerset_handle.clone(),
 			behaviour,
 			notification_protocols: iter::once(block_announces_protocol.notifications_protocol)
@@ -308,7 +250,6 @@ where
 				.collect(),
 			bad_handshake_substreams: Default::default(),
 			boot_node_ids,
-			block_announce_data_cache,
 		};
 
 		Ok((protocol, peerset_handle, known_addresses))
@@ -396,7 +337,6 @@ where
 		}
 
 		let no_slot_peer = self.default_peers_set_no_slot_peers.contains(&who);
-		let this_peer_reserved_slot: usize = if no_slot_peer { 1 } else { 0 };
 
 		let peer = Peer {
 			info: PeerInfo {
@@ -404,9 +344,6 @@ where
 				best_hash: status.best_hash,
 				best_number: status.best_number,
 			},
-			known_blocks: LruHashSet::new(
-				NonZeroUsize::new(MAX_KNOWN_BLOCKS).expect("Constant is nonzero"),
-			),
 		};
 
 		debug!(target: "sync", "Connected {}", who);
@@ -522,7 +459,7 @@ pub enum CustomMessageOutcome<B: BlockT> {
 	/// Now connected to a new peer for syncing purposes.
 	SyncConnected(PeerId),
 	/// No longer connected to a peer for syncing purposes.
-	SyncDisconnected(PeerId),
+	_SyncDisconnected(PeerId),
 	None,
 }
 

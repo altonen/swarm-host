@@ -33,18 +33,15 @@ pub use sc_network_common::{
 
 pub use libp2p::{build_multiaddr, core::PublicKey, identity};
 
-use crate::ChainSyncInterface;
 use core::{fmt, iter};
 use libp2p::{
 	identity::{ed25519, Keypair},
 	multiaddr, Multiaddr,
 };
 use prometheus_endpoint::Registry;
-use sc_network_common::{
-	config::{MultiaddrWithPeerId, NonDefaultSetConfig, SetConfig, TransportConfig},
-	sync::ChainSync,
+use sc_network_common::config::{
+	MultiaddrWithPeerId, NonDefaultSetConfig, SetConfig, TransportConfig,
 };
-use sp_runtime::traits::Block as BlockT;
 use std::{
 	error::Error,
 	fs,

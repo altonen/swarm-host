@@ -162,10 +162,8 @@ async fn build_network_future<
 	let mut imported_blocks_stream = client.import_notification_stream().fuse();
 
 	// Current best block at initialization, to report to the RPC layer.
-	let starting_block = client.info().best_number;
-
-	// Stream of finalized blocks reported by the client.
-	let mut finality_notification_stream = client.finality_notification_stream().fuse();
+	let _starting_block = client.info().best_number;
+	let _finality_notification_stream = client.finality_notification_stream().fuse();
 
 	loop {
 		futures::select! {
@@ -228,7 +226,7 @@ async fn build_network_future<
 					}
 					sc_rpc::system::Request::NetworkAddReservedPeer(peer_addr, sender) => {
 						let result = match MultiaddrWithPeerId::try_from(peer_addr) {
-							Ok(peer) => {
+							Ok(_peer) => {
 								todo!();
 								// network.add_reserved_peer(peer)
 							},
@@ -241,8 +239,8 @@ async fn build_network_future<
 					}
 					sc_rpc::system::Request::NetworkRemoveReservedPeer(peer_id, sender) => {
 						let _ = match peer_id.parse::<PeerId>() {
-							Ok(peer_id) => {
-								todo!();
+							Ok(_peer_id) => {
+								// todo!();
 								// network.remove_reserved_peer(peer_id);
 								sender.send(Ok(()))
 							}
@@ -251,7 +249,7 @@ async fn build_network_future<
 							))),
 						};
 					}
-					sc_rpc::system::Request::NetworkReservedPeers(sender) => {
+					sc_rpc::system::Request::NetworkReservedPeers(_sender) => {
 						todo!();
 						// let reserved_peers = network.reserved_peers();
 						// let reserved_peers = reserved_peers
@@ -269,11 +267,9 @@ async fn build_network_future<
 
 						let _ = sender.send(vec![node_role]);
 					}
-					sc_rpc::system::Request::SyncState(sender) => {
-						use sc_rpc::system::SyncState;
-
-						let best_number = client.info().best_number;
-
+					sc_rpc::system::Request::SyncState(_sender) => {
+						// use sc_rpc::system::SyncState;
+						// let best_number = client.info().best_number;
 						// let _ = sender.send(SyncState {
 						// 	starting_block,
 						// 	current_block: best_number,
