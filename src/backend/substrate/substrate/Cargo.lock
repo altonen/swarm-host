@@ -4724,42 +4724,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "node-bench"
-version = "0.9.0-dev"
-dependencies = [
- "array-bytes",
- "clap 4.1.4",
- "derive_more",
- "fs_extra",
- "futures",
- "hash-db",
- "kitchensink-runtime",
- "kvdb",
- "kvdb-rocksdb",
- "lazy_static",
- "log",
- "node-primitives",
- "node-testing",
- "parity-db",
- "rand 0.8.5",
- "sc-basic-authorship",
- "sc-client-api",
- "sc-transaction-pool",
- "sc-transaction-pool-api",
- "serde",
- "serde_json",
- "sp-consensus",
- "sp-core",
- "sp-inherents",
- "sp-runtime",
- "sp-state-machine",
- "sp-timestamp",
- "sp-tracing",
- "sp-trie",
- "tempfile",
-]
-
-[[package]]
 name = "node-cli"
 version = "3.0.0-dev"
 dependencies = [
@@ -8053,7 +8017,6 @@ version = "0.10.0-dev"
 dependencies = [
  "criterion",
  "hash-db",
- "kitchensink-runtime",
  "kvdb",
  "kvdb-memorydb",
  "kvdb-rocksdb",
