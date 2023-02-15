@@ -55,7 +55,7 @@ pub struct FullChainApi<Client, Block> {
 }
 
 /// Spawn a validation task that will be used by the transaction pool to validate transactions.
-fn spawn_validation_pool_task(
+fn _spawn_validation_pool_task(
 	name: &'static str,
 	receiver: Arc<Mutex<mpsc::Receiver<Pin<Box<dyn Future<Output = ()> + Send>>>>>,
 	spawner: &impl SpawnEssentialNamed,
@@ -81,7 +81,7 @@ impl<Client, Block> FullChainApi<Client, Block> {
 	pub fn new(
 		client: Arc<Client>,
 		prometheus: Option<&PrometheusRegistry>,
-		spawner: &impl SpawnEssentialNamed,
+		_spawner: &impl SpawnEssentialNamed,
 	) -> Self {
 		let metrics = prometheus.map(ApiMetrics::register).and_then(|r| match r {
 			Err(err) => {
@@ -95,11 +95,11 @@ impl<Client, Block> FullChainApi<Client, Block> {
 			Ok(api) => Some(Arc::new(api)),
 		});
 
-		let (sender, receiver) = mpsc::channel(0);
+		let (sender, _receiver) = mpsc::channel(0);
 
-		let receiver = Arc::new(Mutex::new(receiver));
-		spawn_validation_pool_task("transaction-pool-task-0", receiver.clone(), spawner);
-		spawn_validation_pool_task("transaction-pool-task-1", receiver, spawner);
+		// let receiver = Arc::new(Mutex::new(receiver));
+		// spawn_validation_pool_task("transaction-pool-task-0", receiver.clone(), spawner);
+		// spawn_validation_pool_task("transaction-pool-task-1", receiver, spawner);
 
 		FullChainApi {
 			client,

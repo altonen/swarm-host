@@ -193,13 +193,13 @@ where
 		pool_api: Arc<PoolApi>,
 		prometheus: Option<&PrometheusRegistry>,
 		revalidation_type: RevalidationType,
-		spawner: impl SpawnEssentialNamed,
+		_spawner: impl SpawnEssentialNamed,
 		best_block_number: NumberFor<Block>,
 		best_block_hash: Block::Hash,
 		finalized_hash: Block::Hash,
 	) -> Self {
 		let pool = Arc::new(graph::Pool::new(options, is_validator, pool_api.clone()));
-		let (revalidation_queue, background_task) = match revalidation_type {
+		let (revalidation_queue, _background_task) = match revalidation_type {
 			RevalidationType::Light =>
 				(revalidation::RevalidationQueue::new(pool_api.clone(), pool.clone()), None),
 			RevalidationType::Full => {
@@ -209,9 +209,9 @@ where
 			},
 		};
 
-		if let Some(background_task) = background_task {
-			spawner.spawn_essential("txpool-background", Some("transaction-pool"), background_task);
-		}
+		// if let Some(background_task) = background_task {
+		// 	spawner.spawn_essential("txpool-background", Some("transaction-pool"), background_task);
+		// }
 
 		Self {
 			api: pool_api,

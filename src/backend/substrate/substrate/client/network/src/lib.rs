@@ -278,7 +278,7 @@ pub use sc_network_common::{
 };
 pub use service::{
 	DecodingError, Keypair, NetworkService, NetworkWorker, NotificationSender,
-	NotificationSenderReady, OutboundFailure, PublicKey,
+	NotificationSenderReady, OutboundFailure, PublicKey, SubstrateNetwork,
 };
 use sp_runtime::traits::{Block as BlockT, NumberFor};
 

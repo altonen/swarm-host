@@ -762,6 +762,180 @@ pub struct BuildNetworkParams<'a, TBl: BlockT, TExPool, TImpQu, TCl> {
 	/// An optional warp sync provider.
 	pub warp_sync: Option<Arc<dyn WarpSyncProvider<TBl>>>,
 }
+
+/// Build the network service, the network status sinks and an RPC sender.
+pub fn build_custom_network<TBl, TExPool, TImpQu, TCl>(
+	params: BuildNetworkParams<TBl, TExPool, TImpQu, TCl>,
+) -> Result<sc_network::SubstrateNetwork<TBl>, Error>
+where
+	TBl: BlockT,
+	TCl: ProvideRuntimeApi<TBl>
+		+ HeaderMetadata<TBl, Error = sp_blockchain::Error>
+		+ Chain<TBl>
+		+ BlockBackend<TBl>
+		+ BlockIdTo<TBl, Error = sp_blockchain::Error>
+		+ ProofProvider<TBl>
+		+ HeaderBackend<TBl>
+		+ BlockchainEvents<TBl>
+		+ 'static,
+	TExPool: MaintainedTransactionPool<Block = TBl, Hash = <TBl as BlockT>::Hash> + 'static,
+	TImpQu: ImportQueue<TBl> + 'static,
+{
+	let BuildNetworkParams {
+		config,
+		client,
+		transaction_pool: _,
+		spawn_handle,
+		import_queue: _,
+		block_announce_validator_builder,
+		warp_sync,
+	} = params;
+
+	let mut request_response_protocol_configs = Vec::new();
+
+	if warp_sync.is_none() && config.network.sync_mode.is_warp() {
+		return Err("Warp sync enabled, but no warp sync provider configured.".into())
+	}
+
+	if client.requires_full_sync() {
+		match config.network.sync_mode {
+			SyncMode::Fast { .. } => return Err("Fast sync doesn't work for archive nodes".into()),
+			SyncMode::Warp => return Err("Warp sync doesn't work for archive nodes".into()),
+			SyncMode::Full => {},
+		}
+	}
+
+	let protocol_id = config.protocol_id();
+
+	let _block_announce_validator = if let Some(f) = block_announce_validator_builder {
+		f(client.clone())
+	} else {
+		Box::new(DefaultBlockAnnounceValidator)
+	};
+
+	let block_request_protocol_config = {
+		// Allow both outgoing and incoming requests.
+		let (handler, protocol_config) = BlockRequestHandler::new(
+			&protocol_id,
+			config.chain_spec.fork_id(),
+			client.clone(),
+			config.network.default_peers_set.in_peers as usize +
+				config.network.default_peers_set.out_peers as usize,
+		);
+		spawn_handle.spawn("block-request-handler", Some("networking"), handler.run());
+		protocol_config
+	};
+
+	let state_request_protocol_config = {
+		// Allow both outgoing and incoming requests.
+		let (handler, protocol_config) = StateRequestHandler::new(
+			&protocol_id,
+			config.chain_spec.fork_id(),
+			client.clone(),
+			config.network.default_peers_set_num_full as usize,
+		);
+		spawn_handle.spawn("state-request-handler", Some("networking"), handler.run());
+		protocol_config
+	};
+
+	let (_warp_sync_provider, warp_sync_protocol_config) = warp_sync
+		.map(|provider| {
+			// Allow both outgoing and incoming requests.
+			let (handler, protocol_config) = WarpSyncRequestHandler::new(
+				protocol_id.clone(),
+				client
+					.block_hash(0u32.into())
+					.ok()
+					.flatten()
+					.expect("Genesis block exists; qed"),
+				config.chain_spec.fork_id(),
+				provider.clone(),
+			);
+			spawn_handle.spawn("warp-sync-request-handler", Some("networking"), handler.run());
+			(Some(provider), Some(protocol_config))
+		})
+		.unwrap_or_default();
+
+	let light_client_request_protocol_config = {
+		// Allow both outgoing and incoming requests.
+		let (handler, protocol_config) = LightClientRequestHandler::new(
+			&protocol_id,
+			config.chain_spec.fork_id(),
+			client.clone(),
+		);
+		spawn_handle.spawn("light-client-request-handler", Some("networking"), handler.run());
+		protocol_config
+	};
+
+	request_response_protocol_configs.push(config.network.ipfs_server.then(|| {
+		let (handler, protocol_config) = BitswapRequestHandler::new(client.clone());
+		spawn_handle.spawn("bitswap-request-handler", Some("networking"), handler.run());
+		protocol_config
+	}));
+
+	let block_announce_config =
+		sc_network_sync::ChainSync::<TBl, TCl>::get_block_announce_proto_config(
+			protocol_id.clone(),
+			&config.chain_spec.fork_id().map(ToOwned::to_owned),
+			Roles::from(&config.role),
+			client.info().best_number,
+			client.info().best_hash,
+			client
+				.block_hash(Zero::zero())
+				.ok()
+				.flatten()
+				.expect("Genesis block exists; qed"),
+		);
+
+	let network_params = sc_network::config::Params {
+		role: config.role.clone(),
+		executor: {
+			let spawn_handle = Clone::clone(&spawn_handle);
+			Box::new(move |fut| {
+				spawn_handle.spawn("libp2p-node", Some("networking"), fut);
+			})
+		},
+		network_config: config.network.clone(),
+		chain: client.clone(),
+		protocol_id: protocol_id.clone(),
+		fork_id: config.chain_spec.fork_id().map(ToOwned::to_owned),
+		metrics_registry: config.prometheus_config.as_ref().map(|config| config.registry.clone()),
+		block_announce_config,
+		request_response_protocol_configs: request_response_protocol_configs
+			.into_iter()
+			.chain([
+				Some(block_request_protocol_config),
+				Some(state_request_protocol_config),
+				Some(light_client_request_protocol_config),
+				warp_sync_protocol_config,
+			])
+			.flatten()
+			.collect::<Vec<_>>(),
+	};
+
+	let substrate_network = sc_network::SubstrateNetwork::<TBl>::new(
+		&network_params.network_config,
+		client
+			.block_hash(0u32.into())
+			.ok()
+			.flatten()
+			.expect("Genesis block exists; qed"),
+		network_params.role.clone(),
+		None,
+		network_params.protocol_id.clone(),
+		{
+			let spawn_handle = Clone::clone(&spawn_handle);
+			Box::new(move |fut| {
+				spawn_handle.spawn("substrate-network", Some("networking"), fut);
+			})
+		},
+		network_params.block_announce_config.clone(),
+	)
+	.expect("call to succeed");
+
+	Ok(substrate_network)
+}
+
 /// Build the network service, the network status sinks and an RPC sender.
 pub fn build_network<TBl, TExPool, TImpQu, TCl>(
 	params: BuildNetworkParams<TBl, TExPool, TImpQu, TCl>,
@@ -865,8 +1039,6 @@ where
 		spawn_handle.spawn("light-client-request-handler", Some("networking"), handler.run());
 		protocol_config
 	};
-
-	// TODO: create block announce protocol config
 
 	let (chain_sync_network_provider, chain_sync_network_handle) = NetworkServiceProvider::new();
 	let (_chain_sync, chain_sync_service, block_announce_config) = ChainSync::new(

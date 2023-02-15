@@ -53,9 +53,9 @@ use sp_runtime::{
 
 pub use self::{
 	builder::{
-		build_network, build_offchain_workers, new_client, new_db_backend, new_full_client,
-		new_full_parts, spawn_tasks, BuildNetworkParams, KeystoreContainer, NetworkStarter,
-		SpawnTasksParams, TFullBackend, TFullCallExecutor, TFullClient,
+		build_custom_network, build_network, build_offchain_workers, new_client, new_db_backend,
+		new_full_client, new_full_parts, spawn_tasks, BuildNetworkParams, KeystoreContainer,
+		NetworkStarter, SpawnTasksParams, TFullBackend, TFullCallExecutor, TFullClient,
 	},
 	client::{
 		genesis::{BuildGenesisBlock, GenesisBlockBuilder},

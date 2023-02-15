@@ -55,10 +55,11 @@ use log::{debug, error, info, trace, warn};
 use metrics::{Histogram, HistogramVec, MetricSources, Metrics};
 use parking_lot::Mutex;
 use sc_network_common::{
-	config::{MultiaddrWithPeerId, TransportConfig},
+	config::{MultiaddrWithPeerId, NonDefaultSetConfig, ProtocolId, TransportConfig},
 	error::Error,
 	protocol::{
 		event::{DhtEvent, Event},
+		role::Role,
 		ProtocolName,
 	},
 	request_responses::{IfDisconnected, RequestFailure},
@@ -99,7 +100,7 @@ mod tests;
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 use sc_network_common::service::{NetworkBlock, NetworkRequest};
 
-#[allow(unused)]
+/// Substrate network
 pub struct SubstrateNetwork<B: BlockT> {
 	swarm: Swarm<Behaviour<B>>,
 	/// Senders for events that happen on the network.
@@ -107,19 +108,28 @@ pub struct SubstrateNetwork<B: BlockT> {
 }
 
 impl<B: BlockT> SubstrateNetwork<B> {
-	pub fn _new(
-		params: Params<B>,
+	/// Create new substrate network
+	pub fn new(
+		network_config: &crate::config::NetworkConfiguration,
 		genesis_hash: B::Hash,
-		_fork_id: Option<&String>,
+		role: Role,
+		fork_id: Option<String>,
+		protocol_id: ProtocolId,
+		executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
+		block_announce_config: NonDefaultSetConfig,
 	) -> Result<Self, Error> {
-		let local_identity = params.network_config.node_key.clone().into_keypair()?;
+		let local_identity = network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
 		let local_peer_id = local_public.to_peer_id();
 
+		if let Some(path) = &network_config.net_config_path {
+			fs::create_dir_all(path)?;
+		}
+
 		let (protocol, peerset_handle, mut known_addresses) = Protocol::<B>::new(
-			From::from(&params.role),
-			&params.network_config,
-			params.block_announce_config,
+			From::from(&role),
+			&network_config,
+			block_announce_config,
 			genesis_hash,
 		)?;
 
@@ -127,7 +137,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		let mut boot_node_ids = HashSet::new();
 
 		// Process the bootnodes.
-		for bootnode in params.network_config.boot_nodes.iter() {
+		for bootnode in network_config.boot_nodes.iter() {
 			boot_node_ids.insert(bootnode.peer_id);
 			known_addresses.push((bootnode.peer_id, bootnode.multiaddr.clone()));
 		}
@@ -135,9 +145,8 @@ impl<B: BlockT> SubstrateNetwork<B> {
 		let _boot_node_ids = Arc::new(boot_node_ids);
 
 		// Check for duplicate bootnodes.
-		params.network_config.boot_nodes.iter().try_for_each(|bootnode| {
-			if let Some(other) = params
-				.network_config
+		network_config.boot_nodes.iter().try_for_each(|bootnode| {
+			if let Some(other) = network_config
 				.boot_nodes
 				.iter()
 				.filter(|o| o.multiaddr == bootnode.multiaddr)
@@ -153,26 +162,22 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			}
 		})?;
 
-		let (swarm, _bandwidth): (Swarm<Behaviour<B>>, _) = {
-			let user_agent = format!(
-				"{} ({})",
-				params.network_config.client_version, params.network_config.node_name
-			);
+		let (mut swarm, _bandwidth): (Swarm<Behaviour<B>>, _) = {
+			let user_agent =
+				format!("{} ({})", network_config.client_version, network_config.node_name);
 
 			let discovery_config = {
 				let mut config = DiscoveryConfig::new(local_public.clone());
 				config.with_permanent_addresses(known_addresses);
-				config.discovery_limit(
-					u64::from(params.network_config.default_peers_set.out_peers) + 15,
-				);
-				config.with_kademlia(genesis_hash, params.fork_id.as_deref(), &params.protocol_id);
-				config.with_dht_random_walk(params.network_config.enable_dht_random_walk);
-				config.allow_non_globals_in_dht(params.network_config.allow_non_globals_in_dht);
+				config.discovery_limit(u64::from(network_config.default_peers_set.out_peers) + 15);
+				config.with_kademlia(genesis_hash, fork_id.as_deref(), &protocol_id);
+				config.with_dht_random_walk(network_config.enable_dht_random_walk);
+				config.allow_non_globals_in_dht(network_config.allow_non_globals_in_dht);
 				config.use_kademlia_disjoint_query_paths(
-					params.network_config.kademlia_disjoint_query_paths,
+					network_config.kademlia_disjoint_query_paths,
 				);
 
-				match params.network_config.transport {
+				match network_config.transport {
 					TransportConfig::MemoryOnly => {
 						config.with_mdns(false);
 						config.allow_private_ip(false);
@@ -198,16 +203,15 @@ impl<B: BlockT> SubstrateNetwork<B> {
 				// a variable-length-encoding 64bits number. In other words, we make the
 				// assumption that no notification larger than 2^64 will ever be sent.
 				let yamux_maximum_buffer_size = {
-					let requests_max = params
-						.network_config
+					let requests_max = network_config
 						.request_response_protocols
 						.iter()
 						.map(|cfg| usize::try_from(cfg.max_request_size).unwrap_or(usize::MAX));
-					let responses_max =
-						params.network_config.request_response_protocols.iter().map(|cfg| {
-							usize::try_from(cfg.max_response_size).unwrap_or(usize::MAX)
-						});
-					let notifs_max = params.network_config.extra_sets.iter().map(|cfg| {
+					let responses_max = network_config
+						.request_response_protocols
+						.iter()
+						.map(|cfg| usize::try_from(cfg.max_response_size).unwrap_or(usize::MAX));
+					let notifs_max = network_config.extra_sets.iter().map(|cfg| {
 						usize::try_from(cfg.max_notification_size).unwrap_or(usize::MAX)
 					});
 
@@ -228,10 +232,12 @@ impl<B: BlockT> SubstrateNetwork<B> {
 						.saturating_add(10)
 				};
 
+				log::warn!("local identity: {:?}", local_identity);
+
 				transport::build_transport(
 					local_identity.clone(),
 					false,
-					params.network_config.yamux_window_size,
+					network_config.yamux_window_size,
 					yamux_maximum_buffer_size,
 				)
 			};
@@ -242,7 +248,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					user_agent,
 					local_public,
 					discovery_config,
-					params.network_config.request_response_protocols,
+					network_config.request_response_protocols.clone(),
 					peerset_handle.clone(),
 				);
 
@@ -264,7 +270,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					transport,
 					behaviour,
 					local_peer_id,
-					SpawnImpl(params.executor),
+					SpawnImpl(executor),
 				)
 			};
 			let builder = builder
@@ -283,15 +289,36 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			(builder.build(), bandwidth)
 		};
 
+		// Listen on multiaddresses.
+		for addr in &network_config.listen_addresses {
+			if let Err(err) = Swarm::<Behaviour<B>>::listen_on(&mut swarm, addr.clone()) {
+				warn!(target: "sub-libp2p", "Can't listen on {} because: {:?}", addr, err)
+			}
+		}
+
+		// Add external addresses.
+		for addr in &network_config.public_addresses {
+			Swarm::<Behaviour<B>>::add_external_address(
+				&mut swarm,
+				addr.clone(),
+				AddressScore::Infinite,
+			);
+		}
+
 		Ok(Self { swarm, event_streams: out_events::OutChannels::new(None)? })
 	}
 
-	fn event_stream(&mut self, name: &'static str) -> Pin<Box<dyn Stream<Item = Event> + Send>> {
+	/// Create new event stream
+	pub fn _event_stream(
+		&mut self,
+		name: &'static str,
+	) -> Pin<Box<dyn Stream<Item = Event> + Send>> {
 		let (tx, rx) = out_events::channel(name, 100_000);
 		self.event_streams.push(tx);
 		Box::pin(rx)
 	}
 
+	/// Run the event loop of substrate network
 	pub async fn _run(mut self) {
 		loop {
 			match self.swarm.select_next_some().await {
@@ -341,7 +368,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					}
 				},
 				SwarmEvent::Behaviour(BehaviourOut::Discovered(_peer_id)) => {
-					println!("implement maybe");
+					println!("implement maybe, peer id {_peer_id}");
 					// self.swarm
 					// 	.behaviour_mut()
 					// 	.user_protocol_mut()
@@ -358,6 +385,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					role,
 					handshake: _,
 				}) => {
+					log::info!("notification stream opened: {protocol}");
 					// TODO: fix this
 					// {
 					// 	let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
@@ -427,12 +455,15 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					}
 				},
 				SwarmEvent::Behaviour(BehaviourOut::NotificationsReceived { remote, messages }) => {
+					log::info!("notification received: {remote}");
 					self.event_streams.send(Event::NotificationsReceived { remote, messages });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::SyncConnected(remote)) => {
+					log::info!("sync connected");
 					self.event_streams.send(Event::SyncConnected { remote });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::SyncDisconnected(remote)) => {
+					log::info!("sync disconnected");
 					self.event_streams.send(Event::SyncDisconnected { remote });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::Dht(event, _duration)) => {

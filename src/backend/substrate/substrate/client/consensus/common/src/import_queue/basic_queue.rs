@@ -66,7 +66,7 @@ impl<B: BlockT, Transaction: Send + 'static> BasicQueue<B, Transaction> {
 		verifier: V,
 		block_import: BoxBlockImport<B, Transaction>,
 		justification_import: Option<BoxJustificationImport<B>>,
-		spawner: &impl sp_core::traits::SpawnEssentialNamed,
+		_spawner: &impl sp_core::traits::SpawnEssentialNamed,
 		prometheus_registry: Option<&Registry>,
 	) -> Self {
 		let (result_sender, result_port) = buffered_link::buffered_link(100_000);
@@ -79,7 +79,7 @@ impl<B: BlockT, Transaction: Send + 'static> BasicQueue<B, Transaction> {
 				.ok()
 		});
 
-		let (future, justification_sender, block_import_sender) = BlockImportWorker::new(
+		let (_future, justification_sender, block_import_sender) = BlockImportWorker::new(
 			result_sender,
 			verifier,
 			block_import,
@@ -87,11 +87,11 @@ impl<B: BlockT, Transaction: Send + 'static> BasicQueue<B, Transaction> {
 			metrics,
 		);
 
-		spawner.spawn_essential_blocking(
-			"basic-block-import-worker",
-			Some("block-import"),
-			future.boxed(),
-		);
+		// spawner.spawn_essential_blocking(
+		// 	"basic-block-import-worker",
+		// 	Some("block-import"),
+		// 	future.boxed(),
+		// );
 
 		Self {
 			handle: BasicQueueHandle::new(justification_sender, block_import_sender),
