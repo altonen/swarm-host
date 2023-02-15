@@ -255,17 +255,8 @@ where
 		Ok((protocol, peerset_handle, known_addresses))
 	}
 
-	/// Returns the list of all the peers we have an open channel to.
-	pub fn open_peers(&self) -> impl Iterator<Item = &PeerId> {
-		self.behaviour.open_peers()
-	}
-
-	/// Returns the number of discovered nodes that we keep in memory.
-	pub fn num_discovered_peers(&self) -> usize {
-		self.behaviour.num_discovered_peers()
-	}
-
 	/// Disconnects the given peer if we are connected to it.
+	#[allow(unused)]
 	pub fn disconnect_peer(&mut self, peer_id: &PeerId, protocol_name: ProtocolName) {
 		if let Some(position) = self.notification_protocols.iter().position(|p| *p == protocol_name)
 		{
@@ -273,21 +264,6 @@ where
 		} else {
 			warn!(target: "sub-libp2p", "disconnect_peer() with invalid protocol name")
 		}
-	}
-
-	/// Returns the state of the peerset manager, for debugging purposes.
-	pub fn peerset_debug_info(&mut self) -> serde_json::Value {
-		self.behaviour.peerset_debug_info()
-	}
-
-	/// Returns the number of peers we're connected to.
-	pub fn num_connected_peers(&self) -> usize {
-		self.peers.len()
-	}
-
-	/// Returns information about all the peers we are connected to after the handshake message.
-	pub fn peers_info(&self) -> impl Iterator<Item = (&PeerId, &PeerInfo<B>)> {
-		self.peers.iter().map(|(id, peer)| (id, &peer.info))
 	}
 
 	/// Adjusts the reputation of a node.
@@ -356,71 +332,6 @@ where
 			.push_back(CustomMessageOutcome::PeerNewBest(who, status.best_number));
 
 		Ok(())
-	}
-
-	/// Sets the list of reserved peers for the given protocol/peerset.
-	pub fn set_reserved_peerset_peers(&self, protocol: ProtocolName, peers: HashSet<PeerId>) {
-		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
-			self.peerset_handle.set_reserved_peers(sc_peerset::SetId::from(index), peers);
-		} else {
-			error!(
-				target: "sub-libp2p",
-				"set_reserved_peerset_peers with unknown protocol: {}",
-				protocol
-			);
-		}
-	}
-
-	/// Removes a `PeerId` from the list of reserved peers.
-	pub fn remove_set_reserved_peer(&self, protocol: ProtocolName, peer: PeerId) {
-		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
-			self.peerset_handle.remove_reserved_peer(sc_peerset::SetId::from(index), peer);
-		} else {
-			error!(
-				target: "sub-libp2p",
-				"remove_set_reserved_peer with unknown protocol: {}",
-				protocol
-			);
-		}
-	}
-
-	/// Adds a `PeerId` to the list of reserved peers.
-	pub fn add_set_reserved_peer(&self, protocol: ProtocolName, peer: PeerId) {
-		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
-			self.peerset_handle.add_reserved_peer(sc_peerset::SetId::from(index), peer);
-		} else {
-			error!(
-				target: "sub-libp2p",
-				"add_set_reserved_peer with unknown protocol: {}",
-				protocol
-			);
-		}
-	}
-
-	/// Add a peer to a peers set.
-	pub fn add_to_peers_set(&self, protocol: ProtocolName, peer: PeerId) {
-		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
-			self.peerset_handle.add_to_peers_set(sc_peerset::SetId::from(index), peer);
-		} else {
-			error!(
-				target: "sub-libp2p",
-				"add_to_peers_set with unknown protocol: {}",
-				protocol
-			);
-		}
-	}
-
-	/// Remove a peer from a peers set.
-	pub fn remove_from_peers_set(&self, protocol: ProtocolName, peer: PeerId) {
-		if let Some(index) = self.notification_protocols.iter().position(|p| *p == protocol) {
-			self.peerset_handle.remove_from_peers_set(sc_peerset::SetId::from(index), peer);
-		} else {
-			error!(
-				target: "sub-libp2p",
-				"remove_from_peers_set with unknown protocol: {}",
-				protocol
-			);
-		}
 	}
 }
 

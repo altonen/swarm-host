@@ -144,18 +144,18 @@ impl<'a> Node<'a> {
 	/// Returns the endpoint of an established connection to the peer.
 	///
 	/// Returns `None` if we are disconnected from the node.
-	pub fn endpoint(&self) -> Option<&'a ConnectedPoint> {
+	pub fn _endpoint(&self) -> Option<&'a ConnectedPoint> {
 		self.0.endpoints.get(0)
 	}
 
 	/// Returns the latest version information we know of.
-	pub fn client_version(&self) -> Option<&'a str> {
+	pub fn _client_version(&self) -> Option<&'a str> {
 		self.0.client_version.as_deref()
 	}
 
 	/// Returns the latest ping time we know of for this node. `None` if we never successfully
 	/// pinged this node.
-	pub fn latest_ping(&self) -> Option<Duration> {
+	pub fn _latest_ping(&self) -> Option<Duration> {
 		self.0.latest_ping
 	}
 }

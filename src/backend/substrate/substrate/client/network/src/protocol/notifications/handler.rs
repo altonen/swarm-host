@@ -57,6 +57,7 @@
 //! It is illegal to send a [`NotifsHandlerIn::Open`] before a previously-emitted
 //! [`NotifsHandlerIn::Open`] has gotten an answer.
 
+#![allow(unused)]
 use crate::protocol::notifications::upgrade::{
 	NotificationsIn, NotificationsInSubstream, NotificationsOut, NotificationsOutSubstream,
 	UpgradeCollec,
@@ -383,7 +384,7 @@ enum NotificationsSinkMessage {
 
 impl NotificationsSink {
 	/// Returns the [`PeerId`] the sink is connected to.
-	pub fn peer_id(&self) -> &PeerId {
+	pub fn _peer_id(&self) -> &PeerId {
 		&self.inner.peer_id
 	}
 
@@ -396,7 +397,7 @@ impl NotificationsSink {
 	/// error to send a notification using an unknown protocol.
 	///
 	/// This method will be removed in a future version.
-	pub fn send_sync_notification(&self, message: impl Into<Vec<u8>>) {
+	pub fn _send_sync_notification(&self, message: impl Into<Vec<u8>>) {
 		let mut lock = self.inner.sync_channel.lock();
 
 		if let Some(tx) = lock.as_mut() {
@@ -421,7 +422,7 @@ impl NotificationsSink {
 	///
 	/// The protocol name is expected to be checked ahead of calling this method. It is a logic
 	/// error to send a notification using an unknown protocol.
-	pub async fn reserve_notification(&self) -> Result<Ready<'_>, ()> {
+	pub async fn _reserve_notification(&self) -> Result<Ready<'_>, ()> {
 		let mut lock = self.inner.async_channel.lock().await;
 
 		let poll_ready = future::poll_fn(|cx| lock.poll_ready(cx)).await;

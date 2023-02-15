@@ -37,25 +37,18 @@ mod task_manager;
 use std::{collections::HashMap, net::SocketAddr};
 
 use codec::{Decode, Encode};
-use futures::{channel::mpsc, FutureExt, StreamExt};
+use futures::channel::mpsc;
 use jsonrpsee::{core::Error as JsonRpseeError, RpcModule};
 use log::{debug, error, warn};
-use sc_client_api::{blockchain::HeaderBackend, BlockBackend, BlockchainEvents, ProofProvider};
-use sc_network::PeerId;
-use sc_network_common::{config::MultiaddrWithPeerId, service::NetworkBlock};
-use sc_utils::mpsc::TracingUnboundedReceiver;
+use sc_client_api::{blockchain::HeaderBackend, BlockBackend, ProofProvider};
 use sp_blockchain::HeaderMetadata;
-use sp_consensus::SyncOracle;
-use sp_runtime::{
-	generic::BlockId,
-	traits::{Block as BlockT, Header as HeaderT},
-};
+use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 
 pub use self::{
 	builder::{
-		build_custom_network, build_network, build_offchain_workers, new_client, new_db_backend,
-		new_full_client, new_full_parts, spawn_tasks, BuildNetworkParams, KeystoreContainer,
-		NetworkStarter, SpawnTasksParams, TFullBackend, TFullCallExecutor, TFullClient,
+		build_custom_network, build_offchain_workers, new_client, new_db_backend, new_full_client,
+		new_full_parts, spawn_tasks, BuildNetworkParams, KeystoreContainer, SpawnTasksParams,
+		TFullBackend, TFullCallExecutor, TFullClient,
 	},
 	client::{
 		genesis::{BuildGenesisBlock, GenesisBlockBuilder},
@@ -135,156 +128,6 @@ pub struct PartialComponents<Client, Backend, SelectChain, ImportQueue, Transact
 	pub transaction_pool: Arc<TransactionPool>,
 	/// Everything else that needs to be passed into the main build function.
 	pub other: Other,
-}
-
-/// Builds a never-ending future that continuously polls the network.
-///
-/// The `status_sink` contain a list of senders to send a periodic network status to.
-async fn build_network_future<
-	B: BlockT,
-	C: BlockchainEvents<B>
-		+ HeaderBackend<B>
-		+ BlockBackend<B>
-		+ HeaderMetadata<B, Error = sp_blockchain::Error>
-		+ ProofProvider<B>
-		+ Send
-		+ Sync
-		+ 'static,
-	H: sc_network_common::ExHashT,
->(
-	role: Role,
-	mut network: sc_network::NetworkWorker<B, H>,
-	client: Arc<C>,
-	mut rpc_rx: TracingUnboundedReceiver<sc_rpc::system::Request<B>>,
-	should_have_peers: bool,
-	announce_imported_blocks: bool,
-) {
-	let mut imported_blocks_stream = client.import_notification_stream().fuse();
-
-	// Current best block at initialization, to report to the RPC layer.
-	let _starting_block = client.info().best_number;
-	let _finality_notification_stream = client.finality_notification_stream().fuse();
-
-	loop {
-		futures::select! {
-			// List of blocks that the client has imported.
-			notification = imported_blocks_stream.next() => {
-				let notification = match notification {
-					Some(n) => n,
-					// If this stream is shut down, that means the client has shut down, and the
-					// most appropriate thing to do for the network future is to shut down too.
-					None => return,
-				};
-
-				if announce_imported_blocks {
-					network.service().announce_block(notification.hash, None);
-				}
-
-				if notification.is_new_best {
-					network.service().new_best_block_imported(
-						notification.hash,
-						*notification.header.number(),
-					);
-				}
-			}
-
-			// Answer incoming RPC requests.
-			request = rpc_rx.select_next_some() => {
-				match request {
-					sc_rpc::system::Request::Health(sender) => {
-						let _ = sender.send(sc_rpc::system::Health {
-							peers: network.peers_debug_info().len(),
-							is_syncing: network.service().is_major_syncing(),
-							should_have_peers,
-						});
-					},
-					sc_rpc::system::Request::LocalPeerId(sender) => {
-						let _ = sender.send(network.local_peer_id().to_base58());
-					},
-					sc_rpc::system::Request::LocalListenAddresses(sender) => {
-						let peer_id = (*network.local_peer_id()).into();
-						let p2p_proto_suffix = sc_network::multiaddr::Protocol::P2p(peer_id);
-						let addresses = network.listen_addresses()
-							.map(|addr| addr.clone().with(p2p_proto_suffix.clone()).to_string())
-							.collect();
-						let _ = sender.send(addresses);
-					},
-					sc_rpc::system::Request::Peers(sender) => {
-						let _ = sender.send(network.peers_debug_info().into_iter().map(|(peer_id, p)|
-							sc_rpc::system::PeerInfo {
-								peer_id: peer_id.to_base58(),
-								roles: format!("{:?}", p.roles),
-								best_hash: p.best_hash,
-								best_number: p.best_number,
-							}
-						).collect());
-					}
-					sc_rpc::system::Request::NetworkState(sender) => {
-						if let Ok(network_state) = serde_json::to_value(&network.network_state()) {
-							let _ = sender.send(network_state);
-						}
-					}
-					sc_rpc::system::Request::NetworkAddReservedPeer(peer_addr, sender) => {
-						let result = match MultiaddrWithPeerId::try_from(peer_addr) {
-							Ok(_peer) => {
-								todo!();
-								// network.add_reserved_peer(peer)
-							},
-							Err(err) => {
-								Err(err.to_string())
-							},
-						};
-						let x = result.map_err(sc_rpc::system::error::Error::MalformattedPeerArg);
-						let _ = sender.send(x);
-					}
-					sc_rpc::system::Request::NetworkRemoveReservedPeer(peer_id, sender) => {
-						let _ = match peer_id.parse::<PeerId>() {
-							Ok(_peer_id) => {
-								// todo!();
-								// network.remove_reserved_peer(peer_id);
-								sender.send(Ok(()))
-							}
-							Err(e) => sender.send(Err(sc_rpc::system::error::Error::MalformattedPeerArg(
-								e.to_string(),
-							))),
-						};
-					}
-					sc_rpc::system::Request::NetworkReservedPeers(_sender) => {
-						todo!();
-						// let reserved_peers = network.reserved_peers();
-						// let reserved_peers = reserved_peers
-						// 	.map(|peer_id| peer_id.to_base58())
-						// 	.collect();
-						// let _ = sender.send(reserved_peers);
-					}
-					sc_rpc::system::Request::NodeRoles(sender) => {
-						use sc_rpc::system::NodeRole;
-
-						let node_role = match role {
-							Role::Authority { .. } => NodeRole::Authority,
-							Role::Full => NodeRole::Full,
-						};
-
-						let _ = sender.send(vec![node_role]);
-					}
-					sc_rpc::system::Request::SyncState(_sender) => {
-						// use sc_rpc::system::SyncState;
-						// let best_number = client.info().best_number;
-						// let _ = sender.send(SyncState {
-						// 	starting_block,
-						// 	current_block: best_number,
-						// 	highest_block: network.best_seen_block().unwrap_or(best_number),
-						// });
-					}
-				}
-			}
-
-			// The network worker has done something. Nothing special to do, but could be
-			// used in the future to perform actions in response of things that happened on
-			// the network.
-			_ = (&mut network).fuse() => {}
-		}
-	}
 }
 
 // Wrapper for HTTP and WS servers that makes sure they are properly shut down.
@@ -515,54 +358,4 @@ fn legacy_cli_parsing(config: &Configuration) -> (Option<usize>, Option<usize>, 
 	}
 
 	(max_request_size, ws_max_response_size, http_max_response_size)
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use futures::executor::block_on;
-	use sc_transaction_pool::BasicPool;
-	use sp_consensus::SelectChain;
-	use sp_runtime::traits::BlindCheckable;
-	use substrate_test_runtime_client::{
-		prelude::*,
-		runtime::{Extrinsic, Transfer},
-	};
-
-	#[test]
-	fn should_not_propagate_transactions_that_are_marked_as_such() {
-		// given
-		let (client, longest_chain) = TestClientBuilder::new().build_with_longest_chain();
-		let client = Arc::new(client);
-		let spawner = sp_core::testing::TaskExecutor::new();
-		let pool =
-			BasicPool::new_full(Default::default(), true.into(), None, spawner, client.clone());
-		let source = sp_runtime::transaction_validity::TransactionSource::External;
-		let best = block_on(longest_chain.best_chain()).unwrap();
-		let transaction = Transfer {
-			amount: 5,
-			nonce: 0,
-			from: AccountKeyring::Alice.into(),
-			to: AccountKeyring::Bob.into(),
-		}
-		.into_signed_tx();
-		block_on(pool.submit_one(&BlockId::hash(best.hash()), source, transaction.clone()))
-			.unwrap();
-		block_on(pool.submit_one(
-			&BlockId::hash(best.hash()),
-			source,
-			Extrinsic::IncludeData(vec![1]),
-		))
-		.unwrap();
-		assert_eq!(pool.status().ready, 2);
-
-		// when
-		let transactions = transactions_to_propagate(&*pool);
-
-		// then
-		assert_eq!(transactions.len(), 1);
-		assert!(transactions[0].1.clone().check().is_ok());
-		// this should not panic
-		let _ = transactions[0].1.transfer();
-	}
 }
