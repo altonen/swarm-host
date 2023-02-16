@@ -50,12 +50,9 @@ pub use crate::request_responses::{InboundFailure, OutboundFailure, RequestId, R
 /// General behaviour of the network. Combines all protocols together.
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "BehaviourOut")]
-pub struct Behaviour<B>
-where
-	B: BlockT,
-{
+pub struct Behaviour {
 	/// All the substrate-specific protocols.
-	substrate: Protocol<B>,
+	substrate: Protocol,
 	/// Periodically pings and identifies the nodes we are connected to, and store information in a
 	/// cache.
 	peer_info: peer_info::PeerInfoBehaviour,
@@ -176,13 +173,10 @@ pub enum BehaviourOut {
 	None,
 }
 
-impl<B> Behaviour<B>
-where
-	B: BlockT,
-{
+impl Behaviour {
 	/// Builds a new `Behaviour`.
 	pub fn new(
-		substrate: Protocol<B>,
+		substrate: Protocol,
 		user_agent: String,
 		local_public_key: PublicKey,
 		disco_config: DiscoveryConfig,
@@ -250,12 +244,12 @@ where
 	}
 
 	/// Returns a shared reference to the user protocol.
-	pub fn user_protocol(&self) -> &Protocol<B> {
+	pub fn user_protocol(&self) -> &Protocol {
 		&self.substrate
 	}
 
 	/// Returns a mutable reference to the user protocol.
-	pub fn user_protocol_mut(&mut self) -> &mut Protocol<B> {
+	pub fn user_protocol_mut(&mut self) -> &mut Protocol {
 		&mut self.substrate
 	}
 
@@ -318,10 +312,6 @@ impl From<CustomMessageOutcome> for BehaviourOut {
 				BehaviourOut::NotificationStreamClosed { remote, protocol },
 			CustomMessageOutcome::NotificationsReceived { remote, messages } =>
 				BehaviourOut::NotificationsReceived { remote, messages },
-			CustomMessageOutcome::SyncConnected(peer_id) => BehaviourOut::SyncConnected(peer_id),
-			CustomMessageOutcome::_SyncDisconnected(peer_id) =>
-				BehaviourOut::SyncDisconnected(peer_id),
-			CustomMessageOutcome::None => BehaviourOut::None,
 		}
 	}
 }

@@ -765,7 +765,7 @@ pub fn build_custom_network<TBl, TCl>(
 		Box<dyn FnOnce(Arc<TCl>) -> Box<dyn BlockAnnounceValidator<TBl> + Send> + Send>,
 	>,
 	warp_sync: Option<Arc<dyn WarpSyncProvider<TBl>>>,
-) -> Result<sc_network::SubstrateNetwork<TBl>, Error>
+) -> Result<sc_network::SubstrateNetwork, Error>
 where
 	TBl: BlockT,
 	TCl: ProvideRuntimeApi<TBl>
@@ -900,7 +900,7 @@ where
 			.collect::<Vec<_>>(),
 	};
 
-	let substrate_network = sc_network::SubstrateNetwork::<TBl>::new(
+	let substrate_network = sc_network::SubstrateNetwork::new::<TBl>(
 		&network_params.network_config,
 		client
 			.block_hash(0u32.into())

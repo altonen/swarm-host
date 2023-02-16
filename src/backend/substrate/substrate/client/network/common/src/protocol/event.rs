@@ -20,7 +20,6 @@
 //! events that happen on the network like DHT get/put results received.
 
 use super::ProtocolName;
-use crate::protocol::role::ObservedRole;
 use bytes::Bytes;
 use libp2p::{core::PeerId, kad::record::Key};
 

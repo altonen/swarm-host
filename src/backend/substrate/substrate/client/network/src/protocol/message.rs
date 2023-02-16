@@ -26,15 +26,6 @@ pub use self::generic::{
 use codec::{Decode, Encode};
 use sc_client_api::StorageProof;
 use sc_network_common::message::RequestId;
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
-
-/// Type alias for using the message type using block type parameters.
-pub type Message<B> = generic::Message<
-	<B as BlockT>::Header,
-	<B as BlockT>::Hash,
-	<<B as BlockT>::Header as HeaderT>::Number,
-	<B as BlockT>::Extrinsic,
->;
 
 /// Remote call response.
 #[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]

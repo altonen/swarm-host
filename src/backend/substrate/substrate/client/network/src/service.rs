@@ -59,15 +59,15 @@ mod tests;
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 
 /// Substrate network
-pub struct SubstrateNetwork<B: BlockT> {
-	swarm: Swarm<Behaviour<B>>,
+pub struct SubstrateNetwork {
+	swarm: Swarm<Behaviour>,
 	/// Senders for events that happen on the network.
 	event_streams: out_events::OutChannels,
 }
 
-impl<B: BlockT> SubstrateNetwork<B> {
+impl SubstrateNetwork {
 	/// Create new substrate network
-	pub fn new(
+	pub fn new<B: BlockT>(
 		network_config: &crate::config::NetworkConfiguration,
 		genesis_hash: B::Hash,
 		role: Role,
@@ -84,12 +84,8 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			fs::create_dir_all(path)?;
 		}
 
-		let (protocol, peerset_handle, mut known_addresses) = Protocol::<B>::new(
-			From::from(&role),
-			&network_config,
-			block_announce_config,
-			genesis_hash,
-		)?;
+		let (protocol, peerset_handle, mut known_addresses) =
+			Protocol::new(From::from(&role), &network_config, block_announce_config)?;
 
 		// List of multiaddresses that we know in the network.
 		let mut boot_node_ids = HashSet::new();
@@ -120,7 +116,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 			}
 		})?;
 
-		let (mut swarm, _bandwidth): (Swarm<Behaviour<B>>, _) = {
+		let (mut swarm, _bandwidth): (Swarm<Behaviour>, _) = {
 			let user_agent =
 				format!("{} ({})", network_config.client_version, network_config.node_name);
 
@@ -249,14 +245,14 @@ impl<B: BlockT> SubstrateNetwork<B> {
 
 		// Listen on multiaddresses.
 		for addr in &network_config.listen_addresses {
-			if let Err(err) = Swarm::<Behaviour<B>>::listen_on(&mut swarm, addr.clone()) {
+			if let Err(err) = Swarm::<Behaviour>::listen_on(&mut swarm, addr.clone()) {
 				warn!(target: "sub-libp2p", "Can't listen on {} because: {:?}", addr, err)
 			}
 		}
 
 		// Add external addresses.
 		for addr in &network_config.public_addresses {
-			Swarm::<Behaviour<B>>::add_external_address(
+			Swarm::<Behaviour>::add_external_address(
 				&mut swarm,
 				addr.clone(),
 				AddressScore::Infinite,

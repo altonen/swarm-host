@@ -481,7 +481,7 @@ struct PeerInfo<N> {
 }
 
 impl<N> PeerInfo<N> {
-	fn new(roles: ObservedRole) -> Self {
+	fn _new(roles: ObservedRole) -> Self {
 		PeerInfo { view: View::default(), roles }
 	}
 }
@@ -514,7 +514,7 @@ impl<N: Ord> Peers<N> {
 		}
 	}
 
-	fn new_peer(&mut self, who: PeerId) {}
+	fn new_peer(&mut self, _who: PeerId) {}
 
 	fn peer_disconnected(&mut self, who: &PeerId) {
 		self.inner.remove(who);

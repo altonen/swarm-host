@@ -35,7 +35,7 @@ use prometheus_endpoint::{register, Counter, PrometheusError, Registry, U64};
 use sc_network_common::{
 	config::{NonDefaultSetConfig, NonReservedPeerMode, ProtocolId, SetConfig},
 	error,
-	protocol::{event::Event, role::ObservedRole, ProtocolName},
+	protocol::{event::Event, ProtocolName},
 	service::{NetworkEventStream, NetworkNotification, NetworkPeers},
 	utils::{interval, LruHashSet},
 	ExHashT,

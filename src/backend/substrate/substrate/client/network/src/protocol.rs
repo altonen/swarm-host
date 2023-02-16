@@ -19,7 +19,7 @@
 use crate::config;
 
 use bytes::Bytes;
-use codec::{DecodeAll, Encode};
+use codec::Encode;
 use libp2p::{
 	core::connection::ConnectionId,
 	swarm::{
@@ -28,18 +28,15 @@ use libp2p::{
 	},
 	Multiaddr, PeerId,
 };
-use log::{debug, error, log, trace, warn, Level};
-use message::{generic::Message as GenericMessage, Message};
+use log::warn;
 use notifications::{Notifications, NotificationsOut};
 use sc_network_common::{
 	config::NonReservedPeerMode,
 	error,
 	protocol::{role::Roles, ProtocolName},
-	sync::message::BlockAnnouncesHandshake,
 };
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
 use std::{
-	collections::{HashMap, HashSet, VecDeque},
+	collections::{HashSet, VecDeque},
 	iter,
 	task::Poll,
 };
@@ -54,115 +51,29 @@ pub use notifications::{NotificationsSink, NotifsHandlerError, Ready};
 // Must be equal to `max(MAX_BLOCK_ANNOUNCE_SIZE, MAX_TRANSACTIONS_SIZE)`.
 pub(crate) const BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE: u64 = 16 * 1024 * 1024;
 
-/// Identifier of the peerset for the block announces protocol.
-const HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
 /// Number of hardcoded peersets (the constants right above). Any set whose identifier is equal or
 /// superior to this value corresponds to a user-defined protocol.
 const NUM_HARDCODED_PEERSETS: usize = 1;
 
-mod rep {
-	use sc_peerset::ReputationChange as Rep;
-	/// We received a message that failed to decode.
-	pub const BAD_MESSAGE: Rep = Rep::new(-(1 << 12), "Bad message");
-	/// Peer has different genesis.
-	pub const GENESIS_MISMATCH: Rep = Rep::new_fatal("Genesis mismatch");
-}
-
 // Lock must always be taken in order declared here.
-pub struct Protocol<B: BlockT> {
+pub struct Protocol {
 	/// Pending list of messages to return from `poll` as a priority.
 	pending_messages: VecDeque<CustomMessageOutcome>,
-	genesis_hash: B::Hash,
-	// All connected peers. Contains both full and light node peers.
-	peers: HashMap<PeerId, Peer<B>>,
-	/// List of nodes for which we perform additional logging because they are important for the
-	/// user.
-	important_peers: HashSet<PeerId>,
-	/// List of nodes that should never occupy peer slots.
-	default_peers_set_no_slot_peers: HashSet<PeerId>,
-	/// Actual list of connected no-slot nodes.
-	default_peers_set_no_slot_connected_peers: HashSet<PeerId>,
 	/// Used to report reputation changes.
 	peerset_handle: sc_peerset::PeersetHandle,
 	/// Handles opening the unique substream and sending and receiving raw messages.
 	behaviour: Notifications,
 	/// List of notifications protocols that have been registered.
 	notification_protocols: Vec<ProtocolName>,
-	/// If we receive a new "substream open" event that contains an invalid handshake, we ask the
-	/// inner layer to force-close the substream. Force-closing the substream will generate a
-	/// "substream closed" event. This is a problem: since we can't propagate the "substream open"
-	/// event to the outer layers, we also shouldn't propagate this "substream closed" event. To
-	/// solve this, an entry is added to this map whenever an invalid handshake is received.
-	/// Entries are removed when the corresponding "substream closed" is later received.
-	bad_handshake_substreams: HashSet<(PeerId, sc_peerset::SetId)>,
-	/// The `PeerId`'s of all boot nodes.
-	boot_node_ids: HashSet<PeerId>,
 }
 
-/// Peer information
-#[derive(Debug)]
-struct Peer<B: BlockT> {
-	info: PeerInfo<B>,
-}
-
-/// Info about a peer's known state.
-#[derive(Clone, Debug)]
-pub struct PeerInfo<B: BlockT> {
-	/// Roles
-	pub roles: Roles,
-	/// Peer best block hash
-	pub best_hash: B::Hash,
-	/// Peer best block number
-	pub best_number: <B::Header as HeaderT>::Number,
-}
-
-impl<B> Protocol<B>
-where
-	B: BlockT,
-{
+impl Protocol {
 	/// Create a new instance.
 	pub fn new(
 		roles: Roles,
 		network_config: &config::NetworkConfiguration,
 		block_announces_protocol: sc_network_common::config::NonDefaultSetConfig,
-		genesis_hash: B::Hash,
 	) -> error::Result<(Self, sc_peerset::PeersetHandle, Vec<(PeerId, Multiaddr)>)> {
-		let boot_node_ids = {
-			let mut list = HashSet::new();
-			for node in &network_config.boot_nodes {
-				list.insert(node.peer_id);
-			}
-			list.shrink_to_fit();
-			list
-		};
-
-		let important_peers = {
-			let mut imp_p = HashSet::new();
-			for reserved in &network_config.default_peers_set.reserved_nodes {
-				imp_p.insert(reserved.peer_id);
-			}
-			for reserved in network_config
-				.extra_sets
-				.iter()
-				.flat_map(|s| s.set_config.reserved_nodes.iter())
-			{
-				imp_p.insert(reserved.peer_id);
-			}
-			imp_p.shrink_to_fit();
-			imp_p
-		};
-
-		let default_peers_set_no_slot_peers = {
-			let mut no_slot_p: HashSet<PeerId> = network_config
-				.default_peers_set
-				.reserved_nodes
-				.iter()
-				.map(|reserved| reserved.peer_id)
-				.collect();
-			no_slot_p.shrink_to_fit();
-			no_slot_p
-		};
-
 		let mut known_addresses = Vec::new();
 
 		let (peerset, peerset_handle) = {
@@ -238,18 +149,11 @@ where
 
 		let protocol = Self {
 			pending_messages: VecDeque::new(),
-			peers: HashMap::new(),
-			genesis_hash,
-			important_peers,
-			default_peers_set_no_slot_peers,
-			default_peers_set_no_slot_connected_peers: HashSet::new(),
 			peerset_handle: peerset_handle.clone(),
 			behaviour,
 			notification_protocols: iter::once(block_announces_protocol.notifications_protocol)
 				.chain(network_config.extra_sets.iter().map(|s| s.notifications_protocol.clone()))
 				.collect(),
-			bad_handshake_substreams: Default::default(),
-			boot_node_ids,
 		};
 
 		Ok((protocol, peerset_handle, known_addresses))
@@ -269,67 +173,6 @@ where
 	/// Adjusts the reputation of a node.
 	pub fn report_peer(&self, who: PeerId, reputation: sc_peerset::ReputationChange) {
 		self.peerset_handle.report_peer(who, reputation)
-	}
-
-	/// Called on the first connection between two peers on the default set, after their exchange
-	/// of handshake.
-	///
-	/// Returns `Ok` if the handshake is accepted and the peer added to the list of peers we sync
-	/// from.
-	fn on_sync_peer_connected(
-		&mut self,
-		who: PeerId,
-		status: BlockAnnouncesHandshake<B>,
-	) -> Result<(), ()> {
-		trace!(target: "sync", "New peer {} {:?}", who, status);
-
-		if self.peers.contains_key(&who) {
-			error!(target: "sync", "Called on_sync_peer_connected with already connected peer {}", who);
-			debug_assert!(false);
-			return Err(())
-		}
-
-		if status.genesis_hash != self.genesis_hash {
-			log!(
-				target: "sync",
-				if self.important_peers.contains(&who) { Level::Warn } else { Level::Debug },
-				"Peer is on different chain (our genesis: {} theirs: {})",
-				self.genesis_hash, status.genesis_hash
-			);
-			self.peerset_handle.report_peer(who, rep::GENESIS_MISMATCH);
-			self.behaviour.disconnect_peer(&who, HARDCODED_PEERSETS_SYNC);
-
-			if self.boot_node_ids.contains(&who) {
-				error!(
-					target: "sync",
-					"Bootnode with peer id `{}` is on a different chain (our genesis: {} theirs: {})",
-					who,
-					self.genesis_hash,
-					status.genesis_hash,
-				);
-			}
-
-			return Err(())
-		}
-
-		let no_slot_peer = self.default_peers_set_no_slot_peers.contains(&who);
-
-		let peer = Peer {
-			info: PeerInfo {
-				roles: status.roles,
-				best_hash: status.best_hash,
-				best_number: status.best_number,
-			},
-		};
-
-		debug!(target: "sync", "Connected {}", who);
-
-		self.peers.insert(who, peer);
-		if no_slot_peer {
-			self.default_peers_set_no_slot_connected_peers.insert(who);
-		}
-
-		Ok(())
 	}
 }
 
@@ -352,23 +195,12 @@ pub enum CustomMessageOutcome {
 		notifications_sink: NotificationsSink,
 	},
 	/// Notification protocols have been closed with a remote.
-	NotificationStreamClosed {
-		remote: PeerId,
-		protocol: ProtocolName,
-	},
+	NotificationStreamClosed { remote: PeerId, protocol: ProtocolName },
 	/// Messages have been received on one or more notifications protocols.
-	NotificationsReceived {
-		remote: PeerId,
-		messages: Vec<(ProtocolName, Bytes)>,
-	},
-	/// Now connected to a new peer for syncing purposes.
-	SyncConnected(PeerId),
-	/// No longer connected to a peer for syncing purposes.
-	_SyncDisconnected(PeerId),
-	None,
+	NotificationsReceived { remote: PeerId, messages: Vec<(ProtocolName, Bytes)> },
 }
 
-impl<B: BlockT> NetworkBehaviour for Protocol<B> {
+impl NetworkBehaviour for Protocol {
 	type ConnectionHandler = <Notifications as NetworkBehaviour>::ConnectionHandler;
 	type OutEvent = CustomMessageOutcome;
 
@@ -430,7 +262,8 @@ impl<B: BlockT> NetworkBehaviour for Protocol<B> {
 				notifications_sink,
 				negotiated_fallback,
 			} => {
-				println!(
+				log::info!(
+					target: "sub-libp2p",
 					"notification stream opened for {}, peer {peer_id}",
 					self.notification_protocols[usize::from(set_id)]
 				);
@@ -443,56 +276,57 @@ impl<B: BlockT> NetworkBehaviour for Protocol<B> {
 					handshake: received_handshake,
 				}
 			},
-			NotificationsOut::CustomProtocolReplaced { peer_id, notifications_sink, set_id } =>
-				if set_id == HARDCODED_PEERSETS_SYNC ||
-					self.bad_handshake_substreams.contains(&(peer_id, set_id))
-				{
-					CustomMessageOutcome::None
-				} else {
-					CustomMessageOutcome::NotificationStreamReplaced {
-						remote: peer_id,
-						protocol: self.notification_protocols[usize::from(set_id)].clone(),
-						notifications_sink,
-					}
-				},
+			NotificationsOut::CustomProtocolReplaced { peer_id, notifications_sink, set_id } => {
+				log::info!(
+					target: "sub-libp2p",
+					"notification stream replaced for {}, peer {peer_id}",
+					self.notification_protocols[usize::from(set_id)]
+				);
+
+				CustomMessageOutcome::NotificationStreamReplaced {
+					remote: peer_id,
+					protocol: self.notification_protocols[usize::from(set_id)].clone(),
+					notifications_sink,
+				}
+			},
 			NotificationsOut::CustomProtocolClosed { peer_id, set_id } => {
-				// Set number 0 is hardcoded the default set of peers we sync from.
-				if set_id == HARDCODED_PEERSETS_SYNC {
-					self.peers.remove(&peer_id);
-					CustomMessageOutcome::None
-				} else if self.bad_handshake_substreams.remove(&(peer_id, set_id)) {
-					// The substream that has just been closed had been opened with a bad
-					// handshake. The outer layers have never received an opening event about this
-					// substream, and consequently shouldn't receive a closing event either.
-					CustomMessageOutcome::None
-				} else {
-					CustomMessageOutcome::NotificationStreamClosed {
-						remote: peer_id,
-						protocol: self.notification_protocols[usize::from(set_id)].clone(),
-					}
+				log::info!(
+					target: "sub-libp2p",
+					"notification stream closed for {}, peer {peer_id}",
+					self.notification_protocols[usize::from(set_id)]
+				);
+
+				CustomMessageOutcome::NotificationStreamClosed {
+					remote: peer_id,
+					protocol: self.notification_protocols[usize::from(set_id)].clone(),
 				}
 			},
 			NotificationsOut::Notification { peer_id, set_id, message } => {
-				let protocol_name = self.notification_protocols[usize::from(set_id)].clone();
+				log::info!(
+					target: "sub-libp2p",
+					"notification received for {}, peer {peer_id}",
+					self.notification_protocols[usize::from(set_id)]
+				);
+
 				CustomMessageOutcome::NotificationsReceived {
 					remote: peer_id,
-					messages: vec![(protocol_name, message.freeze())],
+					messages: vec![(
+						self.notification_protocols[usize::from(set_id)].clone(),
+						message.freeze(),
+					)],
 				}
 			},
 		};
 
-		if !matches!(outcome, CustomMessageOutcome::None) {
-			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(outcome))
-		}
+		Poll::Ready(NetworkBehaviourAction::GenerateEvent(outcome))
 
-		if let Some(message) = self.pending_messages.pop_front() {
-			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(message))
-		}
-
-		// This block can only be reached if an event was pulled from the behaviour and that
-		// resulted in `CustomMessageOutcome::None`. Since there might be another pending
-		// message from the behaviour, the task is scheduled again.
-		cx.waker().wake_by_ref();
-		Poll::Pending
+		// if let Some(message) = self.pending_messages.pop_front() {
+		// 	return Poll::Ready(NetworkBehaviourAction::GenerateEvent(message))
+		// }
+		// // This block can only be reached if an event was pulled from the behaviour and that
+		// // resulted in `CustomMessageOutcome::None`. Since there might be another pending
+		// // message from the behaviour, the task is scheduled again.
+		// cx.waker().wake_by_ref();
+		// Poll::Pending
 	}
 }

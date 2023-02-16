@@ -1,0 +1,226 @@
+warning: unused import: `crate::protocol::role::ObservedRole`
+  --> client/network/common/src/protocol/event.rs:23:5
+   |
+23 | use crate::protocol::role::ObservedRole;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `sc-network-common` (lib) generated 1 warning
+warning: unused import: `DecodeAll`
+  --> client/network/src/protocol.rs:22:13
+   |
+22 | use codec::{DecodeAll, Encode};
+   | ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused imports: `Message`, `generic::Message as GenericMessage`
+  --> client/network/src/protocol.rs:32:15
+   |
+32 | use message::{generic::Message as GenericMessage, Message};
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^
+
+warning: unused import: `NumberFor`
+  --> client/network/src/protocol.rs:40:62
+   |
+40 | use sp_runtime::traits::{Block as BlockT, Header as HeaderT, NumberFor};
+   |  ^^^^^^^^^
+
+warning: fields `genesis_hash`, `important_peers`, `default_peers_set_no_slot_peers`, `default_peers_set_no_slot_connected_peers`, and `boot_node_ids` are never read
+  --> client/network/src/protocol.rs:75:2
+   |
+72 | pub struct Protocol<B: BlockT> {
+   |-------- fields in this struct
+...
+75 | genesis_hash: B::Hash,
+   | ^^^^^^^^^^^^
+...
+80 | important_peers: HashSet<PeerId>,
+   | ^^^^^^^^^^^^^^^
+81 | /// List of nodes that should never occupy peer slots.
+82 | default_peers_set_no_slot_peers: HashSet<PeerId>,
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+83 | /// Actual list of connected no-slot nodes.
+84 | default_peers_set_no_slot_connected_peers: HashSet<PeerId>,
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+99 | boot_node_ids: HashSet<PeerId>,
+   | ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: field `info` is never read
+   --> client/network/src/protocol.rs:105:2
+|
+104 | struct Peer<B: BlockT> {
+|---- field in this struct
+105 | info: PeerInfo<B>,
+| ^^^^
+|
+= note: `Peer` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `SyncConnected` is never constructed
+   --> client/network/src/protocol.rs:365:2
+|
+339 | pub enum CustomMessageOutcome {
+|  -------------------- variant in this enum
+...
+365 | SyncConnected(PeerId),
+| ^^^^^^^^^^^^^
+|
+= note: `CustomMessageOutcome` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: associated function `on_sync_peer_connected` is never used
+   --> client/network/src/protocol.rs:279:5
+|
+279 | fn on_sync_peer_connected(
+|^^^^^^^^^^^^^^^^^^^^^^
+
+warning: type alias `Message` is never used
+  --> client/network/src/protocol/message.rs:32:10
+   |
+32 | pub type Message<B> = generic::Message<
+   |  ^^^^^^^
+
+warning: constant `BAD_MESSAGE` is never used
+  --> client/network/src/protocol.rs:66:12
+   |
+66 | pub const BAD_MESSAGE: Rep = Rep::new(-(1 << 12), "Bad message");
+   |   ^^^^^^^^^^^
+
+warning: constant `GENESIS_MISMATCH` is never used
+  --> client/network/src/protocol.rs:68:12
+   |
+68 | pub const GENESIS_MISMATCH: Rep = Rep::new_fatal("Genesis mismatch");
+   |   ^^^^^^^^^^^^^^^^
+
+warning: `sc-network` (lib) generated 10 warnings
+warning: unused import: `role::ObservedRole`
+  --> client/network/transactions/src/lib.rs:38:27
+   |
+38 | protocol::{event::Event, role::ObservedRole, ProtocolName},
+   |  ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `sc-network-transactions` (lib) generated 1 warning
+warning: unused import: `role::ObservedRole`
+  --> client/network-gossip/src/state_machine.rs:25:35
+   |
+25 | use sc_network_common::protocol::{role::ObservedRole, ProtocolName};
+   |   ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `sc-network-gossip` (lib) generated 1 warning
+warning: unused variable: `who`
+   --> client/finality-grandpa/src/communication/gossip.rs:517:25
+|
+517 | fn new_peer(&mut self, who: PeerId) {}
+|^^^ help: if this is intentional, prefix it with an underscore: `_who`
+|
+= note: `#[warn(unused_variables)]` on by default
+
+warning: associated function `new` is never used
+   --> client/finality-grandpa/src/communication/gossip.rs:484:5
+|
+484 | fn new(roles: ObservedRole) -> Self {
+|^^^
+|
+= note: `#[warn(dead_code)]` on by default
+
+warning: `sc-finality-grandpa` (lib) generated 2 warnings
+Finished dev [unoptimized + debuginfo] target(s) in 0.66s
+ Running `/home/altonen/code/rust/swarm-host/src/backend/substrate/substrate/target/debug/node-template --chain spec.json --tmp -lsub-libp2p=debug --port 3332 --node-key 0000000000000000000000000000000000000000000000000000000000000001 -lsub-libp2p=trace`
+2023-02-16 19:04:53.193  INFO main sc_cli::runner: Substrate Node
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: ✌️  version 
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: ❤️  by , 2017-2023
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: 📋 Chain specification: Local Testnet
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: 🏷  Node name: flagrant-cabbage-2236
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: 👤 Role: FULL
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: 💾 Database: RocksDb at /tmp/substrateMNBh89/chains/local_testnet/db/full
+2023-02-16 19:04:53.194  INFO main sc_cli::runner: ⛓  Native runtime: node-template-100 (node-template-1.tx1.au1)
+2023-02-16 19:04:54.584  INFO main sc_service::client::client: 🔨 Initializing Genesis block/state (state: 0x38e3…a587, header-hash: 0x3ffb…0202)
+2023-02-16 19:04:54.587  WARN main sc_service::config: Using default protocol ID "sup" because none is configured in the chain specs
+2023-02-16 19:04:54.587  WARN main sc_network::service: local identity: Ed25519(Keypair { public: PublicKey(CompressedEdwardsY: [76, 181, 171, 246, 173, 121, 251, 245, 171, 188, 202, 252, 194, 105, 216, 92, 210, 101, 30, 212, 184, 133, 181, 134, 159, 36, 26, 237, 240, 165, 186, 41]), EdwardsPoint{
+X: FieldElement51([955391783897894, 1570776652898489, 44434024186529, 186590912463769, 1539349797389921]),
+Y: FieldElement51([34527991653762, 962788513016529, 1665000536631091, 874474287046275, 2078716023567111]),
+Z: FieldElement51([1912526516865023, 314430644008306, 374109719420852, 1626786659243311, 1158177189343702]),
+T: FieldElement51([1879183695699218, 1623989891282363, 2032740515670856, 432678586831113, 1561365030930891])
+}) })
+2023-02-16 19:04:54.591 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0)): Starting to connect
+2023-02-16 19:04:54.592 TRACE tokio-runtime-worker sub-libp2p: Libp2p <= Dial 12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7
+2023-02-16 19:04:54.592 TRACE tokio-runtime-worker sub-libp2p: Addresses of PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): ["/ip4/127.0.0.1/tcp/30333", "/ip4/127.0.0.1/tcp/30333"]
+2023-02-16 19:04:54.593 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dialing(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"))
+2023-02-16 19:04:54.593 DEBUG tokio-runtime-worker sub-libp2p: Libp2p <= Starting random Kademlia request for PeerId("1AbNjgP8c2ZYNDa1XBiyvoyrSjNJjPiFpsnNR9VT3bb9N6")
+2023-02-16 19:04:54.595 TRACE tokio-runtime-worker sub-libp2p: Addresses of PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): ["/ip4/127.0.0.1/tcp/30333", "/ip4/127.0.0.1/tcp/30333"]
+2023-02-16 19:04:54.595 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dialing(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"))
+2023-02-16 19:04:54.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Reach failure for Some(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")) through "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7": Other(Custom { kind: Other, error: Other(A(A(A(A(B(Transport(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))))))) })
+2023-02-16 19:04:54.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dial failure for PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")
+2023-02-16 19:04:54.599 TRACE tokio-runtime-worker sub-libp2p: PSM <= Dropped(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0))
+2023-02-16 19:04:54.600 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Failed to reach PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7: : Connection refused (os error 111): Connection refused (os error 111): Connection refused (os error 111))]
+2023-02-16 19:04:54.600 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0)): Will start to connect at until Instant { tv_sec: 275345, tv_nsec: 588920359 }
+2023-02-16 19:04:54.600 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Query for 00204ab362a53396050fcf33d9eff19f9c093c073b86f5b41ab4ac54b625abc20b17 yielded 0 results
+2023-02-16 19:04:54.601 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Reach failure for Some(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")) through "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7": Other(Custom { kind: Other, error: Other(A(A(A(A(B(Transport(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))))))) })
+2023-02-16 19:04:54.601 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dial failure for PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")
+2023-02-16 19:04:54.601 TRACE tokio-runtime-worker sub-libp2p: PSM <= Dropped(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0))
+2023-02-16 19:04:54.601 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Failed to reach PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7: : Connection refused (os error 111): Connection refused (os error 111): Connection refused (os error 111))]
+2023-02-16 19:04:54.602 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0)): Will start to connect at until Instant { tv_sec: 275345, tv_nsec: 590814241 }
+2023-02-16 19:04:54.603 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip4/127.0.0.1/tcp/3332/ws)
+2023-02-16 19:04:54.604 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip6/::1/tcp/3332/ws)
+2023-02-16 19:04:54.605 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip4/192.168.8.101/tcp/3332/ws)
+2023-02-16 19:04:54.605 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip6/2001:1530:1018:7196:299:e6ee:3cbe:3/tcp/3332/ws)
+2023-02-16 19:04:54.606 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip6/fd02:99e6:ee3c:be00:648:4424:233e:6a9b/tcp/3332/ws)
+2023-02-16 19:04:54.607 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip6/2001:1530:1018:7196:39aa:6f97:581d:1807/tcp/3332/ws)
+2023-02-16 19:04:54.608 TRACE tokio-runtime-worker sub-libp2p: Libp2p => NewListenAddr(/ip6/fe80::4395:2d2c:4d12:29d3/tcp/3332/ws)
+2023-02-16 19:04:54.904 TRACE tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnection(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45516/ws))
+2023-02-16 19:04:54.910 TRACE tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnection(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45526/ws))
+2023-02-16 19:04:55.595 DEBUG tokio-runtime-worker sub-libp2p: Libp2p <= Starting random Kademlia request for PeerId("1Aewmx6Gs9inkU2pcCLuaxdLhGurybo2NyatmETaZ6dXQE")
+2023-02-16 19:04:55.596 TRACE tokio-runtime-worker sub-libp2p: Addresses of PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): ["/ip4/127.0.0.1/tcp/30333", "/ip4/127.0.0.1/tcp/30333"]
+2023-02-16 19:04:55.596 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dialing(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"))
+2023-02-16 19:04:55.598 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Reach failure for Some(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")) through "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7": Other(Custom { kind: Other, error: Other(A(A(A(A(B(Transport(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))))))) })
+2023-02-16 19:04:55.598 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dial failure for PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")
+2023-02-16 19:04:55.598 TRACE tokio-runtime-worker sub-libp2p: PSM <= Dropped(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0))
+2023-02-16 19:04:55.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Failed to reach PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7: : Connection refused (os error 111): Connection refused (os error 111): Connection refused (os error 111))]
+2023-02-16 19:04:55.599 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0)): Will start to connect at until Instant { tv_sec: 275346, tv_nsec: 587944697 }
+2023-02-16 19:04:55.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Query for 00207fbd2e335abcbadc9002994614f91923b79391f3de3418cb6fb10448e15ceaab yielded 0 results
+2023-02-16 19:04:55.907 TRACE tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnection(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45542/ws))
+2023-02-16 19:04:55.908 TRACE tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnection(/ip4/192.168.8.101/tcp/3332/ws,/ip4/192.168.8.101/tcp/54648/ws))
+2023-02-16 19:04:55.914 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Connected(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0), Listener { local_addr: "/ip4/192.168.8.101/tcp/3332/ws", send_back_addr: "/ip4/192.168.8.101/tcp/54648/ws" }, ConnectionId(6)): Not requested by PSM, disabling.
+2023-02-16 19:04:55.914 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Connected(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(1), Listener { local_addr: "/ip4/192.168.8.101/tcp/3332/ws", send_back_addr: "/ip4/192.168.8.101/tcp/54648/ws" }, ConnectionId(6)): Not requested by PSM, disabling.
+2023-02-16 19:04:55.914 DEBUG tokio-runtime-worker sub-libp2p: Libp2p => Connected(PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD"))
+2023-02-16 19:04:55.915 DEBUG tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnectionError(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45542/ws): Pending connection: Transport error on connection: 
+2023-02-16 19:04:55.921 TRACE tokio-runtime-worker sub-libp2p: Ping time with PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD"): 2.627862ms
+2023-02-16 19:04:55.924 TRACE tokio-runtime-worker sub-libp2p: Handler(PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD"), ConnectionId(6)]) => OpenDesiredByRemote(SetId(0))
+2023-02-16 19:04:55.925 TRACE tokio-runtime-worker sub-libp2p: PSM <= Incoming(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, IncomingIndex(0)).
+2023-02-16 19:04:55.925 TRACE tokio-runtime-worker sub-libp2p: PSM => Accept(IncomingIndex(0), 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0)): Enabling connections.
+2023-02-16 19:04:55.925 TRACE tokio-runtime-worker sub-libp2p: Handler(PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD"), ConnectionId(6)) <= Open(SetId(0))
+2023-02-16 19:04:55.931 TRACE tokio-runtime-worker sub-libp2p: Handler(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, ConnectionId(6)) => OpenResultOk(SetId(0))
+2023-02-16 19:04:55.931 TRACE tokio-runtime-worker sub-libp2p: External API <= Open(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0))
+2023-02-16 19:04:55.931  INFO tokio-runtime-worker sc_network::service: notification stream opened: /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/block-announces/1
+2023-02-16 19:04:56.419 TRACE tokio-runtime-worker sub-libp2p: Identified PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD") => Info { public_key: Ed25519(PublicKey(compressed): 7422b988759868e32c4448a949adb29df4e35b9e01bee5f1a1e60fe2674), protocol_version: "/substrate/1.0", agent_version: "Substrate Node/v (wanting-power-3614)", listen_addrs: ["/ip4/127.0.0.1/tcp/3333/ws", "/ip4/192.168.8.101/tcp/3333/ws", "/ip6/::1/tcp/3333/ws", "/ip6/2001:1530:1018:7196:299:e6ee:3cbe:3/tcp/3333/ws", "/ip6/fd02:99e6:ee3c:be00:648:4424:233e:6a9b/tcp/3333/ws", "/ip6/2001:1530:1018:7196:39aa:6f97:581d:1807/tcp/3333/ws", "/ip6/fe80::4395:2d2c:4d12:29d3/tcp/3333/ws"], protocols: ["/3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/block-announces/1", "/sup/block-announces/1", "/3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/grandpa/1", "/paritytech/grandpa/1", "/ipfs/ping/1.0.0", "/ipfs/id/1.0.0", "/ipfs/id/push/1.0.0", "/3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad", "/sup/kad"], observed_addr: "/ip4/192.168.8.101/tcp/3332/ws/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp" }
+2023-02-16 19:04:56.420 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip4/127.0.0.1/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.420 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip4/192.168.8.101/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.421 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip6/::1/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.421 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip6/2001:1530:1018:7196:299:e6ee:3cbe:3/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.421 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip6/fd02:99e6:ee3c:be00:648:4424:233e:6a9b/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.422 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip6/2001:1530:1018:7196:39aa:6f97:581d:1807/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:56.422 TRACE tokio-runtime-worker sub-libp2p: Adding self-reported address /ip6/fe80::4395:2d2c:4d12:29d3/tcp/3333/ws from 12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD to Kademlia DHT /3ffbbd17e1b60c26a675b24065630714c4d09a223343fccac50168b9aac80202/kad.
+2023-02-16 19:04:57.596 DEBUG tokio-runtime-worker sub-libp2p: Libp2p <= Starting random Kademlia request for PeerId("1AkymCZ7v3xLTrqgLi1UtRqbSbtf5DPHZNNzGeuxybZNA1")
+2023-02-16 19:04:57.597 TRACE tokio-runtime-worker sub-libp2p: Addresses of PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): ["/ip4/127.0.0.1/tcp/30333", "/ip4/127.0.0.1/tcp/30333"]
+2023-02-16 19:04:57.598 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dialing(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"))
+2023-02-16 19:04:57.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Reach failure for Some(PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")) through "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7": Other(Custom { kind: Other, error: Other(A(A(A(A(B(Transport(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))))))) })
+2023-02-16 19:04:57.599 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Dial failure for PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7")
+2023-02-16 19:04:57.600 TRACE tokio-runtime-worker sub-libp2p: PSM <= Dropped(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0))
+2023-02-16 19:04:57.600 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Failed to reach PeerId("12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7"): Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7: : Connection refused (os error 111): Connection refused (os error 111): Connection refused (os error 111))]
+2023-02-16 19:04:57.600 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWP5gjyotpyfFRPxTV7Z4NKai9qKLebhthEvvhmiw2a2y7, SetId(0)): Will start to connect at until Instant { tv_sec: 275348, tv_nsec: 589395096 }
+2023-02-16 19:04:57.604 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Query for 0020d9659d69cbaea5db9b525d4229332d5dd75fe5d60f8bdfb46f3615b2187172de yielded 1 results
+2023-02-16 19:04:58.085 DEBUG tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnectionError(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45526/ws): Pending connection: Transport error on connection:
+2023-02-16 19:04:58.086 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Disconnected(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0), ConnectionId(6)): Enabled.
+2023-02-16 19:04:58.087 TRACE tokio-runtime-worker sub-libp2p: External API <= Closed(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0))
+2023-02-16 19:04:58.087 TRACE tokio-runtime-worker sub-libp2p: PSM <= Dropped(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0))
+2023-02-16 19:04:58.087 TRACE tokio-runtime-worker sub-libp2p: Libp2p => Disconnected(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(1), ConnectionId(6)): Disabled.
+2023-02-16 19:04:58.087 DEBUG tokio-runtime-worker sub-libp2p: Libp2p => Disconnected(PeerId("12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD"), Some(IO(Custom { kind: Other, error: A(YamuxError(Closed)) })))
+2023-02-16 19:04:58.088 DEBUG tokio-runtime-worker sub-libp2p: Libp2p => IncomingConnectionError(/ip4/127.0.0.1/tcp/3332/ws,/ip4/127.0.0.1/tcp/45516/ws): Pending connection: Transport error on connection:
+2023-02-16 19:04:58.088 TRACE tokio-runtime-worker sub-libp2p: PSM => Connect(12D3KooWHdiAxVd8uMQR1hGWXccidmfCwLqcMpGwR6QcTP6QRMuD, SetId(0)): Will start to connect at until Instant { tv_sec: 275353, tv_nsec: 76514282 }
