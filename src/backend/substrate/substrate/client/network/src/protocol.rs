@@ -71,7 +71,7 @@ mod rep {
 // Lock must always be taken in order declared here.
 pub struct Protocol<B: BlockT> {
 	/// Pending list of messages to return from `poll` as a priority.
-	pending_messages: VecDeque<CustomMessageOutcome<B>>,
+	pending_messages: VecDeque<CustomMessageOutcome>,
 	genesis_hash: B::Hash,
 	// All connected peers. Contains both full and light node peers.
 	peers: HashMap<PeerId, Peer<B>>,
@@ -328,8 +328,6 @@ where
 		if no_slot_peer {
 			self.default_peers_set_no_slot_connected_peers.insert(who);
 		}
-		self.pending_messages
-			.push_back(CustomMessageOutcome::PeerNewBest(who, status.best_number));
 
 		Ok(())
 	}
@@ -338,14 +336,12 @@ where
 /// Outcome of an incoming custom message.
 #[derive(Debug)]
 #[must_use]
-pub enum CustomMessageOutcome<B: BlockT> {
+pub enum CustomMessageOutcome {
 	/// Notification protocols have been opened with a remote.
 	NotificationStreamOpened {
 		remote: PeerId,
 		protocol: ProtocolName,
-		/// See [`crate::Event::NotificationStreamOpened::negotiated_fallback`].
 		negotiated_fallback: Option<ProtocolName>,
-		roles: Roles,
 		notifications_sink: NotificationsSink,
 		handshake: Vec<u8>,
 	},
@@ -365,8 +361,6 @@ pub enum CustomMessageOutcome<B: BlockT> {
 		remote: PeerId,
 		messages: Vec<(ProtocolName, Bytes)>,
 	},
-	/// Peer has a reported a new head of chain.
-	PeerNewBest(PeerId, NumberFor<B>),
 	/// Now connected to a new peer for syncing purposes.
 	SyncConnected(PeerId),
 	/// No longer connected to a peer for syncing purposes.
@@ -374,12 +368,9 @@ pub enum CustomMessageOutcome<B: BlockT> {
 	None,
 }
 
-impl<B> NetworkBehaviour for Protocol<B>
-where
-	B: BlockT,
-{
+impl<B: BlockT> NetworkBehaviour for Protocol<B> {
 	type ConnectionHandler = <Notifications as NetworkBehaviour>::ConnectionHandler;
-	type OutEvent = CustomMessageOutcome<B>;
+	type OutEvent = CustomMessageOutcome;
 
 	fn new_handler(&mut self) -> Self::ConnectionHandler {
 		self.behaviour.new_handler()
@@ -439,97 +430,17 @@ where
 				notifications_sink,
 				negotiated_fallback,
 			} => {
-				// Set number 0 is hardcoded the default set of peers we sync from.
-				if set_id == HARDCODED_PEERSETS_SYNC {
-					// `received_handshake` can be either a `Status` message if received from the
-					// legacy substream ,or a `BlockAnnouncesHandshake` if received from the block
-					// announces substream.
-					match <Message<B> as DecodeAll>::decode_all(&mut &received_handshake[..]) {
-						Ok(GenericMessage::Status(handshake)) => {
-							let handshake = BlockAnnouncesHandshake {
-								roles: handshake.roles,
-								best_number: handshake.best_number,
-								best_hash: handshake.best_hash,
-								genesis_hash: handshake.genesis_hash,
-							};
+				println!(
+					"notification stream opened for {}, peer {peer_id}",
+					self.notification_protocols[usize::from(set_id)]
+				);
 
-							if self.on_sync_peer_connected(peer_id, handshake).is_ok() {
-								CustomMessageOutcome::SyncConnected(peer_id)
-							} else {
-								CustomMessageOutcome::None
-							}
-						},
-						Ok(msg) => {
-							debug!(
-								target: "sync",
-								"Expected Status message from {}, but got {:?}",
-								peer_id,
-								msg,
-							);
-							self.peerset_handle.report_peer(peer_id, rep::BAD_MESSAGE);
-							CustomMessageOutcome::None
-						},
-						Err(err) => {
-							match <BlockAnnouncesHandshake<B> as DecodeAll>::decode_all(
-								&mut &received_handshake[..],
-							) {
-								Ok(handshake) => {
-									if self.on_sync_peer_connected(peer_id, handshake).is_ok() {
-										CustomMessageOutcome::SyncConnected(peer_id)
-									} else {
-										CustomMessageOutcome::None
-									}
-								},
-								Err(err2) => {
-									debug!(
-										target: "sync",
-										"Couldn't decode handshake sent by {}: {:?}: {} & {}",
-										peer_id,
-										received_handshake,
-										err,
-										err2,
-									);
-									self.peerset_handle.report_peer(peer_id, rep::BAD_MESSAGE);
-									CustomMessageOutcome::None
-								},
-							}
-						},
-					}
-				} else {
-					match (
-						Roles::decode_all(&mut &received_handshake[..]),
-						self.peers.get(&peer_id),
-					) {
-						(Ok(roles), _) => CustomMessageOutcome::NotificationStreamOpened {
-							remote: peer_id,
-							protocol: self.notification_protocols[usize::from(set_id)].clone(),
-							negotiated_fallback,
-							roles,
-							notifications_sink,
-							handshake: received_handshake,
-						},
-						(Err(_), Some(peer)) if received_handshake.is_empty() => {
-							// As a convenience, we allow opening substreams for "external"
-							// notification protocols with an empty handshake. This fetches the
-							// roles from the locally-known roles.
-							// TODO: remove this after https://github.com/paritytech/substrate/issues/5685
-							CustomMessageOutcome::NotificationStreamOpened {
-								remote: peer_id,
-								protocol: self.notification_protocols[usize::from(set_id)].clone(),
-								negotiated_fallback,
-								roles: peer.info.roles,
-								notifications_sink,
-								handshake: received_handshake,
-							}
-						},
-						(Err(err), _) => {
-							debug!(target: "sync", "Failed to parse remote handshake: {}", err);
-							self.bad_handshake_substreams.insert((peer_id, set_id));
-							self.behaviour.disconnect_peer(&peer_id, set_id);
-							self.peerset_handle.report_peer(peer_id, rep::BAD_MESSAGE);
-							CustomMessageOutcome::None
-						},
-					}
+				CustomMessageOutcome::NotificationStreamOpened {
+					remote: peer_id,
+					protocol: self.notification_protocols[usize::from(set_id)].clone(),
+					negotiated_fallback,
+					notifications_sink,
+					handshake: received_handshake,
 				}
 			},
 			NotificationsOut::CustomProtocolReplaced { peer_id, notifications_sink, set_id } =>
@@ -570,7 +481,7 @@ where
 			},
 		};
 
-		if !matches!(outcome, CustomMessageOutcome::<B>::None) {
+		if !matches!(outcome, CustomMessageOutcome::None) {
 			return Poll::Ready(NetworkBehaviourAction::GenerateEvent(outcome))
 		}
 

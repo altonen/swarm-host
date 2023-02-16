@@ -340,8 +340,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 					protocol,
 					negotiated_fallback,
 					notifications_sink: _,
-					role,
-					handshake: _,
+					handshake,
 				}) => {
 					log::info!("notification stream opened: {protocol}");
 					// TODO: fix this
@@ -355,7 +354,7 @@ impl<B: BlockT> SubstrateNetwork<B> {
 						remote,
 						protocol,
 						negotiated_fallback,
-						role,
+						handshake,
 					});
 				},
 				SwarmEvent::Behaviour(BehaviourOut::NotificationStreamReplaced {

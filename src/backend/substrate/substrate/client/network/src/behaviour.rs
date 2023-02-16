@@ -115,8 +115,6 @@ pub enum BehaviourOut {
 		negotiated_fallback: Option<ProtocolName>,
 		/// Object that permits sending notifications to the peer.
 		notifications_sink: NotificationsSink,
-		/// Role of the remote.
-		role: ObservedRole,
 		/// Received handshake.
 		handshake: Vec<u8>,
 	},
@@ -295,21 +293,19 @@ fn reported_roles_to_observed_role(roles: Roles) -> ObservedRole {
 	}
 }
 
-impl<B: BlockT> From<CustomMessageOutcome<B>> for BehaviourOut {
-	fn from(event: CustomMessageOutcome<B>) -> Self {
+impl From<CustomMessageOutcome> for BehaviourOut {
+	fn from(event: CustomMessageOutcome) -> Self {
 		match event {
 			CustomMessageOutcome::NotificationStreamOpened {
 				remote,
 				protocol,
 				negotiated_fallback,
-				roles,
 				notifications_sink,
 				handshake,
 			} => BehaviourOut::NotificationStreamOpened {
 				remote,
 				protocol,
 				negotiated_fallback,
-				role: reported_roles_to_observed_role(roles),
 				notifications_sink,
 				handshake,
 			},
@@ -322,7 +318,6 @@ impl<B: BlockT> From<CustomMessageOutcome<B>> for BehaviourOut {
 				BehaviourOut::NotificationStreamClosed { remote, protocol },
 			CustomMessageOutcome::NotificationsReceived { remote, messages } =>
 				BehaviourOut::NotificationsReceived { remote, messages },
-			CustomMessageOutcome::PeerNewBest(_peer_id, _number) => BehaviourOut::None,
 			CustomMessageOutcome::SyncConnected(peer_id) => BehaviourOut::SyncConnected(peer_id),
 			CustomMessageOutcome::_SyncDisconnected(peer_id) =>
 				BehaviourOut::SyncDisconnected(peer_id),

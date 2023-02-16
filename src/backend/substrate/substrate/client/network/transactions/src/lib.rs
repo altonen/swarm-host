@@ -257,7 +257,6 @@ pub struct TransactionsHandler<
 struct Peer<H: ExHashT> {
 	/// Holds a set of transactions known to this peer.
 	known_transactions: LruHashSet<H>,
-	role: ObservedRole,
 }
 
 impl<B, H, S> TransactionsHandler<B, H, S>
@@ -320,7 +319,7 @@ where
 				);
 			},
 
-			Event::NotificationStreamOpened { remote, protocol, role, .. }
+			Event::NotificationStreamOpened { remote, protocol, .. }
 				if protocol == self.protocol_name =>
 			{
 				let _was_in = self.peers.insert(
@@ -329,7 +328,6 @@ where
 						known_transactions: LruHashSet::new(
 							NonZeroUsize::new(MAX_KNOWN_TRANSACTIONS).expect("Constant is nonzero"),
 						),
-						role,
 					},
 				);
 				debug_assert!(_was_in.is_none());
@@ -435,10 +433,10 @@ where
 		let mut propagated_transactions = 0;
 
 		for (who, peer) in self.peers.iter_mut() {
-			// never send transactions to the light node
-			if matches!(peer.role, ObservedRole::Light) {
-				continue
-			}
+			// // never send transactions to the light node
+			// if matches!(peer.role, ObservedRole::Light) {
+			// 	continue
+			// }
 
 			let (hashes, to_send): (Vec<_>, Vec<_>) = transactions
 				.iter()

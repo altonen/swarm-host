@@ -514,22 +514,7 @@ impl<N: Ord> Peers<N> {
 		}
 	}
 
-	fn new_peer(&mut self, who: PeerId, role: ObservedRole) {
-		match role {
-			ObservedRole::Authority if self.first_stage_peers.len() < LUCKY_PEERS => {
-				self.first_stage_peers.insert(who);
-			},
-			ObservedRole::Authority if self.second_stage_peers.len() < LUCKY_PEERS => {
-				self.second_stage_peers.insert(who);
-			},
-			ObservedRole::Light if self.lucky_light_peers.len() < LUCKY_PEERS => {
-				self.lucky_light_peers.insert(who);
-			},
-			_ => {},
-		}
-
-		self.inner.insert(who, PeerInfo::new(role));
-	}
+	fn new_peer(&mut self, who: PeerId) {}
 
 	fn peer_disconnected(&mut self, who: &PeerId) {
 		self.inner.remove(who);
@@ -1511,15 +1496,10 @@ impl<Block: BlockT> GossipValidator<Block> {
 }
 
 impl<Block: BlockT> sc_network_gossip::Validator<Block> for GossipValidator<Block> {
-	fn new_peer(
-		&self,
-		context: &mut dyn ValidatorContext<Block>,
-		who: &PeerId,
-		roles: ObservedRole,
-	) {
+	fn new_peer(&self, context: &mut dyn ValidatorContext<Block>, who: &PeerId) {
 		let packet = {
 			let mut inner = self.inner.write();
-			inner.peers.new_peer(*who, roles);
+			inner.peers.new_peer(*who);
 
 			inner.local_view.as_ref().map(|v| NeighborPacket {
 				round: v.round,

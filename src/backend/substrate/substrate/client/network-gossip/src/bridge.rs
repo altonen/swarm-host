@@ -186,11 +186,11 @@ impl<B: BlockT> Future for GossipEngine<B> {
 									vec![remote],
 								);
 							},
-							Event::NotificationStreamOpened { remote, protocol, role, .. } => {
+							Event::NotificationStreamOpened { remote, protocol, .. } => {
 								if protocol != this.protocol {
 									continue
 								}
-								this.state_machine.new_peer(&mut *this.network, remote, role);
+								this.state_machine.new_peer(&mut *this.network, remote);
 							},
 							Event::NotificationStreamClosed { remote, protocol } => {
 								if protocol != this.protocol {
@@ -316,7 +316,6 @@ mod tests {
 	use quickcheck::{Arbitrary, Gen, QuickCheck};
 	use sc_network_common::{
 		config::MultiaddrWithPeerId,
-		protocol::role::ObservedRole,
 		service::{
 			NetworkBlock, NetworkEventStream, NetworkNotification, NetworkPeers,
 			NotificationSender, NotificationSenderError,
@@ -511,7 +510,6 @@ mod tests {
 				remote: remote_peer,
 				protocol: protocol.clone(),
 				negotiated_fallback: None,
-				role: ObservedRole::Authority,
 			})
 			.expect("Event stream is unbounded; qed.");
 
@@ -673,7 +671,6 @@ mod tests {
 					remote: remote_peer,
 					protocol: protocol.clone(),
 					negotiated_fallback: None,
-					role: ObservedRole::Authority,
 				})
 				.expect("Event stream is unbounded; qed.");
 

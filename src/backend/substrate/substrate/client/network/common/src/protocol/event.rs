@@ -77,8 +77,8 @@ pub enum Event {
 		/// Always contains a value equal to the value in
 		/// `sc_network::config::NonDefaultSetConfig::fallback_names`.
 		negotiated_fallback: Option<ProtocolName>,
-		/// Role of the remote.
-		role: ObservedRole,
+		/// Received handshake.
+		handshake: Vec<u8>,
 	},
 
 	/// Closed a substream with the given node. Always matches a corresponding previous

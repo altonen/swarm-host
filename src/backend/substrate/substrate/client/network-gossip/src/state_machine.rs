@@ -193,19 +193,18 @@ impl<B: BlockT> ConsensusGossip<B> {
 	}
 
 	/// Handle new connected peer.
-	pub fn new_peer(&mut self, network: &mut dyn Network<B>, who: PeerId, role: ObservedRole) {
+	pub fn new_peer(&mut self, network: &mut dyn Network<B>, who: PeerId) {
 		tracing::trace!(
 			target:"gossip",
 			%who,
 			protocol = %self.protocol,
-			?role,
 			"Registering peer",
 		);
 		self.peers.insert(who, PeerConsensus { known_messages: Default::default() });
 
 		let validator = self.validator.clone();
 		let mut context = NetworkContext { gossip: self, network };
-		validator.new_peer(&mut context, &who, role);
+		validator.new_peer(&mut context, &who);
 	}
 
 	fn register_message_hashed(
@@ -776,7 +775,6 @@ mod tests {
 		let mut network = NoOpNetwork::default();
 
 		let peer_id = PeerId::random();
-		consensus.new_peer(&mut network, peer_id, ObservedRole::Full);
 		assert!(consensus.peers.contains_key(&peer_id));
 
 		consensus.peer_disconnected(&mut network, peer_id);

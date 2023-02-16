@@ -17,14 +17,12 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use libp2p::PeerId;
-use sc_network_common::protocol::role::ObservedRole;
 use sp_runtime::traits::Block as BlockT;
 
 /// Validates consensus messages.
 pub trait Validator<B: BlockT>: Send + Sync {
 	/// New peer is connected.
-	fn new_peer(&self, _context: &mut dyn ValidatorContext<B>, _who: &PeerId, _role: ObservedRole) {
-	}
+	fn new_peer(&self, _context: &mut dyn ValidatorContext<B>, _who: &PeerId) {}
 
 	/// New connection is dropped.
 	fn peer_disconnected(&self, _context: &mut dyn ValidatorContext<B>, _who: &PeerId) {}
