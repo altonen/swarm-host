@@ -46,8 +46,7 @@ use sc_network_common::{
 	error::Error,
 	protocol::{event::Event, role::Role},
 };
-use sp_runtime::traits::Block as BlockT;
-use std::{cmp, collections::HashSet, fs, iter, num::NonZeroUsize, pin::Pin, str, sync::Arc};
+use std::{cmp, collections::HashSet, fmt::Debug, fs, iter, num::NonZeroUsize, pin::Pin};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
 
@@ -67,15 +66,20 @@ pub struct SubstrateNetwork {
 
 impl SubstrateNetwork {
 	/// Create new substrate network
-	pub fn new<B: BlockT>(
+	pub fn new<Hash: AsRef<[u8]> + Debug>(
 		network_config: &crate::config::NetworkConfiguration,
-		genesis_hash: B::Hash,
+		genesis_hash: Hash,
 		role: Role,
 		fork_id: Option<String>,
 		protocol_id: ProtocolId,
 		executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
 		block_announce_config: NonDefaultSetConfig,
 	) -> Result<Self, Error> {
+		log::info!(
+			target: "sub-libp2p",
+			"start substrate network, role {role:?}, genesis hash {genesis_hash:?}, fork id {fork_id:?}",
+		);
+
 		let local_identity = network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
 		let local_peer_id = local_public.to_peer_id();
@@ -95,8 +99,6 @@ impl SubstrateNetwork {
 			boot_node_ids.insert(bootnode.peer_id);
 			known_addresses.push((bootnode.peer_id, bootnode.multiaddr.clone()));
 		}
-
-		let _boot_node_ids = Arc::new(boot_node_ids);
 
 		// Check for duplicate bootnodes.
 		network_config.boot_nodes.iter().try_for_each(|bootnode| {
@@ -262,18 +264,8 @@ impl SubstrateNetwork {
 		Ok(Self { swarm, event_streams: out_events::OutChannels::new(None)? })
 	}
 
-	/// Create new event stream
-	pub fn _event_stream(
-		&mut self,
-		name: &'static str,
-	) -> Pin<Box<dyn Stream<Item = Event> + Send>> {
-		let (tx, rx) = out_events::channel(name, 100_000);
-		self.event_streams.push(tx);
-		Box::pin(rx)
-	}
-
 	/// Run the event loop of substrate network
-	pub async fn _run(mut self) {
+	pub async fn run(mut self) {
 		loop {
 			match self.swarm.select_next_some().await {
 				SwarmEvent::Behaviour(BehaviourOut::InboundRequest {

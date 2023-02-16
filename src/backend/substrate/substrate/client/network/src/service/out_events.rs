@@ -52,7 +52,7 @@ use std::{
 ///
 /// The name is used in Prometheus reports, the queue size threshold is used
 /// to warn if there are too many unprocessed events in the channel.
-pub fn channel(name: &'static str, queue_size_warning: i64) -> (Sender, Receiver) {
+pub fn _channel(name: &'static str, queue_size_warning: i64) -> (Sender, Receiver) {
 	let (tx, rx) = mpsc::unbounded();
 	let metrics = Arc::new(Mutex::new(None));
 	let queue_size = Arc::new(AtomicI64::new(0));
@@ -175,7 +175,7 @@ impl OutChannels {
 	}
 
 	/// Adds a new [`Sender`] to the collection.
-	pub fn push(&mut self, sender: Sender) {
+	pub fn _push(&mut self, sender: Sender) {
 		let mut metrics = sender.metrics.lock();
 		debug_assert!(metrics.is_none());
 		*metrics = Some(self.metrics.clone());

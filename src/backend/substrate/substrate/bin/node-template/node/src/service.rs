@@ -42,6 +42,7 @@ pub fn new_custom(mut config: Configuration) -> Result<TaskManager, ServiceError
 		&config.chain_spec,
 	);
 
+	// TODO: open substream for grandpa
 	config
 		.network
 		.extra_sets
@@ -71,7 +72,7 @@ pub fn new_custom(mut config: Configuration) -> Result<TaskManager, ServiceError
 	task_manager.spawn_handle().spawn(
 		"test-test",
 		Some("test"),
-		async move { network._run().await },
+		async move { network.run().await },
 	);
 
 	Ok(task_manager)

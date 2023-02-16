@@ -900,7 +900,7 @@ where
 			.collect::<Vec<_>>(),
 	};
 
-	let substrate_network = sc_network::SubstrateNetwork::new::<TBl>(
+	let substrate_network = sc_network::SubstrateNetwork::new(
 		&network_params.network_config,
 		client
 			.block_hash(0u32.into())
