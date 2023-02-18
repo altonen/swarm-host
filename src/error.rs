@@ -38,6 +38,9 @@ pub enum Error {
 
     #[error("Filter does not exit")]
     FilterDoesntExist,
+
+    #[error("Substrate error: `{0}`")]
+    SubstrateError(sc_network_common::error::Error),
 }
 
 impl From<io::Error> for Error {
@@ -49,6 +52,12 @@ impl From<io::Error> for Error {
 impl From<serde_cbor::Error> for Error {
     fn from(error: serde_cbor::Error) -> Self {
         Error::SerdeCborError(error)
+    }
+}
+
+impl From<sc_network_common::error::Error> for Error {
+    fn from(error: sc_network_common::error::Error) -> Self {
+        Error::SubstrateError(error)
     }
 }
 

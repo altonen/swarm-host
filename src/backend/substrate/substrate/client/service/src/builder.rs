@@ -902,21 +902,21 @@ where
 
 	let substrate_network = sc_network::SubstrateNetwork::new(
 		&network_params.network_config,
-		client
-			.block_hash(0u32.into())
-			.ok()
-			.flatten()
-			.expect("Genesis block exists; qed"),
-		network_params.role.clone(),
-		None,
-		network_params.protocol_id.clone(),
+		NodeType::NodeBacked {
+			role: network_params.role.clone(),
+			genesis_hash: client
+				.block_hash(0u32.into())
+				.ok()
+				.flatten()
+				.expect("Genesis block exists; qed"),
+			block_announce_config: network_params.block_announce_config.clone(),
+		},
 		{
 			let spawn_handle = Clone::clone(&spawn_handle);
 			Box::new(move |fut| {
 				spawn_handle.spawn("substrate-network", Some("networking"), fut);
 			})
 		},
-		network_params.block_announce_config.clone(),
 	)
 	.expect("call to succeed");
 

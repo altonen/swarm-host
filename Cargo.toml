@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+array-bytes = "6.0.0"
 async-trait = "0.1.64"
 clap = { version = "4.1.4", features = ["derive"] }
 futures = "0.3.25"
@@ -13,6 +14,8 @@ jsonrpsee = { version = "0.16.2", features = ["full"] }
 petgraph = "0.6.3"
 rand = "0.8.5"
 sc-network = { path = "src/backend/substrate/substrate/client/network/", version = "0.10.0-dev" }
+sc-network-common = { path = "src/backend/substrate/substrate/client/network/common", version = "0.10.0-dev" }
+sp-runtime = { path = "src/backend/substrate/substrate/primitives/runtime/", version = "7.0.0" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_cbor = "0.11.2"
 thiserror = "1.0.38"

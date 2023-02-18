@@ -195,6 +195,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52f63c5c1316a16a4b35eaac8b76a98248961a533f061684cb2a7cb0eafb6c6"
 
 [[package]]
+name = "array-bytes"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22f72e9d6fac4bc80778ea470b20197b88d28c292bb7d60c3fb099280003cd19"
+
+[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4648,7 +4654,7 @@ dependencies = [
 name = "sc-network"
 version = "0.10.0-dev"
 dependencies = [
- "array-bytes",
+ "array-bytes 4.2.0",
  "async-trait",
  "asynchronous-codec",
  "backtrace",
@@ -4682,6 +4688,7 @@ dependencies = [
  "sp-runtime",
  "substrate-prometheus-endpoint",
  "thiserror",
+ "tokio",
  "unsigned-varint",
  "zeroize",
 ]
@@ -5227,7 +5234,7 @@ dependencies = [
 name = "sp-core"
 version = "7.0.0"
 dependencies = [
- "array-bytes",
+ "array-bytes 4.2.0",
  "base58",
  "bitflags",
  "blake2",
@@ -5683,6 +5690,7 @@ checksum = "6bdef32e8150c2a081110b42772ffe7d7c9032b606bc226c8260fd97e0976601"
 name = "swarm-host"
 version = "0.1.0"
 dependencies = [
+ "array-bytes 6.0.0",
  "async-trait",
  "clap",
  "futures",
@@ -5690,8 +5698,10 @@ dependencies = [
  "petgraph",
  "rand 0.8.5",
  "sc-network",
+ "sc-network-common",
  "serde",
  "serde_cbor",
+ "sp-runtime",
  "thiserror",
  "tokio",
  "tokio-stream",

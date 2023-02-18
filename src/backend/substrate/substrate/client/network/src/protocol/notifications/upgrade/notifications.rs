@@ -85,6 +85,7 @@ pub struct NotificationsInSubstream<TSubstream> {
 	#[pin]
 	socket: Framed<TSubstream, UviBytes<io::Cursor<Vec<u8>>>>,
 	handshake: NotificationsInSubstreamHandshake,
+	pub received_handshake: Vec<u8>,
 }
 
 /// State of the handshake sending back process.
@@ -171,6 +172,7 @@ where
 			let substream = NotificationsInSubstream {
 				socket: Framed::new(socket, codec),
 				handshake: NotificationsInSubstreamHandshake::NotSent,
+				received_handshake: handshake.clone(),
 			};
 
 			Ok(NotificationsInOpen {

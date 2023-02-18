@@ -135,7 +135,10 @@ impl Protocol {
 				iter::once(notifications::ProtocolConfig {
 					name: block_announces_protocol.notifications_protocol.clone(),
 					fallback_names: block_announces_protocol.fallback_names.clone(),
-					handshake: block_announces_protocol.handshake.as_ref().unwrap().to_vec(),
+					handshake: block_announces_protocol
+						.handshake
+						.as_ref()
+						.map_or(roles.encode(), |h| (*h).to_vec()),
 					max_notification_size: block_announces_protocol.max_notification_size,
 				})
 				.chain(network_config.extra_sets.iter().map(|s| notifications::ProtocolConfig {
@@ -319,14 +322,5 @@ impl NetworkBehaviour for Protocol {
 		};
 
 		Poll::Ready(NetworkBehaviourAction::GenerateEvent(outcome))
-
-		// if let Some(message) = self.pending_messages.pop_front() {
-		// 	return Poll::Ready(NetworkBehaviourAction::GenerateEvent(message))
-		// }
-		// // This block can only be reached if an event was pulled from the behaviour and that
-		// // resulted in `CustomMessageOutcome::None`. Since there might be another pending
-		// // message from the behaviour, the task is scheduled again.
-		// cx.waker().wake_by_ref();
-		// Poll::Pending
 	}
 }

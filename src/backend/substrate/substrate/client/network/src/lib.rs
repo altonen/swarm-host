@@ -278,6 +278,7 @@ pub use sc_network_common::{
 pub use service::{
 	DecodingError,
 	Keypair, //NetworkService, NetworkWorker, NotificationSender,
+	NodeType,
 	// NotificationSenderReady,
 	OutboundFailure,
 	PublicKey,

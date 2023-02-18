@@ -16,17 +16,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//! Main entry point of the sc-network crate.
-//!
-//! There are two main structs in this module: [`NetworkWorker`] and [`NetworkService`].
-//! The [`NetworkWorker`] *is* the network and implements the `Future` trait. It must be polled in
-//! order for the network to advance.
-//! The [`NetworkService`] is merely a shared version of the [`NetworkWorker`]. You can obtain an
-//! `Arc<NetworkService>` by calling [`NetworkWorker::service`].
-//!
-//! The methods of the [`NetworkService`] are implemented by sending a message over a channel,
-//! which is then processed by [`NetworkWorker::poll`].
-
 use crate::{
 	behaviour::{self, Behaviour, BehaviourOut},
 	discovery::DiscoveryConfig,
@@ -46,7 +35,7 @@ use sc_network_common::{
 	error::Error,
 	protocol::{event::Event, role::Role},
 };
-use std::{cmp, collections::HashSet, fmt::Debug, fs, iter, num::NonZeroUsize, pin::Pin};
+use std::{cmp, fmt::Debug, fs, iter, num::NonZeroUsize, pin::Pin};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
 
@@ -57,6 +46,11 @@ mod tests;
 
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 
+pub enum NodeType {
+	Masquerade { role: Role, block_announce_config: NonDefaultSetConfig },
+	NodeBacked { genesis_hash: Vec<u8>, role: Role, block_announce_config: NonDefaultSetConfig },
+}
+
 /// Substrate network
 pub struct SubstrateNetwork {
 	swarm: Swarm<Behaviour>,
@@ -66,20 +60,11 @@ pub struct SubstrateNetwork {
 
 impl SubstrateNetwork {
 	/// Create new substrate network
-	pub fn new<Hash: AsRef<[u8]> + Debug>(
+	pub fn new(
 		network_config: &crate::config::NetworkConfiguration,
-		genesis_hash: Hash,
-		role: Role,
-		fork_id: Option<String>,
-		protocol_id: ProtocolId,
+		node_type: NodeType,
 		executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
-		block_announce_config: NonDefaultSetConfig,
 	) -> Result<Self, Error> {
-		log::info!(
-			target: "sub-libp2p",
-			"start substrate network, role {role:?}, genesis hash {genesis_hash:?}, fork id {fork_id:?}",
-		);
-
 		let local_identity = network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
 		let local_peer_id = local_public.to_peer_id();
@@ -88,35 +73,19 @@ impl SubstrateNetwork {
 			fs::create_dir_all(path)?;
 		}
 
+		let (role, block_announce_config, genesis_hash) = match node_type {
+			NodeType::Masquerade { role, block_announce_config } =>
+				(role, block_announce_config, None),
+			NodeType::NodeBacked { genesis_hash, role, block_announce_config } =>
+				(role, block_announce_config, Some(genesis_hash)),
+		};
+
 		let (protocol, peerset_handle, mut known_addresses) =
 			Protocol::new(From::from(&role), &network_config, block_announce_config)?;
 
-		// List of multiaddresses that we know in the network.
-		let mut boot_node_ids = HashSet::new();
-
-		// Process the bootnodes.
 		for bootnode in network_config.boot_nodes.iter() {
-			boot_node_ids.insert(bootnode.peer_id);
 			known_addresses.push((bootnode.peer_id, bootnode.multiaddr.clone()));
 		}
-
-		// Check for duplicate bootnodes.
-		network_config.boot_nodes.iter().try_for_each(|bootnode| {
-			if let Some(other) = network_config
-				.boot_nodes
-				.iter()
-				.filter(|o| o.multiaddr == bootnode.multiaddr)
-				.find(|o| o.peer_id != bootnode.peer_id)
-			{
-				Err(Error::DuplicateBootnode {
-					address: bootnode.multiaddr.clone(),
-					first_id: bootnode.peer_id,
-					second_id: other.peer_id,
-				})
-			} else {
-				Ok(())
-			}
-		})?;
 
 		let (mut swarm, _bandwidth): (Swarm<Behaviour>, _) = {
 			let user_agent =
@@ -126,7 +95,10 @@ impl SubstrateNetwork {
 				let mut config = DiscoveryConfig::new(local_public.clone());
 				config.with_permanent_addresses(known_addresses);
 				config.discovery_limit(u64::from(network_config.default_peers_set.out_peers) + 15);
-				config.with_kademlia(genesis_hash, fork_id.as_deref(), &protocol_id);
+				// TODO: add kademlia support for both node types
+				// if let Some(genesis_hash) = genesis_hash {
+				// 	config.with_kademlia(genesis_hash, fork_id.as_deref(), &protocol_id);
+				// }
 				config.with_dht_random_walk(network_config.enable_dht_random_walk);
 				config.allow_non_globals_in_dht(network_config.allow_non_globals_in_dht);
 				config.use_kademlia_disjoint_query_paths(
@@ -152,12 +124,6 @@ impl SubstrateNetwork {
 			};
 
 			let (transport, bandwidth) = {
-				// The yamux buffer size limit is configured to be equal to the maximum frame size
-				// of all protocols. 10 bytes are added to each limit for the length prefix that
-				// is not included in the upper layer protocols limit but is still present in the
-				// yamux buffer. These 10 bytes correspond to the maximum size required to encode
-				// a variable-length-encoding 64bits number. In other words, we make the
-				// assumption that no notification larger than 2^64 will ever be sent.
 				let yamux_maximum_buffer_size = {
 					let requests_max = network_config
 						.request_response_protocols
@@ -171,8 +137,6 @@ impl SubstrateNetwork {
 						usize::try_from(cfg.max_notification_size).unwrap_or(usize::MAX)
 					});
 
-					// A "default" max is added to cover all the other protocols: ping, identify,
-					// kademlia, block announces, and transactions.
 					let default_max = cmp::max(
 						1024 * 1024,
 						usize::try_from(protocol::BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE)
@@ -188,7 +152,7 @@ impl SubstrateNetwork {
 						.saturating_add(10)
 				};
 
-				log::warn!("local identity: {:?}", local_identity);
+				log::info!(target: "sub-libp2p", "local peer id: {local_peer_id}");
 
 				transport::build_transport(
 					local_identity.clone(),
@@ -245,14 +209,12 @@ impl SubstrateNetwork {
 			(builder.build(), bandwidth)
 		};
 
-		// Listen on multiaddresses.
 		for addr in &network_config.listen_addresses {
 			if let Err(err) = Swarm::<Behaviour>::listen_on(&mut swarm, addr.clone()) {
 				warn!(target: "sub-libp2p", "Can't listen on {} because: {:?}", addr, err)
 			}
 		}
 
-		// Add external addresses.
 		for addr in &network_config.public_addresses {
 			Swarm::<Behaviour>::add_external_address(
 				&mut swarm,
