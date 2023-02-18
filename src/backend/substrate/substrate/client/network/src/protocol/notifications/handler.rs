@@ -716,14 +716,14 @@ impl ConnectionHandler for NotifsHandler {
 	}
 
 	fn connection_keep_alive(&self) -> KeepAlive {
-		// `Yes` if any protocol has some activity.
-		if self.protocols.iter().any(|p| !matches!(p.state, State::Closed { .. })) {
-			return KeepAlive::Yes
-		}
+		// // `Yes` if any protocol has some activity.
+		// if self.protocols.iter().any(|p| !matches!(p.state, State::Closed { .. })) {
+		return KeepAlive::Yes
+		// }
 
-		// A grace period of `INITIAL_KEEPALIVE_TIME` must be given to leave time for the remote
-		// to express desire to open substreams.
-		KeepAlive::Until(self.when_connection_open + INITIAL_KEEPALIVE_TIME)
+		// // A grace period of `INITIAL_KEEPALIVE_TIME` must be given to leave time for the remote
+		// // to express desire to open substreams.
+		// KeepAlive::Until(self.when_connection_open + INITIAL_KEEPALIVE_TIME)
 	}
 
 	fn poll(
