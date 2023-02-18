@@ -536,8 +536,8 @@ impl ConnectionHandler for NotifsHandler {
 						}
 
 						log::info!(
-                            target: "sub-libp2p",
-                            "echo back the same handshake",
+							target: "sub-libp2p",
+							"`Opening`/`Open`: echo back the same handshake",
 						);
 
 						// Create `handshake_message` on a separate line to be sure that the
@@ -643,7 +643,8 @@ impl ConnectionHandler for NotifsHandler {
 						protocol_info.state = State::Opening { in_substream: None };
 					},
 					State::OpenDesiredByRemote { pending_opening, in_substream } => {
-						let handshake_message = protocol_info.config.handshake.read().clone();
+						// let handshake_message = protocol_info.config.handshake.read().clone();
+						let handshake_message = in_substream.received_handshake.clone();
 
 						if !*pending_opening {
 							let proto = NotificationsOut::new(
@@ -660,6 +661,11 @@ impl ConnectionHandler for NotifsHandler {
 								},
 							);
 						}
+
+						log::info!(
+							target: "sub-libp2p",
+							"`OpenDesiredByRemote`: echo back the same handshake ",
+						);
 
 						in_substream.send_handshake(handshake_message);
 
