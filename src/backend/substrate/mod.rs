@@ -3,6 +3,7 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
+use futures::channel;
 use sc_network::{config::NetworkConfiguration, NodeType, SubstrateNetwork};
 use sc_network_common::{
     config::{
@@ -10,10 +11,11 @@ use sc_network_common::{
         ProtocolId as SubstrateProtocolId, SetConfig,
     },
     protocol::role::{Role, Roles},
+    request_responses::{IncomingRequest, ProtocolConfig},
     sync::message::BlockAnnouncesHandshake,
 };
 use sp_runtime::traits::{Block, NumberFor};
-use std::{iter, net::SocketAddr};
+use std::{iter, net::SocketAddr, ptr::NonNull, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -27,6 +29,67 @@ pub enum ProtocolId {}
 
 pub struct InterfaceHandle {
     tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
+    req_rx: channel::mpsc::Receiver<IncomingRequest>,
+}
+
+fn build_block_announce_protocol() -> NonDefaultSetConfig {
+    NonDefaultSetConfig {
+        notifications_protocol: format!("/sup/block-announces/1",).into(),
+        fallback_names: vec![],
+        max_notification_size: 8 * 1024 * 1024,
+        handshake: None,
+        set_config: SetConfig {
+            in_peers: 0,
+            out_peers: 0,
+            reserved_nodes: Vec::new(),
+            non_reserved_mode: NonReservedPeerMode::Deny,
+        },
+    }
+}
+
+fn build_request_response_protocols() -> (
+    channel::mpsc::Receiver<IncomingRequest>,
+    Vec<ProtocolConfig>,
+) {
+    let (tx, rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
+
+    (
+        rx,
+        vec![
+            ProtocolConfig {
+                name: "/sup/sync/2".into(),
+                fallback_names: vec![],
+                max_request_size: 1024 * 1024,
+                max_response_size: 16 * 1024 * 1024,
+                request_timeout: Duration::from_secs(20),
+                inbound_queue: Some(tx.clone()),
+            },
+            ProtocolConfig {
+                name: "/sup/state/2".into(),
+                fallback_names: vec![],
+                max_request_size: 1024 * 1024,
+                max_response_size: 16 * 1024 * 1024,
+                request_timeout: Duration::from_secs(40),
+                inbound_queue: Some(tx.clone()),
+            },
+            ProtocolConfig {
+                name: "/sup/sync/warp".into(),
+                fallback_names: vec![],
+                max_request_size: 32,
+                max_response_size: 16 * 1024 * 1024,
+                request_timeout: Duration::from_secs(10),
+                inbound_queue: Some(tx.clone()),
+            },
+            ProtocolConfig {
+                name: "/sup/light/2".into(),
+                fallback_names: vec![],
+                max_request_size: 1 * 1024 * 1024,
+                max_response_size: 16 * 1024 * 1024,
+                request_timeout: Duration::from_secs(15),
+                inbound_queue: Some(tx),
+            },
+        ],
+    )
 }
 
 impl InterfaceHandle {
@@ -38,27 +101,19 @@ impl InterfaceHandle {
         let node_type = match interface_type {
             InterfaceType::Masquerade => NodeType::Masquerade {
                 role: Role::Full,
-                block_announce_config: NonDefaultSetConfig {
-                    notifications_protocol: format!("/sup/block-announces/1",).into(),
-                    fallback_names: vec![],
-                    max_notification_size: 8 * 1024 * 1024,
-                    handshake: None,
-                    set_config: SetConfig {
-                        in_peers: 0,
-                        out_peers: 0,
-                        reserved_nodes: Vec::new(),
-                        non_reserved_mode: NonReservedPeerMode::Deny,
-                    },
-                },
+                block_announce_config: build_block_announce_protocol(),
             },
             InterfaceType::NodeBacked => todo!("node-backed interfaces not implemented"),
         };
-        let config = {
+        let (config, req_rx) = {
             let mut config = NetworkConfiguration::new_local();
+            let (req_rx, configs) = build_request_response_protocols();
+
+            config.request_response_protocols = configs;
             config
                 .listen_addresses
                 .push("/ip6/::1/tcp/8888".parse().unwrap());
-            config
+            (config, req_rx)
         };
 
         // TODO: pass tx here?
@@ -72,7 +127,7 @@ impl InterfaceHandle {
         )?;
         tokio::spawn(network.run());
 
-        Ok((Self { tx }, Box::pin(ReceiverStream::new(rx))))
+        Ok((Self { tx, req_rx }, Box::pin(ReceiverStream::new(rx))))
     }
 }
 

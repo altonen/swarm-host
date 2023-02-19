@@ -801,7 +801,6 @@ where
 	};
 
 	let block_request_protocol_config = {
-		// Allow both outgoing and incoming requests.
 		let (handler, protocol_config) = BlockRequestHandler::new(
 			&protocol_id,
 			config.chain_spec.fork_id(),
@@ -814,7 +813,6 @@ where
 	};
 
 	let state_request_protocol_config = {
-		// Allow both outgoing and incoming requests.
 		let (handler, protocol_config) = StateRequestHandler::new(
 			&protocol_id,
 			config.chain_spec.fork_id(),
@@ -827,7 +825,6 @@ where
 
 	let (_warp_sync_provider, warp_sync_protocol_config) = warp_sync
 		.map(|provider| {
-			// Allow both outgoing and incoming requests.
 			let (handler, protocol_config) = WarpSyncRequestHandler::new(
 				protocol_id.clone(),
 				client
@@ -844,7 +841,6 @@ where
 		.unwrap_or_default();
 
 	let light_client_request_protocol_config = {
-		// Allow both outgoing and incoming requests.
 		let (handler, protocol_config) = LightClientRequestHandler::new(
 			&protocol_id,
 			config.chain_spec.fork_id(),

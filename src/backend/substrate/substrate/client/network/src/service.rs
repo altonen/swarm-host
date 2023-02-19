@@ -31,11 +31,11 @@ use libp2p::{
 };
 use log::{debug, error, info, trace, warn};
 use sc_network_common::{
-	config::{NonDefaultSetConfig, ProtocolId, TransportConfig},
+	config::{NonDefaultSetConfig, TransportConfig},
 	error::Error,
 	protocol::{event::Event, role::Role},
 };
-use std::{cmp, fmt::Debug, fs, iter, num::NonZeroUsize, pin::Pin};
+use std::{cmp, fs, iter, num::NonZeroUsize, pin::Pin};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
 
