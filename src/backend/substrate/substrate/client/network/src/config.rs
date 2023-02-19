@@ -38,7 +38,6 @@ use libp2p::{
 	identity::{ed25519, Keypair},
 	multiaddr, Multiaddr,
 };
-use prometheus_endpoint::Registry;
 use sc_network_common::config::{
 	MultiaddrWithPeerId, NonDefaultSetConfig, SetConfig, TransportConfig,
 };
@@ -74,9 +73,6 @@ pub struct Params<Client> {
 	/// Fork ID to distinguish protocols of different hard forks. Part of the standard protocol
 	/// name on the wire.
 	pub fork_id: Option<String>,
-
-	/// Registry for recording prometheus metrics to.
-	pub metrics_registry: Option<Registry>,
 
 	/// Block announce protocol configuration
 	pub block_announce_config: NonDefaultSetConfig,

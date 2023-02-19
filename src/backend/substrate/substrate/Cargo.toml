@@ -12,7 +12,7 @@ members = [
 	"client/basic-authorship",
 	"client/beefy",
 	"client/beefy/rpc",
-	"client/block-builder",
+	# "client/block-builder",
 	"client/chain-spec",
 	"client/chain-spec/derive",
 	"client/cli",

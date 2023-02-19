@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+#![allow(unused)]
+
 use crate::{
 	behaviour::{self, Behaviour, BehaviourOut},
 	discovery::DiscoveryConfig,
@@ -33,14 +35,12 @@ use log::{debug, error, info, trace, warn};
 use sc_network_common::{
 	config::{NonDefaultSetConfig, TransportConfig},
 	error::Error,
-	protocol::{event::Event, role::Role},
+	protocol::role::Role,
 };
 use std::{cmp, fs, iter, num::NonZeroUsize, pin::Pin};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
 
-mod metrics;
-mod out_events;
 #[cfg(test)]
 mod tests;
 
@@ -54,8 +54,6 @@ pub enum NodeType {
 /// Substrate network
 pub struct SubstrateNetwork {
 	swarm: Swarm<Behaviour>,
-	/// Senders for events that happen on the network.
-	event_streams: out_events::OutChannels,
 }
 
 impl SubstrateNetwork {
@@ -223,7 +221,7 @@ impl SubstrateNetwork {
 			);
 		}
 
-		Ok(Self { swarm, event_streams: out_events::OutChannels::new(None)? })
+		Ok(Self { swarm })
 	}
 
 	/// Run the event loop of substrate network
@@ -300,12 +298,12 @@ impl SubstrateNetwork {
 					// 		.insert((remote, protocol.clone()), notifications_sink);
 					// 	debug_assert!(_previous_value.is_none());
 					// }
-					self.event_streams.send(Event::NotificationStreamOpened {
-						remote,
-						protocol,
-						negotiated_fallback,
-						handshake,
-					});
+					// self.event_streams.send(Event::NotificationStreamOpened {
+					// 	remote,
+					// 	protocol,
+					// 	negotiated_fallback,
+					// 	handshake,
+					// });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::NotificationStreamReplaced {
 					remote: _,
@@ -349,10 +347,10 @@ impl SubstrateNetwork {
 					remote,
 					protocol,
 				}) => {
-					self.event_streams.send(Event::NotificationStreamClosed {
-						remote,
-						protocol: protocol.clone(),
-					});
+					// self.event_streams.send(Event::NotificationStreamClosed {
+					// 	remote,
+					// 	protocol: protocol.clone(),
+					// });
 					{
 						// TODO: implement this
 						// let mut peers_notifications_sinks =
@@ -363,18 +361,18 @@ impl SubstrateNetwork {
 				},
 				SwarmEvent::Behaviour(BehaviourOut::NotificationsReceived { remote, messages }) => {
 					log::info!("notification received: {remote}");
-					self.event_streams.send(Event::NotificationsReceived { remote, messages });
+					// self.event_streams.send(Event::NotificationsReceived { remote, messages });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::SyncConnected(remote)) => {
 					log::info!("sync connected");
-					self.event_streams.send(Event::SyncConnected { remote });
+					// self.event_streams.send(Event::SyncConnected { remote });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::SyncDisconnected(remote)) => {
 					log::info!("sync disconnected");
-					self.event_streams.send(Event::SyncDisconnected { remote });
+					// self.event_streams.send(Event::SyncDisconnected { remote });
 				},
 				SwarmEvent::Behaviour(BehaviourOut::Dht(event, _duration)) => {
-					self.event_streams.send(Event::Dht(event));
+					// self.event_streams.send(Event::Dht(event));
 				},
 				SwarmEvent::Behaviour(BehaviourOut::None) => {
 					// Ignored event from lower layers.

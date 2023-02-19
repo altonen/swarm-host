@@ -4523,21 +4523,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-block-builder"
-version = "0.10.0-dev"
-dependencies = [
- "parity-scale-codec",
- "sc-client-api",
- "sp-api",
- "sp-block-builder",
- "sp-blockchain",
- "sp-core",
- "sp-inherents",
- "sp-runtime",
- "sp-state-machine",
-]
-
-[[package]]
 name = "sc-client-api"
 version = "4.0.0-dev"
 dependencies = [
@@ -4672,21 +4657,15 @@ dependencies = [
  "parking_lot 0.12.1",
  "pin-project",
  "rand 0.8.5",
- "sc-block-builder",
  "sc-client-api",
- "sc-consensus",
  "sc-network-common",
  "sc-peerset",
  "sc-utils",
  "serde",
  "serde_json",
  "smallvec",
- "sp-arithmetic",
- "sp-blockchain",
- "sp-consensus",
  "sp-core",
  "sp-runtime",
- "substrate-prometheus-endpoint",
  "thiserror",
  "tokio",
  "unsigned-varint",
@@ -5183,17 +5162,6 @@ dependencies = [
  "serde",
  "sp-std",
  "static_assertions",
-]
-
-[[package]]
-name = "sp-block-builder"
-version = "4.0.0-dev"
-dependencies = [
- "parity-scale-codec",
- "sp-api",
- "sp-inherents",
- "sp-runtime",
- "sp-std",
 ]
 
 [[package]]
