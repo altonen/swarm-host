@@ -11,6 +11,9 @@ import time
 def setup_swarm_host():
     print("setup swarm host")
 
+def parition_network():
+    print("partition network")
+
 def setup_nodes():
     print("setup nodes")
 

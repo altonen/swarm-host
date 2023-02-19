@@ -180,6 +180,9 @@ pub enum ProtocolId {
 
     /// Peer exchange protocol.
     PeerExchange,
+
+    /// Generic protocol.
+    Generic,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

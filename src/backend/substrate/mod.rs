@@ -7,8 +7,7 @@ use futures::channel;
 use sc_network::{config::NetworkConfiguration, NodeType, SubstrateNetwork};
 use sc_network_common::{
     config::{
-        NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake,
-        ProtocolId as SubstrateProtocolId, SetConfig,
+        NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
     },
     protocol::role::{Role, Roles},
     request_responses::{IncomingRequest, ProtocolConfig},
@@ -23,9 +22,6 @@ use tokio_stream::wrappers::ReceiverStream;
 mod tests;
 
 const LOG_TARGET: &'static str = "substrate";
-
-#[derive(Debug, Copy, Clone)]
-pub enum ProtocolId {}
 
 pub struct InterfaceHandle {
     tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
@@ -181,7 +177,7 @@ impl SubstrateBackend {
 impl NetworkBackend for SubstrateBackend {
     type PeerId = sc_network::PeerId;
     type InterfaceId = usize;
-    type ProtocolId = ProtocolId;
+    type Protocol = ProtocolId;
     type Message = ();
     type InterfaceHandle = InterfaceHandle;
 

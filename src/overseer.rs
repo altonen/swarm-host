@@ -29,7 +29,7 @@ const LOG_TARGET: &'static str = "overseer";
 /// Peer-related information.
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
-    protocols: Vec<T::ProtocolId>,
+    protocols: Vec<T::Protocol>,
 
     /// Socket for sending messages to peer.
     socket: Box<dyn AsyncWrite + Send + Unpin>,
@@ -100,7 +100,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                         "interface created"
                                     );
 
-                                    // it is logic error for the interface to exist in `MessageFilter`
+                                    // NOTE: it is logic error for the interface to exist in `MessageFilter`
                                     // if it doesn't exist in `self.interfaces` so `expect` is justified.
                                     self
                                         .filter
@@ -214,7 +214,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             }
                         }
                     }
-                    Some(InterfaceEvent::MessageReceived { peer, interface, message }) => {
+                    Some(InterfaceEvent::MessageReceived { peer, interface, protocol: _, message }) => {
                         // TODO: span?
                         tracing::trace!(
                             target: LOG_TARGET,

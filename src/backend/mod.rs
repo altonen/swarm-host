@@ -50,7 +50,7 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         socket: Box<dyn AsyncWrite + Send + Unpin>,
 
         /// Supported protocols.
-        protocols: Vec<T::ProtocolId>,
+        protocols: Vec<T::Protocol>,
     },
 
     /// Peer disconnected from the interface.
@@ -69,6 +69,9 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// Protocol.
+        protocol: T::Protocol,
 
         /// Received message.
         message: T::Message,
@@ -108,7 +111,7 @@ pub trait NetworkBackend {
     type InterfaceId: Serialize + DeserializeOwned + Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying a protocol.
-    type ProtocolId: Debug + Copy + Clone + Send + Sync;
+    type Protocol: Debug + Clone + Send + Sync;
 
     /// Type identifying a message understood by the backend.
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;

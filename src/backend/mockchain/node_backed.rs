@@ -109,6 +109,7 @@ impl Peer {
                         .send(InterfaceEvent::MessageReceived {
                             peer: handshake.peer,
                             interface: iface_id,
+                            protocol: ProtocolId::Generic,
                             message,
                         })
                         .await

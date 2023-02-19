@@ -160,7 +160,7 @@ impl MockchainBackend {
 impl NetworkBackend for MockchainBackend {
     type PeerId = PeerId;
     type InterfaceId = InterfaceId;
-    type ProtocolId = ProtocolId;
+    type Protocol = ProtocolId;
     type Message = Message;
     type InterfaceHandle = MockchainHandle;
 
