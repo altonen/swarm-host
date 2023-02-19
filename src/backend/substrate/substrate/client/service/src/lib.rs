@@ -19,7 +19,6 @@
 //! Substrate service. Starts a thread that spins up the network, client, and extrinsic pool.
 //! Manages communication between them.
 
-#![warn(missing_docs)]
 #![recursion_limit = "1024"]
 
 pub mod chain_ops;

@@ -17,7 +17,6 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![warn(unused_extern_crates)]
-#![warn(missing_docs)]
 
 //! Substrate-specific P2P networking.
 //!

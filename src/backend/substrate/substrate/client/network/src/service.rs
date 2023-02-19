@@ -73,7 +73,7 @@ impl SubstrateNetwork {
 			fs::create_dir_all(path)?;
 		}
 
-		let (role, block_announce_config, genesis_hash) = match node_type {
+		let (role, block_announce_config, _genesis_hash) = match node_type {
 			NodeType::Masquerade { role, block_announce_config } =>
 				(role, block_announce_config, None),
 			NodeType::NodeBacked { genesis_hash, role, block_announce_config } =>
