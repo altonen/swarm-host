@@ -4,7 +4,7 @@ use crate::{
 };
 
 use futures::channel;
-use sc_network::{config::NetworkConfiguration, NodeType, SubstrateNetwork};
+use sc_network::{config::NetworkConfiguration, NodeType, SubstrateNetwork, SubstrateNetworkEvent};
 use sc_network_common::{
     config::{
         NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
@@ -14,7 +14,7 @@ use sc_network_common::{
     sync::message::BlockAnnouncesHandshake,
 };
 use sp_runtime::traits::{Block, NumberFor};
-use std::{iter, net::SocketAddr, ptr::NonNull, time::Duration};
+use std::{iter, net::SocketAddr, ops::SubAssign, ptr::NonNull, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -26,6 +26,7 @@ const LOG_TARGET: &'static str = "substrate";
 pub struct InterfaceHandle {
     tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
     req_rx: channel::mpsc::Receiver<IncomingRequest>,
+    event_rx: mpsc::Receiver<SubstrateNetworkEvent>,
 }
 
 fn build_block_announce_protocol() -> NonDefaultSetConfig {
@@ -93,6 +94,7 @@ impl InterfaceHandle {
         interface_type: InterfaceType,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (event_tx, event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         let node_type = match interface_type {
             InterfaceType::Masquerade => NodeType::Masquerade {
@@ -120,10 +122,18 @@ impl InterfaceHandle {
             Box::new(move |fut| {
                 tokio::spawn(fut);
             }),
+            event_tx,
         )?;
         tokio::spawn(network.run());
 
-        Ok((Self { tx, req_rx }, Box::pin(ReceiverStream::new(rx))))
+        Ok((
+            Self {
+                tx,
+                req_rx,
+                event_rx,
+            },
+            Box::pin(ReceiverStream::new(rx)),
+        ))
     }
 }
 

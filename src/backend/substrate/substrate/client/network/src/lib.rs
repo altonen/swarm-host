@@ -55,6 +55,7 @@ pub use service::{
 	OutboundFailure,
 	PublicKey,
 	SubstrateNetwork,
+	SubstrateNetworkEvent,
 };
 
 pub use sc_peerset::ReputationChange;
