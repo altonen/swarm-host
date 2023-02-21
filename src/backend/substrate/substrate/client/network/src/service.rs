@@ -27,15 +27,16 @@ use crate::{
 
 use futures::prelude::*;
 use libp2p::{
+    PeerId,
 	core::upgrade,
 	identify::Info as IdentifyInfo,
 	swarm::{AddressScore, ConnectionLimits, Executor, Swarm, SwarmBuilder, SwarmEvent},
 };
 use log::{debug, error, info, trace, warn};
 use sc_network_common::{
-	config::{NonDefaultSetConfig, TransportConfig},
+	config::{ProtocolId, NonDefaultSetConfig, TransportConfig},
 	error::Error,
-	protocol::role::Role,
+	protocol::{ProtocolName, role::Role},
 };
 use std::{cmp, fs, iter, num::NonZeroUsize, pin::Pin};
 use tokio::sync::mpsc;
@@ -48,6 +49,7 @@ mod tests;
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
 
 /// Substrate network events.
+#[derive(Debug)]
 pub enum SubstrateNetworkEvent {
 	/// Peer connected.
 	PeerConnected {
@@ -60,17 +62,17 @@ pub enum SubstrateNetworkEvent {
 	/// Peer opened a protocol.
 	ProtocolOpened {
 		peer: PeerId,
-		protocols: ProtocolId,
+		protocol: ProtocolName,
 	},
 	/// Peer closed a protocol.
 	ProtocolClosed {
 		peer: PeerId,
-		protocols: ProtocolId,
+		protocol: ProtocolName,
 	},
 	/// Notification received from peer.
 	NotificationReceived {
     	peer: PeerId,
-    	protocol: ProtocolId,
+    	protocol: ProtocolName,
     	notification: Vec<u8>,
 	}
 }
@@ -92,7 +94,7 @@ impl SubstrateNetwork {
 		network_config: &crate::config::NetworkConfiguration,
 		node_type: NodeType,
 		executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
-		tx_event: mpsc::Sender<SubstrateNetworkEvent>,
+		event_tx: mpsc::Sender<SubstrateNetworkEvent>,
 	) -> Result<Self, Error> {
 		let local_identity = network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
@@ -252,10 +254,10 @@ impl SubstrateNetwork {
 			);
 		}
 
-		Ok(Self { swarm, tx_event, })
+		Ok(Self { swarm, event_tx, })
 	}
 
-	fn on_swarm_event(&mut self, event: BehaviourOut) {
+	async fn on_swarm_event(&mut self, event: BehaviourOut) {
     	match event {
 			BehaviourOut::InboundRequest {
 				protocol: _,
@@ -288,28 +290,14 @@ impl SubstrateNetwork {
 						..
 					},
 			} => {
-				if listen_addrs.len() > 30 {
-					debug!(
-						target: "sub-libp2p",
-						"Node {:?} has reported more than 30 addresses; it is identified by {:?} and {:?}",
-						peer_id, protocol_version, agent_version
-					);
-					listen_addrs.truncate(30);
-				}
 				for addr in listen_addrs {
 					self.swarm
 						.behaviour_mut()
 						.add_self_reported_address_to_dht(&peer_id, &protocols, addr);
 				}
-
-				// TODO: send peerconnected to remote
 			},
 			BehaviourOut::Discovered(_peer_id) => {
 				println!("implement maybe, peer id {_peer_id}");
-				// self.swarm
-				// 	.behaviour_mut()
-				// 	.user_protocol_mut()
-				// 	.add_default_set_discovered_nodes(iter::once(peer_id));
 			},
 			BehaviourOut::RandomKademliaStarted => {
 				println!("metrics")
@@ -322,92 +310,47 @@ impl SubstrateNetwork {
 				handshake,
 			} => {
 				log::info!("notification stream opened: {protocol}");
-				// TODO: fix this
-				// {
-				// 	let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
-				// 	let _previous_value = peers_notifications_sinks
-				// 		.insert((remote, protocol.clone()), notifications_sink);
-				// 	debug_assert!(_previous_value.is_none());
-				// }
-				// self.event_streams.send(Event::NotificationStreamOpened {
-				// 	remote,
-				// 	protocol,
-				// 	negotiated_fallback,
-				// 	handshake,
-				// });
+
+				self.event_tx.send(SubstrateNetworkEvent::ProtocolOpened {
+                    peer: remote,
+                    protocol,
+				})
+				.await
+				.expect("channel to stay open");
 			},
 			BehaviourOut::NotificationStreamReplaced {
 				remote: _,
 				protocol: _,
 				notifications_sink: _,
 			} => {
-				// TODO: fix this
-				// let mut peers_notifications_sinks = this.peers_notifications_sinks.lock();
-				// if let Some(s) = peers_notifications_sinks.get_mut(&(remote, protocol)) {
-				// 	*s = notifications_sink;
-				// } else {
-				// 	error!(
-				// 		target: "sub-libp2p",
-				// 		"NotificationStreamReplaced for non-existing substream"
-				// 	);
-				// 	debug_assert!(false);
-				// }
-
-				// TODO: Notifications might have been lost as a result of the previous
-				// connection being dropped, and as a result it would be preferable to notify
-				// the users of this fact by simulating the substream being closed then
-				// reopened.
-				// The code below doesn't compile because `role` is unknown. Propagating the
-				// handshake of the secondary connections is quite an invasive change and
-				// would conflict with https://github.com/paritytech/substrate/issues/6403.
-				// Considering that dropping notifications is generally regarded as
-				// acceptable, this bug is at the moment intentionally left there and is
-				// intended to be fixed at the same time as
-				// https://github.com/paritytech/substrate/issues/6403.
-				// this.event_streams.send(Event::NotificationStreamClosed {
-				// remote,
-				// protocol,
-				// });
-				// this.event_streams.send(Event::NotificationStreamOpened {
-				// remote,
-				// protocol,
-				// role,
-				// });
+				todo!("implement this maybe");
 			},
 			BehaviourOut::NotificationStreamClosed {
 				remote,
 				protocol,
 			} => {
-				// self.event_streams.send(Event::NotificationStreamClosed {
-				// 	remote,
-				// 	protocol: protocol.clone(),
-				// });
-				{
-					// TODO: implement this
-					// let mut peers_notifications_sinks =
-					// this.peers_notifications_sinks.lock(); let _previous_value =
-					// peers_notifications_sinks.remove(&(remote, protocol)); debug_assert!
-					// (_previous_value.is_some());
-				}
+				self.event_tx.send(SubstrateNetworkEvent::ProtocolClosed {
+                    peer: remote,
+                    protocol,
+				})
+				.await
+				.expect("channel to stay open");
 			},
 			BehaviourOut::NotificationsReceived { remote, messages } => {
-				log::info!("notification received: {remote}");
-				// self.event_streams.send(Event::NotificationsReceived { remote, messages });
+				log::trace!(target: "sub-libp2p", "notification received");
+
+				for (protocol, bytes) in messages {
+    				self.event_tx.send(SubstrateNetworkEvent::NotificationReceived {
+                        peer: remote,
+                        protocol: protocol,
+                        notification: bytes.into(),
+    				})
+    				.await
+    				.expect("channel to stay open");
+				}
 			},
-			BehaviourOut::SyncConnected(remote) => {
-				log::info!("sync connected");
-				// self.event_streams.send(Event::SyncConnected { remote });
-			},
-			BehaviourOut::SyncDisconnected(remote) => {
-				log::info!("sync disconnected");
-				// self.event_streams.send(Event::SyncDisconnected { remote });
-			},
-			BehaviourOut::Dht(event, _duration) => {
-				// self.event_streams.send(Event::Dht(event));
-			},
-			BehaviourOut::None => {
-				// Ignored event from lower layers.
-			},
+			BehaviourOut::SyncConnected(_) | BehaviourOut::SyncDisconnected(_) |
+			BehaviourOut::Dht(_, _) | BehaviourOut::None => {},
     	}
 	}
 
@@ -416,7 +359,7 @@ impl SubstrateNetwork {
 		loop {
 			tokio::select! {
     			event = self.swarm.select_next_some() => match event {
-    				SwarmEvent::Behaviour(event) => self.on_swarm_event(event),
+    				SwarmEvent::Behaviour(event) => self.on_swarm_event(event).await,
         			SwarmEvent::ConnectionEstablished {
         				peer_id,
         				endpoint: _,
