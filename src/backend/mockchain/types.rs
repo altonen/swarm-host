@@ -170,7 +170,7 @@ impl Distribution<Message> for Standard {
 }
 
 /// Supported protocols.
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolId {
     /// Transaction protocol.
     Transaction,

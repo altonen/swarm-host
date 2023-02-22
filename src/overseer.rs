@@ -1,7 +1,9 @@
 #![allow(unused)]
 
 use crate::{
-    backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend, PacketSink},
+    backend::{
+        ConnectionUpgrade, Interface, InterfaceEvent, InterfaceType, NetworkBackend, PacketSink,
+    },
     error::Error,
     filter::{FilterType, LinkType, MessageFilter},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
@@ -14,14 +16,18 @@ use tokio::{
 };
 
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
+    fmt::Debug,
     future::Future,
+    hash::Hash,
     net::SocketAddr,
     pin::Pin,
 };
 
 // TODO: get filter type from rpc
 // TODO: all links should not ben bidrectional
+// TODO: split code into functions
+// TODO: move tests to separate direcotry
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
@@ -29,7 +35,7 @@ const LOG_TARGET: &'static str = "overseer";
 /// Peer-related information.
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
-    protocols: Vec<T::Protocol>,
+    protocols: HashSet<T::Protocol>,
 
     /// Sink for sending messages to peer.
     sink: Box<dyn PacketSink<T> + Send>,
@@ -59,7 +65,7 @@ pub struct Overseer<T: NetworkBackend> {
     filter: MessageFilter<T>,
 }
 
-impl<T: NetworkBackend> Overseer<T> {
+impl<T: NetworkBackend + Debug> Overseer<T> {
     /// Create new [`Overseer`].
     pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -184,7 +190,7 @@ impl<T: NetworkBackend> Overseer<T> {
                         self.iface_peers.entry(interface).or_default().insert(
                             peer,
                             PeerInfo {
-                                protocols,
+                                protocols: HashSet::from_iter(protocols.into_iter()),
                                 sink,
                             }
                         );
@@ -230,7 +236,12 @@ impl<T: NetworkBackend> Overseer<T> {
                             &message
                         ) {
                             Ok(routing_table) => for (interface, peer) in routing_table {
-                                match self.iface_peers.get_mut(&interface).expect("interface to exist").get_mut(&peer) {
+                                match self
+                                    .iface_peers
+                                    .get_mut(&interface)
+                                    .expect("interface to exist")
+                                    .get_mut(&peer)
+                                {
                                     None => tracing::error!(
                                         target: LOG_TARGET,
                                         interface_id = ?interface,
@@ -266,9 +277,146 @@ impl<T: NetworkBackend> Overseer<T> {
                             ),
                         }
                     }
+                    Some(InterfaceEvent::ConnectionUpgraded { peer, interface, upgrade }) => {
+                        tracing::trace!(
+                            target: LOG_TARGET,
+                            interface_id = ?interface,
+                            peer_id = ?peer,
+                            upgrade = ?upgrade,
+                            "apply upgrade to connection",
+                        );
+
+                        if let Err(err) = self.apply_connection_upgrade(interface, peer, upgrade) {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                interface_id = ?interface,
+                                peer_id = ?peer,
+                                error = ?err,
+                                "failed to apply connection upgrade",
+                            );
+                        }
+                    }
                     _ => {},
                 }
             }
         }
+    }
+
+    /// Apply connection upgrade for an active peer.
+    fn apply_connection_upgrade(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        upgrade: ConnectionUpgrade<T>,
+    ) -> crate::Result<()> {
+        let peer_info = self
+            .iface_peers
+            .get_mut(&interface)
+            .expect("interface to exist")
+            .get_mut(&peer)
+            .ok_or(Error::PeerDoesntExist)?;
+
+        match upgrade {
+            ConnectionUpgrade::ProtocolOpened { protocols } => {
+                peer_info.protocols.extend(protocols)
+            }
+            ConnectionUpgrade::ProtocolClosed { protocols } => peer_info
+                .protocols
+                .retain(|protocol| !protocols.contains(protocol)),
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::mockchain::{types::ProtocolId, MockchainBackend};
+    use rand::Rng;
+
+    // TODO: use `mockall`
+    struct DummySink;
+
+    #[async_trait::async_trait]
+    impl PacketSink<MockchainBackend> for DummySink {
+        async fn send_packet(
+            &mut self,
+            message: &<MockchainBackend as NetworkBackend>::Message,
+        ) -> crate::Result<()> {
+            todo!();
+        }
+    }
+
+    #[test]
+    fn apply_connection_upgrade() {
+        let mut rng = rand::thread_rng();
+        let (mut overseer, _) = Overseer::<MockchainBackend>::new();
+        let interface = rng.gen();
+        let peer = rng.gen();
+
+        // overseer.iface_peers.insert(interface, HashMap::new());
+        overseer.iface_peers.entry(interface).or_default().insert(
+            peer,
+            PeerInfo {
+                protocols: HashSet::from([ProtocolId::Transaction, ProtocolId::Block]),
+                sink: Box::new(DummySink),
+            },
+        );
+
+        assert_eq!(
+            overseer
+                .iface_peers
+                .get(&interface)
+                .unwrap()
+                .get(&peer)
+                .unwrap()
+                .protocols,
+            HashSet::from([ProtocolId::Transaction, ProtocolId::Block]),
+        );
+
+        // add new protocol and verify peer protocols are updated
+        overseer.apply_connection_upgrade(
+            interface,
+            peer,
+            ConnectionUpgrade::ProtocolOpened {
+                protocols: HashSet::from([ProtocolId::Generic]),
+            },
+        );
+
+        assert_eq!(
+            overseer
+                .iface_peers
+                .get(&interface)
+                .unwrap()
+                .get(&peer)
+                .unwrap()
+                .protocols,
+            HashSet::from([
+                ProtocolId::Transaction,
+                ProtocolId::Block,
+                ProtocolId::Generic
+            ]),
+        );
+
+        // close two protocols: one that's supported and one that's not and verify state again
+        overseer.apply_connection_upgrade(
+            interface,
+            peer,
+            ConnectionUpgrade::ProtocolClosed {
+                protocols: HashSet::from([ProtocolId::PeerExchange, ProtocolId::Transaction]),
+            },
+        );
+
+        assert_eq!(
+            overseer
+                .iface_peers
+                .get(&interface)
+                .unwrap()
+                .get(&peer)
+                .unwrap()
+                .protocols,
+            HashSet::from([ProtocolId::Block, ProtocolId::Generic]),
+        );
     }
 }

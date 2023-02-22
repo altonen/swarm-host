@@ -5,7 +5,9 @@ use futures::stream::Stream;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{io::AsyncWrite, sync::mpsc::Sender};
 
-use std::{fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin};
+use std::{
+    collections::HashSet, fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin,
+};
 
 pub mod mockchain;
 pub mod substrate;
@@ -44,6 +46,22 @@ pub trait PacketSink<T: NetworkBackend> {
     ) -> crate::Result<()>;
 }
 
+/// Connection received an upgrade.
+#[derive(Debug)]
+pub enum ConnectionUpgrade<T: NetworkBackend> {
+    /// Protocol opened.
+    ProtocolOpened {
+        /// One or more protocols were opened.
+        protocols: HashSet<T::Protocol>,
+    },
+
+    /// Protocol closed.
+    ProtocolClosed {
+        /// One or more protocols were closed.
+        protocols: HashSet<T::Protocol>,
+    },
+}
+
 // TODO: how to express capabilities in a generic way?
 // TODO: capabilities should come from python and
 //       be transported to `NetworkBackend` in a generic way??
@@ -56,11 +74,11 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Associated interface.
         interface: T::InterfaceId,
 
+        /// One or more supported protocols.
+        protocols: Vec<T::Protocol>,
+
         /// Socket which allows sending messages to the peer.
         sink: Box<dyn PacketSink<T> + Send>,
-
-        /// Supported protocols.
-        protocols: Vec<T::Protocol>,
     },
 
     /// Peer disconnected from the interface.
@@ -70,6 +88,18 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
         /// Associated interface
         interface: T::InterfaceId,
+    },
+
+    /// Connection received an upgrade
+    ConnectionUpgraded {
+        /// ID of the peer who connected.
+        peer: T::PeerId,
+
+        /// Associated interface.
+        interface: T::InterfaceId,
+
+        /// One or more supported protocols.
+        upgrade: ConnectionUpgrade<T>,
     },
 
     /// Message received from one of the peers
@@ -121,7 +151,7 @@ pub trait NetworkBackend {
     type InterfaceId: Serialize + DeserializeOwned + Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying a protocol.
-    type Protocol: Debug + Clone + Send + Sync;
+    type Protocol: Debug + Clone + Hash + PartialEq + Eq + Send + Sync;
 
     /// Type identifying a message understood by the backend.
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;
