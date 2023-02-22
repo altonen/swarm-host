@@ -4,7 +4,7 @@ use crate::{
             types::{ConnectionType, Handshake, InterfaceId, Message, PeerId, ProtocolId},
             MockchainBackend,
         },
-        Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend,
+        Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend, PacketSink,
     },
     ensure,
     error::Error,
@@ -24,6 +24,48 @@ use tokio::{
 use tokio_stream::wrappers::ReceiverStream;
 
 const LOG_TARGET: &'static str = "mockchain-node-backed";
+
+// TODO: move to some common place
+pub struct MockPacketSink {
+    interface: InterfaceId,
+    peer: PeerId,
+    inner: OwnedWriteHalf,
+}
+
+impl MockPacketSink {
+    pub fn new(interface: InterfaceId, peer: PeerId, inner: OwnedWriteHalf) -> Self {
+        Self {
+            interface,
+            peer,
+            inner,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl PacketSink<MockchainBackend> for MockPacketSink {
+    async fn send_packet(
+        &mut self,
+        // _protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
+        packet: &<MockchainBackend as NetworkBackend>::Message,
+    ) -> crate::Result<()> {
+        tracing::trace!(
+            target: LOG_TARGET,
+            interface_id = ?self.interface,
+            peer_id = ?self.peer,
+            "send packet to peer",
+        );
+
+        // TODO: proper error handling
+        let packet = serde_cbor::to_vec(&packet).expect("packet to serialize");
+
+        self.inner
+            .write(&packet)
+            .await
+            .map(|_| ())
+            .map_err(From::from)
+    }
+}
 
 pub struct Peer;
 
@@ -68,7 +110,7 @@ impl Peer {
                 peer: handshake.peer,
                 interface: iface_id,
                 protocols: handshake.protocols,
-                socket: Box::new(write),
+                sink: Box::new(MockPacketSink::new(iface_id, handshake.peer, write)),
             })
             .await
             .is_err()

@@ -33,6 +33,17 @@ pub enum InterfaceType {
     NodeBacked,
 }
 
+/// Abstraction which allows `swarm-host` to send packets to peer.
+#[async_trait::async_trait]
+pub trait PacketSink<T: NetworkBackend> {
+    /// Send packet to peer over `protocol`.
+    async fn send_packet(
+        &mut self,
+        // protocol: Option<T::Protocol>,
+        message: &T::Message,
+    ) -> crate::Result<()>;
+}
+
 // TODO: how to express capabilities in a generic way?
 // TODO: capabilities should come from python and
 //       be transported to `NetworkBackend` in a generic way??
@@ -45,9 +56,8 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Associated interface.
         interface: T::InterfaceId,
 
-        // TODO: too leaky
         /// Socket which allows sending messages to the peer.
-        socket: Box<dyn AsyncWrite + Send + Unpin>,
+        sink: Box<dyn PacketSink<T> + Send>,
 
         /// Supported protocols.
         protocols: Vec<T::Protocol>,

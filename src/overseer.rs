@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use crate::{
-    backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend},
+    backend::{Interface, InterfaceEvent, InterfaceType, NetworkBackend, PacketSink},
     error::Error,
     filter::{FilterType, LinkType, MessageFilter},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
@@ -31,8 +31,8 @@ struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
     protocols: Vec<T::Protocol>,
 
-    /// Socket for sending messages to peer.
-    socket: Box<dyn AsyncWrite + Send + Unpin>,
+    /// Sink for sending messages to peer.
+    sink: Box<dyn PacketSink<T> + Send>,
 }
 
 /// Object overseeing `swarm-host` execution.
@@ -167,7 +167,7 @@ impl<T: NetworkBackend> Overseer<T> {
                     }
                 },
                 event = self.event_streams.next() => match event {
-                    Some(InterfaceEvent::PeerConnected { peer, interface, protocols, socket }) => {
+                    Some(InterfaceEvent::PeerConnected { peer, interface, protocols, sink }) => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             interface_id = ?interface,
@@ -185,7 +185,7 @@ impl<T: NetworkBackend> Overseer<T> {
                             peer,
                             PeerInfo {
                                 protocols,
-                                socket,
+                                sink,
                             }
                         );
                     }
@@ -238,9 +238,7 @@ impl<T: NetworkBackend> Overseer<T> {
                                         "peer does not exist"
                                     ),
                                     Some(peer_info) => {
-                                        // TODO: zzz
-                                        let message = serde_cbor::to_vec(&message).expect("message to serialize");
-                                        match peer_info.socket.write(&message).await {
+                                        match peer_info.sink.send_packet(&message).await {
                                             Ok(_) =>
                                                 tracing::trace!(
                                                     target: LOG_TARGET,

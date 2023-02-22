@@ -13,6 +13,9 @@ pub type BlockId = u64;
 /// Unique message ID.
 pub type MessageId = u64;
 
+/// Peer ID.
+pub type PeerId = u64;
+
 /// Transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
