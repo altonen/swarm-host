@@ -18,6 +18,8 @@ use std::{iter, net::SocketAddr, ops::SubAssign, ptr::NonNull, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+// TODO: differentiate between notifications and requests?
+
 #[cfg(test)]
 mod tests;
 
@@ -50,6 +52,7 @@ fn build_request_response_protocols() -> (
 ) {
     let (tx, rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
+    // TODO: crate new tx for each request type
     (
         rx,
         vec![
@@ -90,6 +93,8 @@ fn build_request_response_protocols() -> (
 }
 
 impl InterfaceHandle {
+    // TODO: pass interface id here
+    // TODO: pass listen address
     pub async fn new(
         interface_type: InterfaceType,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
@@ -114,8 +119,7 @@ impl InterfaceHandle {
             (config, req_rx)
         };
 
-        // TODO: pass tx here?
-        // TODO: return some service handle from `SubstrateNetwork` and save it in `InterfaceHandle`
+        // TODO: create all protocols on substrate side
         let mut network = SubstrateNetwork::new(
             &config,
             node_type,
@@ -126,14 +130,37 @@ impl InterfaceHandle {
         )?;
         tokio::spawn(network.run());
 
-        Ok((
-            Self {
-                tx,
-                req_rx,
-                event_rx,
-            },
-            Box::pin(ReceiverStream::new(rx)),
-        ))
+        // TODO: remove this and handle all messages on `substrate` side
+        tokio::spawn(async move {
+            let mut fused_rx = req_rx.fuse();
+
+            loop {
+                tokio::select! {
+                    event = event_rx.recv() => match event.expect("channel to stay open") {
+                        SubstrateNetworkEvent::PeerConnected { peer } => {
+                            todo!();
+                        }
+                        SubstrateNetworkEvent::PeerDisconnected { peer } => {
+                            todo!();
+                        }
+                        SubstrateNetworkEvent::ProtocolOpened { peer, protocol } => {
+                            todo!();
+                        }
+                        SubstrateNetworkEvent::ProtocolClosed { peer, protocol } => {
+                            todo!();
+                        }
+                        SubstrateNetworkEvent::NotificationReceived { peer, protocol, notification } => {
+                            todo!();
+                        }
+                    },
+                    request = fused_rx.next() => match request.expect("channel to stay open") {
+                        _ => todo!(),
+                    }
+                }
+            }
+        });
+
+        Ok((Self {}, Box::pin(ReceiverStream::new(rx))))
     }
 }
 

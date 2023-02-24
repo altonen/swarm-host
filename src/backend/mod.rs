@@ -12,7 +12,9 @@ use std::{
 pub mod mockchain;
 pub mod substrate;
 
-// TODO: `Message` -> `Packet`
+// TODO: rename `Message` to `Packet`
+// TODO: rename `PeerId` to `Source`
+// TODO: define generic `Address` type
 
 /// Stream which allows reading events from the interface.
 pub type InterfaceEventStream<T> = Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>;
