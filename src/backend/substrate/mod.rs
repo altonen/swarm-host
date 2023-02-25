@@ -2,15 +2,20 @@ use crate::{
     backend::{
         ConnectionUpgrade, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
         NetworkBackend, PacketSink,
+        substrate::network::{
+            PeerId,
+            config::NetworkConfiguration, Command, NodeType, ProtocolName, SubstrateNetwork,
+            SubstrateNetworkEvent,
+        },
     },
     types::DEFAULT_CHANNEL_SIZE,
 };
 
 use futures::{channel, FutureExt, StreamExt};
-use sc_network::{
-    config::NetworkConfiguration, Command, NodeType, ProtocolName, SubstrateNetwork,
-    SubstrateNetworkEvent,
-};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::{instrument::WithSubscriber, Subscriber};
+
 use sc_network_common::{
     config::{
         NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
@@ -20,15 +25,13 @@ use sc_network_common::{
     sync::message::BlockAnnouncesHandshake,
 };
 use sp_runtime::traits::{Block, NumberFor};
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tracing::{instrument::WithSubscriber, Subscriber};
 
 use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 
 // TODO: differentiate between notifications and requests?
 // TODO: new protocol opened -> apply upgrade for packetsink?
 
+mod network;
 #[cfg(test)]
 mod tests;
 
@@ -36,12 +39,12 @@ const LOG_TARGET: &'static str = "substrate";
 
 #[derive(Debug)]
 pub struct SubstratePacketSink {
-    peer: sc_network::PeerId,
+    peer: PeerId,
     tx: mpsc::Sender<Command>,
 }
 
 impl SubstratePacketSink {
-    pub fn new(peer: sc_network::PeerId, tx: mpsc::Sender<Command>) -> Self {
+    pub fn new(peer: PeerId, tx: mpsc::Sender<Command>) -> Self {
         Self { peer, tx }
     }
 }
@@ -314,7 +317,7 @@ impl SubstrateBackend {
 
 #[async_trait::async_trait]
 impl NetworkBackend for SubstrateBackend {
-    type PeerId = sc_network::PeerId;
+    type PeerId = PeerId;
     type InterfaceId = usize;
     type Protocol = ProtocolName;
     type Message = Vec<u8>;
