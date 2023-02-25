@@ -237,7 +237,13 @@ impl InterfaceHandle {
                         }
                     },
                     request = fused_rx.next() => match request.expect("channel to stay open") {
-                        _ => todo!(),
+                        request => {
+                            tracing::warn!(
+                                target: LOG_TARGET,
+                                request = ?request,
+                                "received request from some peer, cannot handle requests yet"
+                            );
+                        },
                     }
                 }
             }
