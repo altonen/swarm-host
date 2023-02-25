@@ -116,8 +116,6 @@ impl SubstrateNetwork {
 			fs::create_dir_all(path)?;
 		}
 
-		log::info!("keyzzzz: {local_peer_id}");
-
 		let (role, block_announce_config, _genesis_hash) = match node_type {
 			NodeType::Masquerade { role, block_announce_config } =>
 				(role, block_announce_config, None),
@@ -274,8 +272,9 @@ impl SubstrateNetwork {
 	async fn on_command(&mut self, command: Command) {
 		match command {
 			Command::SendNotification { peer, protocol, message } => {
-				log::warn!("cannot send notification, implementation missing");
-				// TODO: index into self.notification_sinks and send message to peer.
+    			if let Some(sink) = self.notification_sinks.get(&(peer, protocol)) {
+            		sink.send_sync_notification(message);
+    			}
 			}
 		}
 	}
@@ -329,12 +328,13 @@ impl SubstrateNetwork {
 				remote,
 				protocol,
 				negotiated_fallback,
-				notifications_sink: _,
+				notifications_sink,
 				handshake,
 			} => {
 				log::info!("notification stream opened: {protocol}");
 
 				// TODO: save notification sink
+				self.notification_sinks.insert((remote, protocol.clone()), notifications_sink);
 
 				self.event_tx.send(SubstrateNetworkEvent::ProtocolOpened {
                     peer: remote,
@@ -355,6 +355,7 @@ impl SubstrateNetwork {
 				protocol,
 			} => {
 				// TODO: remove notifications sink
+				self.notification_sinks.remove(&(remote, protocol.clone()));
 
 				self.event_tx.send(SubstrateNetworkEvent::ProtocolClosed {
                     peer: remote,

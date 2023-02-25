@@ -397,7 +397,7 @@ impl NotificationsSink {
 	/// error to send a notification using an unknown protocol.
 	///
 	/// This method will be removed in a future version.
-	pub fn _send_sync_notification(&self, message: impl Into<Vec<u8>>) {
+	pub fn send_sync_notification(&self, message: impl Into<Vec<u8>>) {
 		let mut lock = self.inner.sync_channel.lock();
 
 		if let Some(tx) = lock.as_mut() {

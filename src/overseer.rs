@@ -181,8 +181,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             "peer connected"
                         );
 
-                        // TODO: explain `expect()`
-                        // TODO: handle both `PeerAlreadyExists` and `InterfaceDoesntExist`
+                        // TODO: more comprehensive error handling
                         match self
                             .filter
                             .register_peer(interface, peer, FilterType::FullBypass) {
@@ -230,7 +229,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             }
                         }
                     }
-                    Some(InterfaceEvent::MessageReceived { peer, interface, protocol: _, message }) => {
+                    Some(InterfaceEvent::MessageReceived { peer, interface, protocol, message }) => {
                         // TODO: span?
                         tracing::trace!(
                             target: LOG_TARGET,
@@ -259,7 +258,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                                         "peer does not exist"
                                     ),
                                     Some(peer_info) => {
-                                        match peer_info.sink.send_packet(None, &message).await {
+                                        match peer_info.sink.send_packet(Some(protocol.clone()), &message).await {
                                             Ok(_) =>
                                                 tracing::trace!(
                                                     target: LOG_TARGET,
