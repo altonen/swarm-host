@@ -1,13 +1,14 @@
 #![allow(unused)]
 
 use crate::{
-    backend::{mockchain::MockchainBackend, NetworkBackendType},
+    backend::{mockchain::MockchainBackend, substrate::SubstrateBackend, NetworkBackendType},
     error::Error,
     overseer::Overseer,
     rpc::run_server,
 };
 
 use clap::Parser;
+use tracing_subscriber::fmt::SubscriberBuilder;
 
 use std::net::SocketAddr;
 
@@ -43,6 +44,32 @@ struct Flags {
     backend: NetworkBackendType,
 }
 
+async fn run_mockchain_backend(flags: Flags) {
+    let (mut overseer, tx) = Overseer::<MockchainBackend>::new();
+    tokio::spawn(async move { overseer.run().await });
+
+    run_server(
+        tx,
+        format!("127.0.0.1:{}", flags.rpc_port)
+            .parse::<SocketAddr>()
+            .expect("valid address"),
+    )
+    .await;
+}
+
+async fn run_substrate_backend(flags: Flags) {
+    let (mut overseer, tx) = Overseer::<SubstrateBackend>::new();
+    tokio::spawn(async move { overseer.run().await });
+
+    run_server(
+        tx,
+        format!("127.0.0.1:{}", flags.rpc_port)
+            .parse::<SocketAddr>()
+            .expect("valid address"),
+    )
+    .await;
+}
+
 #[tokio::main]
 async fn main() {
     let flags = Flags::parse();
@@ -53,15 +80,8 @@ async fn main() {
         .try_init()
         .expect("to succeed");
 
-    let (mut overseer, tx) = Overseer::<MockchainBackend>::new();
-
-    tokio::spawn(async move { overseer.run().await });
-
-    run_server(
-        tx,
-        format!("127.0.0.1:{}", flags.rpc_port)
-            .parse::<SocketAddr>()
-            .expect("valid address"),
-    )
-    .await;
+    match flags.backend {
+        NetworkBackendType::Mockchain => run_mockchain_backend(flags).await,
+        NetworkBackendType::Substrate => run_substrate_backend(flags).await,
+    }
 }

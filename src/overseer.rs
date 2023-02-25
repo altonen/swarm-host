@@ -183,10 +183,20 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 
                         // TODO: explain `expect()`
                         // TODO: handle both `PeerAlreadyExists` and `InterfaceDoesntExist`
-                        self
+                        match self
                             .filter
-                            .register_peer(interface, peer, FilterType::FullBypass)
-                            .expect("unique (interface, peer) combination");
+                            .register_peer(interface, peer, FilterType::FullBypass) {
+                                Err(Error::PeerAlreadyExists) => {
+                                    tracing::warn!(
+                                        target: LOG_TARGET,
+                                        interface_id = ?interface,
+                                        peer_id = ?peer,
+                                        "peer already exists in the filter",
+                                    );
+                                }
+                                Ok(_) => {},
+                                Err(err) => panic!("unrecoverable error occurred: {err:?}"),
+                            }
                         self.iface_peers.entry(interface).or_default().insert(
                             peer,
                             PeerInfo {
@@ -249,7 +259,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                                         "peer does not exist"
                                     ),
                                     Some(peer_info) => {
-                                        match peer_info.sink.send_packet(&message).await {
+                                        match peer_info.sink.send_packet(None, &message).await {
                                             Ok(_) =>
                                                 tracing::trace!(
                                                     target: LOG_TARGET,

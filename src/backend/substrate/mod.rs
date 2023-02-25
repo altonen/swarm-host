@@ -1,10 +1,16 @@
 use crate::{
-    backend::{Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend},
+    backend::{
+        ConnectionUpgrade, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
+        NetworkBackend, PacketSink,
+    },
     types::DEFAULT_CHANNEL_SIZE,
 };
 
-use futures::channel;
-use sc_network::{config::NetworkConfiguration, NodeType, SubstrateNetwork, SubstrateNetworkEvent};
+use futures::{channel, FutureExt, StreamExt};
+use sc_network::{
+    config::NetworkConfiguration, Command, NodeType, ProtocolName, SubstrateNetwork,
+    SubstrateNetworkEvent,
+};
 use sc_network_common::{
     config::{
         NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
@@ -14,22 +20,61 @@ use sc_network_common::{
     sync::message::BlockAnnouncesHandshake,
 };
 use sp_runtime::traits::{Block, NumberFor};
-use std::{iter, net::SocketAddr, ops::SubAssign, ptr::NonNull, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::{instrument::WithSubscriber, Subscriber};
+
+use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 
 // TODO: differentiate between notifications and requests?
+// TODO: new protocol opened -> apply upgrade for packetsink?
 
 #[cfg(test)]
 mod tests;
 
 const LOG_TARGET: &'static str = "substrate";
 
-pub struct InterfaceHandle {
-    tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
-    req_rx: channel::mpsc::Receiver<IncomingRequest>,
-    event_rx: mpsc::Receiver<SubstrateNetworkEvent>,
+#[derive(Debug)]
+pub struct SubstratePacketSink {
+    peer: sc_network::PeerId,
+    tx: mpsc::Sender<Command>,
 }
+
+impl SubstratePacketSink {
+    pub fn new(peer: sc_network::PeerId, tx: mpsc::Sender<Command>) -> Self {
+        Self { peer, tx }
+    }
+}
+
+/// Abstraction which allows `swarm-host` to send packets to peer.
+#[async_trait::async_trait]
+impl PacketSink<SubstrateBackend> for SubstratePacketSink {
+    /// Send packet to peer over `protocol`.
+    async fn send_packet(
+        &mut self,
+        protocol: Option<<SubstrateBackend as NetworkBackend>::Protocol>,
+        message: &<SubstrateBackend as NetworkBackend>::Message,
+    ) -> crate::Result<()> {
+        self.tx
+            .send(Command::SendNotification {
+                peer: self.peer,
+                protocol: protocol.expect("protocol to exist"),
+                message: message.to_vec(),
+            })
+            .await
+            .expect("channel to stay open");
+
+        Ok(())
+    }
+}
+
+pub struct InterfaceHandle {
+    interface_id: usize, // tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
+                         // req_rx: channel::mpsc::Receiver<IncomingRequest>,
+                         // event_rx: mpsc::Receiver<SubstrateNetworkEvent>,
+}
+
+pub enum SubstrateMessage {}
 
 fn build_block_announce_protocol() -> NonDefaultSetConfig {
     NonDefaultSetConfig {
@@ -97,9 +142,11 @@ impl InterfaceHandle {
     // TODO: pass listen address
     pub async fn new(
         interface_type: InterfaceType,
+        interface_id: usize,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let (event_tx, event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (event_tx, mut event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (command_tx, mut command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         let node_type = match interface_type {
             InterfaceType::Masquerade => NodeType::Masquerade {
@@ -127,6 +174,7 @@ impl InterfaceHandle {
                 tokio::spawn(fut);
             }),
             event_tx,
+            command_rx,
         )?;
         tokio::spawn(network.run());
 
@@ -138,19 +186,54 @@ impl InterfaceHandle {
                 tokio::select! {
                     event = event_rx.recv() => match event.expect("channel to stay open") {
                         SubstrateNetworkEvent::PeerConnected { peer } => {
-                            todo!();
+                            tx.send(InterfaceEvent::PeerConnected {
+                                peer,
+                                interface: interface_id,
+                                protocols: Vec::new(),
+                                sink: Box::new(SubstratePacketSink::new(peer, command_tx.clone())),
+                            })
+                            .await
+                            .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::PeerDisconnected { peer } => {
-                            todo!();
+                            tx.send(InterfaceEvent::PeerDisconnected {
+                                peer,
+                                interface: interface_id,
+                            })
+                            .await
+                            .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::ProtocolOpened { peer, protocol } => {
-                            todo!();
+                            tx.send(InterfaceEvent::ConnectionUpgraded {
+                                peer,
+                                interface: interface_id,
+                                upgrade: ConnectionUpgrade::ProtocolOpened {
+                                    protocols: HashSet::from([protocol]),
+                                }
+                            })
+                            .await
+                            .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::ProtocolClosed { peer, protocol } => {
-                            todo!();
+                            tx.send(InterfaceEvent::ConnectionUpgraded {
+                                peer,
+                                interface: interface_id,
+                                upgrade: ConnectionUpgrade::ProtocolClosed {
+                                    protocols: HashSet::from([protocol]),
+                                }
+                            })
+                            .await
+                            .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::NotificationReceived { peer, protocol, notification } => {
-                            todo!();
+                            tx.send(InterfaceEvent::MessageReceived {
+                                peer,
+                                interface: interface_id,
+                                protocol,
+                                message: notification,
+                            })
+                            .await
+                            .expect("channel to stay open");
                         }
                     },
                     request = fused_rx.next() => match request.expect("channel to stay open") {
@@ -160,13 +243,13 @@ impl InterfaceHandle {
             }
         });
 
-        Ok((Self {}, Box::pin(ReceiverStream::new(rx))))
+        Ok((Self { interface_id }, Box::pin(ReceiverStream::new(rx))))
     }
 }
 
 impl Interface<SubstrateBackend> for InterfaceHandle {
     fn id(&self) -> &<SubstrateBackend as NetworkBackend>::InterfaceId {
-        todo!();
+        &self.interface_id
     }
 
     /// Get handle to installed filter
@@ -202,11 +285,24 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
     }
 }
 
-pub struct SubstrateBackend {}
+#[derive(Debug)]
+pub struct SubstrateBackend {
+    next_iface_id: usize,
+}
 
 impl SubstrateBackend {
+    /// Create new `SubstrateBackend`.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            next_iface_id: 0usize,
+        }
+    }
+
+    /// Allocate ID for new interface.
+    pub fn next_interface_id(&mut self) -> usize {
+        let iface_id = self.next_iface_id;
+        self.next_iface_id += 1;
+        iface_id
     }
 }
 
@@ -214,8 +310,8 @@ impl SubstrateBackend {
 impl NetworkBackend for SubstrateBackend {
     type PeerId = sc_network::PeerId;
     type InterfaceId = usize;
-    type Protocol = ProtocolId;
-    type Message = ();
+    type Protocol = ProtocolName;
+    type Message = Vec<u8>;
     type InterfaceHandle = InterfaceHandle;
 
     /// Create new [`SubstrateBackend`].
@@ -245,6 +341,6 @@ impl NetworkBackend for SubstrateBackend {
             "create new substrate backend",
         );
 
-        InterfaceHandle::new(interface_type).await
+        InterfaceHandle::new(interface_type, self.next_interface_id()).await
     }
 }

@@ -26,6 +26,7 @@ use tokio_stream::wrappers::ReceiverStream;
 const LOG_TARGET: &'static str = "mockchain-node-backed";
 
 // TODO: move to some common place
+#[derive(Debug)]
 pub struct MockPacketSink {
     interface: InterfaceId,
     peer: PeerId,
@@ -46,7 +47,7 @@ impl MockPacketSink {
 impl PacketSink<MockchainBackend> for MockPacketSink {
     async fn send_packet(
         &mut self,
-        // _protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
+        _protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
         packet: &<MockchainBackend as NetworkBackend>::Message,
     ) -> crate::Result<()> {
         tracing::trace!(

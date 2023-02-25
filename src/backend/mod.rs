@@ -39,11 +39,11 @@ pub enum InterfaceType {
 
 /// Abstraction which allows `swarm-host` to send packets to peer.
 #[async_trait::async_trait]
-pub trait PacketSink<T: NetworkBackend> {
+pub trait PacketSink<T: NetworkBackend>: Debug {
     /// Send packet to peer over `protocol`.
     async fn send_packet(
         &mut self,
-        // protocol: Option<T::Protocol>,
+        protocol: Option<T::Protocol>,
         message: &T::Message,
     ) -> crate::Result<()>;
 }
@@ -67,6 +67,7 @@ pub enum ConnectionUpgrade<T: NetworkBackend> {
 // TODO: how to express capabilities in a generic way?
 // TODO: capabilities should come from python and
 //       be transported to `NetworkBackend` in a generic way??
+#[derive(Debug)]
 pub enum InterfaceEvent<T: NetworkBackend> {
     /// Peer connected to the interface.
     PeerConnected {

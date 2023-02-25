@@ -21,7 +21,7 @@
 use crate::{
 	behaviour::{self, Behaviour, BehaviourOut},
 	discovery::DiscoveryConfig,
-	protocol::{self, Protocol},
+	protocol::{self, Protocol, NotificationsSink},
 	transport,
 };
 
@@ -38,7 +38,7 @@ use sc_network_common::{
 	error::Error,
 	protocol::{ProtocolName, role::Role},
 };
-use std::{cmp, fs, iter, num::NonZeroUsize, pin::Pin};
+use std::{cmp, fs, iter, num::NonZeroUsize, pin::Pin, collections::HashMap};
 use tokio::sync::mpsc;
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
@@ -77,6 +77,15 @@ pub enum SubstrateNetworkEvent {
 	}
 }
 
+#[derive(Debug)]
+pub enum Command {
+    SendNotification {
+        peer: PeerId,
+        protocol: ProtocolName,
+        message: Vec<u8>,
+    },
+}
+
 pub enum NodeType {
 	Masquerade { role: Role, block_announce_config: NonDefaultSetConfig },
 	NodeBacked { genesis_hash: Vec<u8>, role: Role, block_announce_config: NonDefaultSetConfig },
@@ -86,6 +95,8 @@ pub enum NodeType {
 pub struct SubstrateNetwork {
 	swarm: Swarm<Behaviour>,
 	event_tx: mpsc::Sender<SubstrateNetworkEvent>,
+	command_rx: mpsc::Receiver<Command>,
+	notification_sinks: HashMap<(PeerId, ProtocolName), NotificationsSink>,
 }
 
 impl SubstrateNetwork {
@@ -95,6 +106,7 @@ impl SubstrateNetwork {
 		node_type: NodeType,
 		executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
 		event_tx: mpsc::Sender<SubstrateNetworkEvent>,
+		command_rx: mpsc::Receiver<Command>,
 	) -> Result<Self, Error> {
 		let local_identity = network_config.node_key.clone().into_keypair()?;
 		let local_public = local_identity.public();
@@ -103,6 +115,8 @@ impl SubstrateNetwork {
 		if let Some(path) = &network_config.net_config_path {
 			fs::create_dir_all(path)?;
 		}
+
+		log::info!("keyzzzz: {local_peer_id}");
 
 		let (role, block_announce_config, _genesis_hash) = match node_type {
 			NodeType::Masquerade { role, block_announce_config } =>
@@ -254,7 +268,16 @@ impl SubstrateNetwork {
 			);
 		}
 
-		Ok(Self { swarm, event_tx, })
+		Ok(Self { swarm, event_tx, command_rx, notification_sinks: HashMap::new(), })
+	}
+
+	async fn on_command(&mut self, command: Command) {
+		match command {
+			Command::SendNotification { peer, protocol, message } => {
+				log::warn!("cannot send notification, implementation missing");
+				// TODO: index into self.notification_sinks and send message to peer.
+			}
+		}
 	}
 
 	async fn on_swarm_event(&mut self, event: BehaviourOut) {
@@ -311,6 +334,8 @@ impl SubstrateNetwork {
 			} => {
 				log::info!("notification stream opened: {protocol}");
 
+				// TODO: save notification sink
+
 				self.event_tx.send(SubstrateNetworkEvent::ProtocolOpened {
                     peer: remote,
                     protocol,
@@ -329,6 +354,8 @@ impl SubstrateNetwork {
 				remote,
 				protocol,
 			} => {
+				// TODO: remove notifications sink
+
 				self.event_tx.send(SubstrateNetworkEvent::ProtocolClosed {
                     peer: remote,
                     protocol,
@@ -358,6 +385,10 @@ impl SubstrateNetwork {
 	pub async fn run(mut self) {
 		loop {
 			tokio::select! {
+				event = self.command_rx.recv() => match event {
+    				Some(command) => self.on_command(command).await,
+    				None => panic!("essential task closed"),
+				},
     			event = self.swarm.select_next_some() => match event {
     				SwarmEvent::Behaviour(event) => self.on_swarm_event(event).await,
         			SwarmEvent::ConnectionEstablished {

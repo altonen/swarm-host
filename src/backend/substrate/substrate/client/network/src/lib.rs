@@ -56,6 +56,7 @@ pub use service::{
 	PublicKey,
 	SubstrateNetwork,
 	SubstrateNetworkEvent,
+	Command,
 };
 
 pub use sc_peerset::ReputationChange;
