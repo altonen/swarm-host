@@ -20,8 +20,8 @@
 //! notifications substreams.
 
 pub use self::{
-	behaviour::{Notifications, NotificationsOut, ProtocolConfig},
-	handler::{NotificationsSink, NotifsHandlerError, Ready},
+    behaviour::{Notifications, NotificationsOut, ProtocolConfig},
+    handler::{NotificationsSink, NotifsHandlerError, Ready},
 };
 
 mod behaviour;

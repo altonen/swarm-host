@@ -17,12 +17,12 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 pub use self::{
-	collec::UpgradeCollec,
-	notifications::{
-		NotificationsHandshakeError, NotificationsIn, NotificationsInOpen,
-		NotificationsInSubstream, NotificationsInSubstreamHandshake, NotificationsOut,
-		NotificationsOutError, NotificationsOutOpen, NotificationsOutSubstream,
-	},
+    collec::UpgradeCollec,
+    notifications::{
+        NotificationsHandshakeError, NotificationsIn, NotificationsInOpen,
+        NotificationsInSubstream, NotificationsInSubstreamHandshake, NotificationsOut,
+        NotificationsOutError, NotificationsOutOpen, NotificationsOutSubstream,
+    },
 };
 
 mod collec;

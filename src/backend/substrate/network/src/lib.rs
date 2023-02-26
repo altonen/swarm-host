@@ -32,31 +32,25 @@ pub mod network_state;
 #[doc(inline)]
 pub use libp2p::{multiaddr, Multiaddr, PeerId};
 pub use sc_network_common::{
-	protocol::{
-		event::{DhtEvent, Event},
-		role::ObservedRole,
-		ProtocolName,
-	},
-	request_responses::{IfDisconnected, RequestFailure},
-	service::{
-		KademliaKey, NetworkBlock, NetworkDHTProvider, NetworkRequest, NetworkSigner,
-		NetworkStateInfo, NetworkStatus, NetworkStatusProvider, NetworkSyncForkRequest, Signature,
-		SigningError,
-	},
-	sync::{
-		warp::{WarpSyncPhase, WarpSyncProgress},
-		StateDownloadProgress, SyncState,
-	},
+    protocol::{
+        event::{DhtEvent, Event},
+        role::ObservedRole,
+        ProtocolName,
+    },
+    request_responses::{IfDisconnected, RequestFailure},
+    service::{
+        KademliaKey, NetworkBlock, NetworkDHTProvider, NetworkRequest, NetworkSigner,
+        NetworkStateInfo, NetworkStatus, NetworkStatusProvider, NetworkSyncForkRequest, Signature,
+        SigningError,
+    },
+    sync::{
+        warp::{WarpSyncPhase, WarpSyncProgress},
+        StateDownloadProgress, SyncState,
+    },
 };
 pub use service::{
-	DecodingError,
-	Keypair,
-	NodeType,
-	OutboundFailure,
-	PublicKey,
-	SubstrateNetwork,
-	SubstrateNetworkEvent,
-	Command,
+    Command, DecodingError, Keypair, NodeType, OutboundFailure, PublicKey, SubstrateNetwork,
+    SubstrateNetworkEvent,
 };
 
 pub use sc_peerset::ReputationChange;
