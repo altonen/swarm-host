@@ -92,6 +92,36 @@ fn build_block_announce_protocol() -> NonDefaultSetConfig {
     }
 }
 
+fn build_transaction_protocol() -> NonDefaultSetConfig {
+    NonDefaultSetConfig {
+        notifications_protocol: "/sup/transactions/1".into(),
+        fallback_names: vec![],
+        max_notification_size: 16 * 1024 * 1024,
+        handshake: None,
+        set_config: SetConfig {
+            in_peers: 0,
+            out_peers: 0,
+            reserved_nodes: Vec::new(),
+            non_reserved_mode: NonReservedPeerMode::Deny,
+        },
+    }
+}
+
+fn build_grandpa_protocol() -> NonDefaultSetConfig {
+    NonDefaultSetConfig {
+        notifications_protocol: "/paritytech/grandpa/1".into(),
+        fallback_names: vec![],
+        max_notification_size: 1024 * 1024,
+        handshake: None,
+        set_config: SetConfig {
+            in_peers: 0,
+            out_peers: 0,
+            reserved_nodes: Vec::new(),
+            non_reserved_mode: NonReservedPeerMode::Deny,
+        },
+    }
+}
+
 fn build_request_response_protocols() -> (
     channel::mpsc::Receiver<IncomingRequest>,
     Vec<ProtocolConfig>,
@@ -164,6 +194,8 @@ impl InterfaceHandle {
             config
                 .listen_addresses
                 .push("/ip6/::1/tcp/8888".parse().unwrap());
+            config.extra_sets.push(build_transaction_protocol());
+            config.extra_sets.push(build_grandpa_protocol());
             (config, req_rx)
         };
 
