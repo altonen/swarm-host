@@ -20,12 +20,13 @@
 
 use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
+    config::NetworkConfiguration,
     discovery::DiscoveryConfig,
     protocol::{self, NotificationsSink, Protocol},
     transport,
 };
 
-use futures::prelude::*;
+use futures::{channel, prelude::*, FutureExt, Stream, StreamExt};
 use libp2p::{
     core::upgrade,
     identify::Info as IdentifyInfo,
@@ -34,16 +35,22 @@ use libp2p::{
 };
 use log::{debug, error, info, trace, warn};
 use sc_network_common::{
-    config::{NonDefaultSetConfig, ProtocolId, TransportConfig},
+    config::{
+        NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
+        TransportConfig,
+    },
     error::Error,
     protocol::{role::Role, ProtocolName},
+    request_responses::{IncomingRequest, ProtocolConfig},
 };
-use std::{cmp, collections::HashMap, fs, iter, num::NonZeroUsize, pin::Pin};
+use std::{cmp, collections::HashMap, fs, iter, num::NonZeroUsize, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamMap};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
-
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
+
+const DEFAULT_CHANNEL_SIZE: usize = 64usize;
 
 /// Substrate network events.
 #[derive(Debug)]
@@ -80,10 +87,7 @@ pub enum Command {
 }
 
 pub enum NodeType {
-    Masquerade {
-        role: Role,
-        block_announce_config: NonDefaultSetConfig,
-    },
+    Masquerade,
     NodeBacked {
         genesis_hash: Vec<u8>,
         role: Role,
@@ -97,17 +101,44 @@ pub struct SubstrateNetwork {
     event_tx: mpsc::Sender<SubstrateNetworkEvent>,
     command_rx: mpsc::Receiver<Command>,
     notification_sinks: HashMap<(PeerId, ProtocolName), NotificationsSink>,
+    map: StreamMap<ProtocolName, Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>>,
 }
 
 impl SubstrateNetwork {
     /// Create new substrate network
+    // TODO: pass socket address
     pub fn new(
-        network_config: &crate::config::NetworkConfiguration,
         node_type: NodeType,
         executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
         event_tx: mpsc::Sender<SubstrateNetworkEvent>,
         command_rx: mpsc::Receiver<Command>,
     ) -> Result<Self, Error> {
+        let mut network_config = NetworkConfiguration::new_local();
+        let mut map = StreamMap::new();
+
+        let block_announce_config = Self::build_block_announce_protocol();
+        let sync_config = Self::build_sync_protocol(&mut map);
+        let state_config = Self::build_state_sync_protocol(&mut map);
+        let warp_config = Self::build_warp_sync_protocol(&mut map);
+        let light_config = Self::build_light_protocol(&mut map);
+
+        network_config.request_response_protocols.extend(vec![
+            sync_config,
+            state_config,
+            warp_config,
+            light_config,
+        ]);
+        network_config
+            .listen_addresses
+            .push("/ip6/::1/tcp/8888".parse().unwrap());
+        network_config
+            .extra_sets
+            .push(Self::build_transaction_protocol());
+        network_config
+            .extra_sets
+            .push(Self::build_grandpa_protocol());
+
+        // TODO: get key from somewhere
         let local_identity = network_config.node_key.clone().into_keypair()?;
         let local_public = local_identity.public();
         let local_peer_id = local_public.to_peer_id();
@@ -116,17 +147,8 @@ impl SubstrateNetwork {
             fs::create_dir_all(path)?;
         }
 
-        let (role, block_announce_config, _genesis_hash) = match node_type {
-            NodeType::Masquerade {
-                role,
-                block_announce_config,
-            } => (role, block_announce_config, None),
-            NodeType::NodeBacked {
-                genesis_hash,
-                role,
-                block_announce_config,
-            } => (role, block_announce_config, Some(genesis_hash)),
-        };
+        // TODO: zzz
+        let role = Role::Full;
 
         let (protocol, peerset_handle, mut known_addresses) =
             Protocol::new(From::from(&role), &network_config, block_announce_config)?;
@@ -278,10 +300,168 @@ impl SubstrateNetwork {
             swarm,
             event_tx,
             command_rx,
+            map,
             notification_sinks: HashMap::new(),
         })
     }
 
+    /// Build block announce protocol config.
+    fn build_block_announce_protocol() -> NonDefaultSetConfig {
+        NonDefaultSetConfig {
+            notifications_protocol: format!("/sup/block-announces/1",).into(),
+            fallback_names: vec![],
+            max_notification_size: 8 * 1024 * 1024,
+            handshake: None,
+            set_config: SetConfig {
+                in_peers: 0,
+                out_peers: 0,
+                reserved_nodes: Vec::new(),
+                non_reserved_mode: NonReservedPeerMode::Deny,
+            },
+        }
+    }
+
+    /// Build transactions protocol config.
+    fn build_transaction_protocol() -> NonDefaultSetConfig {
+        NonDefaultSetConfig {
+            notifications_protocol: "/sup/transactions/1".into(),
+            fallback_names: vec![],
+            max_notification_size: 16 * 1024 * 1024,
+            handshake: None,
+            set_config: SetConfig {
+                in_peers: 0,
+                out_peers: 0,
+                reserved_nodes: Vec::new(),
+                non_reserved_mode: NonReservedPeerMode::Deny,
+            },
+        }
+    }
+
+    /// Build GRANDPA protocol config.
+    fn build_grandpa_protocol() -> NonDefaultSetConfig {
+        NonDefaultSetConfig {
+            notifications_protocol: "/paritytech/grandpa/1".into(),
+            fallback_names: vec![],
+            max_notification_size: 1024 * 1024,
+            handshake: None,
+            set_config: SetConfig {
+                in_peers: 0,
+                out_peers: 0,
+                reserved_nodes: Vec::new(),
+                non_reserved_mode: NonReservedPeerMode::Deny,
+            },
+        }
+    }
+
+    /// Build the sync request-response protocol.
+    fn build_sync_protocol(
+        map: &mut StreamMap<
+            ProtocolName,
+            Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>,
+        >,
+    ) -> ProtocolConfig {
+        let (tx, mut rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let name = ProtocolName::from("/sup/sync/2");
+
+        let rx = Box::pin(async_stream::stream! {
+              while let Some(item) = rx.next().await {
+                  yield item;
+              }
+        }) as Pin<Box<dyn Stream<Item = IncomingRequest> + Send>>;
+        map.insert(name.clone(), rx);
+
+        ProtocolConfig {
+            name,
+            fallback_names: vec![],
+            max_request_size: 1024 * 1024,
+            max_response_size: 16 * 1024 * 1024,
+            request_timeout: Duration::from_secs(20),
+            inbound_queue: Some(tx.clone()),
+        }
+    }
+
+    /// Build state sync protocol config.
+    fn build_state_sync_protocol(
+        map: &mut StreamMap<
+            ProtocolName,
+            Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>,
+        >,
+    ) -> ProtocolConfig {
+        let (tx, mut rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let name = ProtocolName::from("/sup/state/2");
+
+        let rx = Box::pin(async_stream::stream! {
+              while let Some(item) = rx.next().await {
+                  yield item;
+              }
+        }) as Pin<Box<dyn Stream<Item = IncomingRequest> + Send>>;
+        map.insert(name.clone(), rx);
+
+        ProtocolConfig {
+            name,
+            fallback_names: vec![],
+            max_request_size: 1024 * 1024,
+            max_response_size: 16 * 1024 * 1024,
+            request_timeout: Duration::from_secs(40),
+            inbound_queue: Some(tx.clone()),
+        }
+    }
+
+    /// Build warp sync request-response protocol.
+    fn build_warp_sync_protocol(
+        map: &mut StreamMap<
+            ProtocolName,
+            Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>,
+        >,
+    ) -> ProtocolConfig {
+        let (tx, mut rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let name = ProtocolName::from("/sup/sync/warp");
+
+        let rx = Box::pin(async_stream::stream! {
+              while let Some(item) = rx.next().await {
+                  yield item;
+              }
+        }) as Pin<Box<dyn Stream<Item = IncomingRequest> + Send>>;
+        map.insert(name.clone(), rx);
+
+        ProtocolConfig {
+            name,
+            fallback_names: vec![],
+            max_request_size: 32,
+            max_response_size: 16 * 1024 * 1024,
+            request_timeout: Duration::from_secs(10),
+            inbound_queue: Some(tx.clone()),
+        }
+    }
+
+    /// Build light request-response protocol.
+    fn build_light_protocol(
+        map: &mut StreamMap<
+            ProtocolName,
+            Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>,
+        >,
+    ) -> ProtocolConfig {
+        let (tx, mut rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let name = ProtocolName::from("/sup/light/2");
+
+        let rx = Box::pin(async_stream::stream! {
+              while let Some(item) = rx.next().await {
+                  yield item;
+              }
+        }) as Pin<Box<dyn Stream<Item = IncomingRequest> + Send>>;
+        map.insert(name.clone(), rx);
+
+        ProtocolConfig {
+            name,
+            fallback_names: vec![],
+            max_request_size: 1 * 1024 * 1024,
+            max_response_size: 16 * 1024 * 1024,
+            request_timeout: Duration::from_secs(15),
+            inbound_queue: Some(tx),
+        }
+    }
+
+    /// Handle command received from `swarm-host`.
     async fn on_command(&mut self, command: Command) {
         match command {
             Command::SendNotification {
@@ -296,6 +476,7 @@ impl SubstrateNetwork {
         }
     }
 
+    /// Handle custom `Swarm` event.
     async fn on_swarm_event(&mut self, event: BehaviourOut) {
         match event {
             BehaviourOut::InboundRequest {
@@ -303,7 +484,7 @@ impl SubstrateNetwork {
                 result: _,
                 ..
             } => {
-                println!("metrics");
+                // println!("metrics");
             }
             BehaviourOut::RequestFinished {
                 protocol: _,
@@ -311,7 +492,7 @@ impl SubstrateNetwork {
                 result: _,
                 ..
             } => {
-                println!("metrics");
+                // println!("metrics");
             }
             BehaviourOut::ReputationChanges { peer, changes } => {
                 for change in changes {
@@ -342,7 +523,7 @@ impl SubstrateNetwork {
                 println!("implement maybe, peer id {_peer_id}");
             }
             BehaviourOut::RandomKademliaStarted => {
-                println!("metrics")
+                // println!("metrics")
             }
             BehaviourOut::NotificationStreamOpened {
                 remote,
@@ -391,7 +572,7 @@ impl SubstrateNetwork {
                     self.event_tx
                         .send(SubstrateNetworkEvent::NotificationReceived {
                             peer: remote,
-                            protocol: protocol,
+                            protocol,
                             notification: bytes.into(),
                         })
                         .await
@@ -409,6 +590,13 @@ impl SubstrateNetwork {
     pub async fn run(mut self) {
         loop {
             tokio::select! {
+                event = self.map.next() => match event {
+                    Some((protocol, _request)) => log::warn!(
+                        target: "sub-libp2p",
+                        "received request from protocol {protocol}",
+                    ),
+                    None => panic!("essential task closed"),
+                },
                 event = self.command_rx.recv() => match event {
                     Some(command) => self.on_command(command).await,
                     None => panic!("essential task closed"),

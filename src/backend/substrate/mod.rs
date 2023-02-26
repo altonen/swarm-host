@@ -23,7 +23,6 @@ use sc_network_common::{
     request_responses::{IncomingRequest, ProtocolConfig},
     sync::message::BlockAnnouncesHandshake,
 };
-// use sp_runtime::traits::{Block, NumberFor};
 
 use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 
@@ -70,102 +69,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 }
 
 pub struct InterfaceHandle {
-    interface_id: usize, // tx: mpsc::Sender<InterfaceEvent<SubstrateBackend>>,
-                         // req_rx: channel::mpsc::Receiver<IncomingRequest>,
-                         // event_rx: mpsc::Receiver<SubstrateNetworkEvent>,
-}
-
-pub enum SubstrateMessage {}
-
-fn build_block_announce_protocol() -> NonDefaultSetConfig {
-    NonDefaultSetConfig {
-        notifications_protocol: format!("/sup/block-announces/1",).into(),
-        fallback_names: vec![],
-        max_notification_size: 8 * 1024 * 1024,
-        handshake: None,
-        set_config: SetConfig {
-            in_peers: 0,
-            out_peers: 0,
-            reserved_nodes: Vec::new(),
-            non_reserved_mode: NonReservedPeerMode::Deny,
-        },
-    }
-}
-
-fn build_transaction_protocol() -> NonDefaultSetConfig {
-    NonDefaultSetConfig {
-        notifications_protocol: "/sup/transactions/1".into(),
-        fallback_names: vec![],
-        max_notification_size: 16 * 1024 * 1024,
-        handshake: None,
-        set_config: SetConfig {
-            in_peers: 0,
-            out_peers: 0,
-            reserved_nodes: Vec::new(),
-            non_reserved_mode: NonReservedPeerMode::Deny,
-        },
-    }
-}
-
-fn build_grandpa_protocol() -> NonDefaultSetConfig {
-    NonDefaultSetConfig {
-        notifications_protocol: "/paritytech/grandpa/1".into(),
-        fallback_names: vec![],
-        max_notification_size: 1024 * 1024,
-        handshake: None,
-        set_config: SetConfig {
-            in_peers: 0,
-            out_peers: 0,
-            reserved_nodes: Vec::new(),
-            non_reserved_mode: NonReservedPeerMode::Deny,
-        },
-    }
-}
-
-fn build_request_response_protocols() -> (
-    channel::mpsc::Receiver<IncomingRequest>,
-    Vec<ProtocolConfig>,
-) {
-    let (tx, rx) = futures::channel::mpsc::channel(DEFAULT_CHANNEL_SIZE);
-
-    // TODO: crate new tx for each request type
-    (
-        rx,
-        vec![
-            ProtocolConfig {
-                name: "/sup/sync/2".into(),
-                fallback_names: vec![],
-                max_request_size: 1024 * 1024,
-                max_response_size: 16 * 1024 * 1024,
-                request_timeout: Duration::from_secs(20),
-                inbound_queue: Some(tx.clone()),
-            },
-            ProtocolConfig {
-                name: "/sup/state/2".into(),
-                fallback_names: vec![],
-                max_request_size: 1024 * 1024,
-                max_response_size: 16 * 1024 * 1024,
-                request_timeout: Duration::from_secs(40),
-                inbound_queue: Some(tx.clone()),
-            },
-            ProtocolConfig {
-                name: "/sup/sync/warp".into(),
-                fallback_names: vec![],
-                max_request_size: 32,
-                max_response_size: 16 * 1024 * 1024,
-                request_timeout: Duration::from_secs(10),
-                inbound_queue: Some(tx.clone()),
-            },
-            ProtocolConfig {
-                name: "/sup/light/2".into(),
-                fallback_names: vec![],
-                max_request_size: 1 * 1024 * 1024,
-                max_response_size: 16 * 1024 * 1024,
-                request_timeout: Duration::from_secs(15),
-                inbound_queue: Some(tx),
-            },
-        ],
-    )
+    interface_id: usize,
 }
 
 impl InterfaceHandle {
@@ -179,30 +83,9 @@ impl InterfaceHandle {
         let (event_tx, mut event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (command_tx, mut command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-        let node_type = match interface_type {
-            InterfaceType::Masquerade => NodeType::Masquerade {
-                role: Role::Full,
-                block_announce_config: build_block_announce_protocol(),
-            },
-            InterfaceType::NodeBacked => todo!("node-backed interfaces not implemented"),
-        };
-        let (config, req_rx) = {
-            let mut config = NetworkConfiguration::new_local();
-            let (req_rx, configs) = build_request_response_protocols();
-
-            config.request_response_protocols = configs;
-            config
-                .listen_addresses
-                .push("/ip6/::1/tcp/8888".parse().unwrap());
-            config.extra_sets.push(build_transaction_protocol());
-            config.extra_sets.push(build_grandpa_protocol());
-            (config, req_rx)
-        };
-
         // TODO: create all protocols on substrate side
         let mut network = SubstrateNetwork::new(
-            &config,
-            node_type,
+            NodeType::Masquerade,
             Box::new(move |fut| {
                 tokio::spawn(fut);
             }),
@@ -213,8 +96,6 @@ impl InterfaceHandle {
 
         // TODO: remove this and handle all messages on `substrate` side
         tokio::spawn(async move {
-            let mut fused_rx = req_rx.fuse();
-
             loop {
                 tokio::select! {
                     event = event_rx.recv() => match event.expect("channel to stay open") {
@@ -269,15 +150,6 @@ impl InterfaceHandle {
                             .expect("channel to stay open");
                         }
                     },
-                    request = fused_rx.next() => match request.expect("channel to stay open") {
-                        request => {
-                            tracing::warn!(
-                                target: LOG_TARGET,
-                                request = ?request,
-                                "received request from some peer, cannot handle requests yet"
-                            );
-                        },
-                    }
                 }
             }
         });
