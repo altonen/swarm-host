@@ -1,0 +1,53 @@
+[package]
+description = "Substrate network protocol"
+name = "sc-network"
+version = "0.10.0-dev"
+license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+homepage = "https://substrate.io"
+repository = "https://github.com/paritytech/substrate/"
+documentation = "https://docs.rs/sc-network"
+readme = "README.md"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+array-bytes = "4.1"
+async-trait = "0.1"
+asynchronous-codec = "0.6"
+backtrace = "0.3.67"
+bytes = "1"
+codec = { package = "parity-scale-codec", version = "3.2.2", features = ["derive"] }
+either = "1.5.3"
+fnv = "1.0.6"
+futures = "0.3.21"
+futures-timer = "3.0.2"
+ip_network = "0.4.1"
+libp2p = { version = "0.50.0", features = ["dns", "identify", "kad", "macros", "mdns", "mplex", "noise", "ping", "tcp",  "tokio", "yamux", "websocket"] }
+tokio = { version = "1.22.0", features = ["macros"] }
+log = "0.4.17"
+lru = "0.8.1"
+mockall = "0.11.3"
+parking_lot = "0.12.1"
+pin-project = "1.0.12"
+rand = "0.8.5"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.85"
+smallvec = "1.8.0"
+thiserror = "1.0"
+unsigned-varint = { version = "0.7.1", features = ["futures", "asynchronous_codec"] }
+zeroize = "1.4.3"
+
+sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-client-api = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-network-common = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-peerset = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-utils = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-arithmetic = { version = "6.0.0", git = "https://github.com/paritytech/substrate" }
+sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
+sp-runtime = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }

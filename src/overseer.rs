@@ -345,12 +345,14 @@ mod tests {
     use rand::Rng;
 
     // TODO: use `mockall`
+    #[derive(Debug)]
     struct DummySink;
 
     #[async_trait::async_trait]
     impl PacketSink<MockchainBackend> for DummySink {
         async fn send_packet(
             &mut self,
+            protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
             message: &<MockchainBackend as NetworkBackend>::Message,
         ) -> crate::Result<()> {
             todo!();

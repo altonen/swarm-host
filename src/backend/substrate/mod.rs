@@ -2,11 +2,6 @@ use crate::{
     backend::{
         ConnectionUpgrade, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
         NetworkBackend, PacketSink,
-        substrate::network::{
-            PeerId,
-            config::NetworkConfiguration, Command, NodeType, ProtocolName, SubstrateNetwork,
-            SubstrateNetworkEvent,
-        },
     },
     types::DEFAULT_CHANNEL_SIZE,
 };
@@ -16,6 +11,10 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{instrument::WithSubscriber, Subscriber};
 
+use sc_network::{
+    config::NetworkConfiguration, Command, NodeType, PeerId, ProtocolName, SubstrateNetwork,
+    SubstrateNetworkEvent,
+};
 use sc_network_common::{
     config::{
         NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
@@ -24,14 +23,13 @@ use sc_network_common::{
     request_responses::{IncomingRequest, ProtocolConfig},
     sync::message::BlockAnnouncesHandshake,
 };
-use sp_runtime::traits::{Block, NumberFor};
+// use sp_runtime::traits::{Block, NumberFor};
 
 use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 
 // TODO: differentiate between notifications and requests?
 // TODO: new protocol opened -> apply upgrade for packetsink?
 
-mod network;
 #[cfg(test)]
 mod tests;
 
