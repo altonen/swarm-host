@@ -86,11 +86,11 @@ pub enum ConnectionUpgrade<T: NetworkBackend> {
 pub enum InterfaceEvent<T: NetworkBackend> {
     /// Peer connected to the interface.
     PeerConnected {
-        /// ID of the peer who connected.
-        peer: T::PeerId,
-
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// ID of the peer who connected.
+        peer: T::PeerId,
 
         /// One or more supported protocols.
         protocols: Vec<T::Protocol>,
@@ -101,20 +101,20 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
     /// Peer disconnected from the interface.
     PeerDisconnected {
-        /// Peer who disconnected.
-        peer: T::PeerId,
-
         /// Associated interface
         interface: T::InterfaceId,
+
+        /// Peer who disconnected.
+        peer: T::PeerId,
     },
 
     /// Connection received an upgrade
     ConnectionUpgraded {
-        /// ID of the peer who connected.
-        peer: T::PeerId,
-
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// ID of the peer who connected.
+        peer: T::PeerId,
 
         /// One or more supported protocols.
         upgrade: ConnectionUpgrade<T>,
@@ -122,11 +122,11 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
     /// Message received from one of the peers
     MessageReceived {
-        /// Peer who sent the message.
-        peer: T::PeerId,
-
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// Peer who sent the message.
+        peer: T::PeerId,
 
         /// Protocol.
         protocol: T::Protocol,
@@ -137,11 +137,11 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
     /// Request received from one of the peers.
     RequestReceived {
-        /// Peer who sent the message.
-        peer: T::PeerId,
-
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// Peer who sent the message.
+        peer: T::PeerId,
 
         /// Protocol.
         protocol: T::Protocol,
@@ -152,17 +152,28 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
     /// Response received from one of the peers.
     ResponseReceived {
-        /// Peer who sent the message.
-        peer: T::PeerId,
-
         /// Associated interface.
         interface: T::InterfaceId,
+
+        /// Peer who sent the message.
+        peer: T::PeerId,
 
         /// Protocol.
         protocol: T::Protocol,
 
         /// Received message.
         response: T::Response,
+    },
+
+    /// Interface was bound to a peer.
+    ///
+    /// Requests should be sent to this peer if they're forwarded.
+    InterfaceBound {
+        /// Associated interface.
+        interface: T::InterfaceId,
+
+        /// Peer who sent the message.
+        peer: T::PeerId,
     },
 }
 

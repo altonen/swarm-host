@@ -389,6 +389,8 @@ impl<T: NetworkBackend> MessageFilter<T> {
         protocol: &T::Protocol,
         message: &T::Request,
     ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
+        // TODO: what should this return?
+        // TODO: RequestHandlingResult?
         Ok(vec![].into_iter())
     }
 

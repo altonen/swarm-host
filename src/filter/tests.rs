@@ -559,3 +559,32 @@ fn custom_message_filter() {
         vec![],
     );
 }
+
+#[test]
+fn test_function() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+
+    let mut filter = MessageFilter::<MockchainBackend>::new();
+    assert_eq!(
+        filter.register_interface(0usize, FilterType::FullBypass),
+        Ok(())
+    );
+    assert_eq!(
+        filter.register_peer(0usize, 0u64, FilterType::FullBypass),
+        Ok(())
+    );
+    assert_eq!(
+        filter.register_peer(0usize, 1u64, FilterType::FullBypass),
+        Ok(())
+    );
+
+    assert_eq!(
+        filter
+            .inject_message(0usize, 0u64, &rand::random())
+            .expect("valid configuration")
+            .collect::<Vec<_>>(),
+        vec![(0usize, 1u64)],
+    );
+}
