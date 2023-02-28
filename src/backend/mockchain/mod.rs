@@ -162,6 +162,8 @@ impl NetworkBackend for MockchainBackend {
     type InterfaceId = InterfaceId;
     type Protocol = ProtocolId;
     type Message = Message;
+    type Request = Message;
+    type Response = Message;
     type InterfaceHandle = MockchainHandle;
 
     /// Create new [`MockchainBackend`].

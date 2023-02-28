@@ -75,6 +75,16 @@ pub enum SubstrateNetworkEvent {
         protocol: ProtocolName,
         notification: Vec<u8>,
     },
+    RequestReceived {
+        peer: PeerId,
+        protocol: ProtocolName,
+        request: Vec<u8>,
+    },
+    ResponseReceived {
+        peer: PeerId,
+        protocol: ProtocolName,
+        response: Vec<u8>,
+    },
 }
 
 #[derive(Debug)]
@@ -83,6 +93,16 @@ pub enum Command {
         peer: PeerId,
         protocol: ProtocolName,
         message: Vec<u8>,
+    },
+    SendRequest {
+        peer: PeerId,
+        protocol: ProtocolName,
+        request_id: u8,
+        request: Vec<u8>,
+    },
+    // TODO: figure out what to do with this?
+    SendResponse {
+        response: Vec<u8>,
     },
 }
 
@@ -473,6 +493,13 @@ impl SubstrateNetwork {
                     sink.send_sync_notification(message);
                 }
             }
+            Command::SendRequest {
+                peer,
+                protocol,
+                request_id,
+                request,
+            } => {}
+            Command::SendResponse { response } => {}
         }
     }
 
@@ -591,10 +618,18 @@ impl SubstrateNetwork {
         loop {
             tokio::select! {
                 event = self.map.next() => match event {
-                    Some((protocol, _request)) => log::warn!(
-                        target: "sub-libp2p",
-                        "received request from protocol {protocol}",
-                    ),
+                    Some((protocol, _request)) => {
+                        log::warn!(
+                            target: "sub-libp2p",
+                            "received request from protocol {protocol}",
+                        );
+
+                        // TODO: enable
+                        // self.event_tx
+                        //     .send()
+                        //     .await
+                        //     .expect("channel to stay open");
+                    },
                     None => panic!("essential task closed"),
                 },
                 event = self.command_rx.recv() => match event {

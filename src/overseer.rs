@@ -28,6 +28,7 @@ use std::{
 // TODO: all links should not ben bidrectional
 // TODO: split code into functions
 // TODO: move tests to separate direcotry
+// TODO: print messages and `Vec<u8>` separate and for separate target but in same span
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
@@ -286,7 +287,29 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             ),
                         }
                     }
-                    Some(InterfaceEvent::ConnectionUpgraded { peer, interface, upgrade }) => {
+                    Some(InterfaceEvent::RequestReceived { interface, peer, protocol, request }) => {
+                        if let Err(err) = self.inject_request(interface, peer, protocol, request).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                interface_id = ?interface,
+                                peer_id = ?peer,
+                                err = ?err,
+                                "failed to inject request into `MessageFilter`",
+                            );
+                        }
+                    },
+                    Some(InterfaceEvent::ResponseReceived { interface, peer, protocol, response }) => {
+                        if let Err(err) = self.inject_response(interface, peer, protocol, response).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                interface_id = ?interface,
+                                peer_id = ?peer,
+                                err = ?err,
+                                "failed to inject response into `MessageFilter`",
+                            );
+                        }
+                    },
+                    Some(InterfaceEvent::ConnectionUpgraded { interface, peer, upgrade }) => {
                         tracing::trace!(
                             target: LOG_TARGET,
                             interface_id = ?interface,
@@ -309,6 +332,72 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 }
             }
         }
+    }
+
+    /// Inject request to `MessageFilter` and possibly route it to some connected peer.
+    async fn inject_request(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+        request: T::Request,
+    ) -> crate::Result<()> {
+        tracing::trace!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            peer_id = ?peer,
+            protocol = ?protocol,
+            "handle request",
+        );
+
+        for (interface, peer) in self
+            .filter
+            .inject_request(interface, peer, &protocol, &request)?
+        {
+            self.iface_peers
+                .get_mut(&interface)
+                .expect("interface to exist")
+                .get_mut(&peer)
+                .ok_or(Error::PeerDoesntExist)?
+                .sink
+                .send_request(protocol.clone(), &request)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Inject response to `MessageFilter` and possibly route it to some connected peer.
+    async fn inject_response(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+        response: T::Response,
+    ) -> crate::Result<()> {
+        tracing::trace!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            peer_id = ?peer,
+            protocol = ?protocol,
+            "inject response",
+        );
+
+        for (interface, peer) in self
+            .filter
+            .inject_response(interface, peer, &protocol, &response)?
+        {
+            self.iface_peers
+                .get_mut(&interface)
+                .expect("interface to exist")
+                .get_mut(&peer)
+                .ok_or(Error::PeerDoesntExist)?
+                .sink
+                .send_response(protocol.clone(), &response)
+                .await?;
+        }
+
+        Ok(())
     }
 
     /// Apply connection upgrade for an active peer.
@@ -354,6 +443,22 @@ mod tests {
             &mut self,
             protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
             message: &<MockchainBackend as NetworkBackend>::Message,
+        ) -> crate::Result<()> {
+            todo!();
+        }
+
+        async fn send_request(
+            &mut self,
+            protocol: <MockchainBackend as NetworkBackend>::Protocol,
+            message: &<MockchainBackend as NetworkBackend>::Request,
+        ) -> crate::Result<()> {
+            todo!();
+        }
+
+        async fn send_response(
+            &mut self,
+            protocol: <MockchainBackend as NetworkBackend>::Protocol,
+            message: &<MockchainBackend as NetworkBackend>::Response,
         ) -> crate::Result<()> {
             todo!();
         }

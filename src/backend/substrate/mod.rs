@@ -49,7 +49,6 @@ impl SubstratePacketSink {
 /// Abstraction which allows `swarm-host` to send packets to peer.
 #[async_trait::async_trait]
 impl PacketSink<SubstrateBackend> for SubstratePacketSink {
-    /// Send packet to peer over `protocol`.
     async fn send_packet(
         &mut self,
         protocol: Option<<SubstrateBackend as NetworkBackend>::Protocol>,
@@ -65,6 +64,22 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
             .expect("channel to stay open");
 
         Ok(())
+    }
+
+    async fn send_request(
+        &mut self,
+        protocol: <SubstrateBackend as NetworkBackend>::Protocol,
+        message: &<SubstrateBackend as NetworkBackend>::Request,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    async fn send_response(
+        &mut self,
+        protocol: <SubstrateBackend as NetworkBackend>::Protocol,
+        message: &<SubstrateBackend as NetworkBackend>::Response,
+    ) -> crate::Result<()> {
+        todo!();
     }
 }
 
@@ -149,6 +164,26 @@ impl InterfaceHandle {
                             .await
                             .expect("channel to stay open");
                         }
+                        SubstrateNetworkEvent::RequestReceived { peer, protocol, request } => {
+                            tx.send(InterfaceEvent::RequestReceived {
+                                peer,
+                                interface: interface_id,
+                                protocol,
+                                request,
+                            })
+                            .await
+                            .expect("channel to stay open");
+                        }
+                        SubstrateNetworkEvent::ResponseReceived {peer, protocol, response } => {
+                            tx.send(InterfaceEvent::ResponseReceived {
+                                peer,
+                                interface: interface_id,
+                                protocol,
+                                response,
+                            })
+                            .await
+                            .expect("channel to stay open");
+                        }
                     },
                 }
             }
@@ -223,6 +258,8 @@ impl NetworkBackend for SubstrateBackend {
     type InterfaceId = usize;
     type Protocol = ProtocolName;
     type Message = Vec<u8>;
+    type Request = Vec<u8>;
+    type Response = Vec<u8>;
     type InterfaceHandle = InterfaceHandle;
 
     /// Create new [`SubstrateBackend`].

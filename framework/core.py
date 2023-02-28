@@ -20,6 +20,12 @@ def setup_nodes():
 def run_test():
     print("run test")
 
+# block response handler
+def handle_block_response(ctx, dst_iface, src_peer, dst_iface, dst_peer, response):
+    if response != None:
+        return Forward
+    return Timeout
+
 def main():
     print("initializing test program")
     host = SwarmHost(8884, "mockchain")

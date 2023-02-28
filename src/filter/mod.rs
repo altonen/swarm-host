@@ -19,19 +19,12 @@ mod tests;
 
 const LOG_TARGET: &'static str = "filter";
 
-// TODO: study eBPF
+// TODO: message -> notification
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
 // TODO: start using `mockall`
 // TODO: documentation
 // TODO: fuzzing
 // TODO: benches
-
-// TODO: something like this
-/// ```rust
-/// pub trait InterfaceFilter {
-///     fn apply() -> Destinations;
-/// }
-/// ```
 
 // TODO: remove?
 /// Filtering mode for peer/interface.
@@ -44,16 +37,57 @@ pub enum FilterType {
     DropAll,
 }
 
+// TODO: documentation
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum LinkType {
+    // TODO: documentation
     IngressOnly,
+
+    // TODO: documentation
     EgressOnly,
+
+    // TODO: documentation
     Bidrectional,
 }
 
+// TODO: documentation
 pub enum EdgeType {
+    // TODO: documentation
     Unidirectional(EdgeIndex),
+
+    // TODO: documentation
     Bidrectional(EdgeIndex, EdgeIndex),
+}
+
+/// Request handling reusult.
+///
+/// Returned either by the installed filter or by the default handler
+/// based on the interface type.
+enum RequestHandlingResult {
+    /// Cause timeout for the request.
+    Timeout,
+
+    /// Reject the request.
+    Reject,
+
+    /// Forward the request to designated peer.
+    // TODO: who is the request forwarded to?
+    Forward,
+}
+
+/// Response handling reusult.
+///
+/// Returned either by the installed filter or by the default handler
+/// based on the interface type.
+enum ResponseHandlingResult {
+    /// Cause timeout for the request.
+    Timeout,
+
+    /// Reject the request.
+    Reject,
+
+    /// Forward the request to destination.
+    Forward,
 }
 
 /// Interface-related information.
@@ -343,5 +377,31 @@ impl<T: NetworkBackend> MessageFilter<T> {
             .collect::<Vec<_>>();
 
         Ok(pairs.into_iter())
+    }
+
+    //// Inject request into the [`MessageFilter`].
+    ///
+    /// Requests are handled by default by sending them to the bound interface.
+    pub fn inject_request(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: &T::Protocol,
+        message: &T::Request,
+    ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
+        Ok(vec![].into_iter())
+    }
+
+    //// Inject response into the [`MessageFilter`].
+    ///
+    /// Responses are handled by default by sending them to the source.
+    pub fn inject_response(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: &T::Protocol,
+        message: &T::Response,
+    ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
+        Ok(vec![].into_iter())
     }
 }

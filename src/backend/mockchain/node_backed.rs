@@ -66,6 +66,25 @@ impl PacketSink<MockchainBackend> for MockPacketSink {
             .map(|_| ())
             .map_err(From::from)
     }
+
+    /// Send request to peer over `protocol`.
+    async fn send_request(
+        &mut self,
+        protocol: <MockchainBackend as NetworkBackend>::Protocol,
+        message: &<MockchainBackend as NetworkBackend>::Request,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Send response to peer.
+    /// TODO: add request ID?
+    async fn send_response(
+        &mut self,
+        protocol: <MockchainBackend as NetworkBackend>::Protocol,
+        message: &<MockchainBackend as NetworkBackend>::Response,
+    ) -> crate::Result<()> {
+        todo!();
+    }
 }
 
 pub struct Peer;

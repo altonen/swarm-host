@@ -12,7 +12,7 @@ use std::{
 pub mod mockchain;
 pub mod substrate;
 
-// TODO: rename `Message` to `Packet`
+// TODO: rename `packet/Packet` to `Notification`
 // TODO: rename `PeerId` to `Source`
 // TODO: define generic `Address` type
 
@@ -45,6 +45,21 @@ pub trait PacketSink<T: NetworkBackend>: Debug {
         &mut self,
         protocol: Option<T::Protocol>,
         message: &T::Message,
+    ) -> crate::Result<()>;
+
+    /// Send request to peer over `protocol`.
+    async fn send_request(
+        &mut self,
+        protocol: T::Protocol,
+        message: &T::Request,
+    ) -> crate::Result<()>;
+
+    /// Send response to peer.
+    /// TODO: add request ID?
+    async fn send_response(
+        &mut self,
+        protocol: T::Protocol,
+        message: &T::Response,
     ) -> crate::Result<()>;
 }
 
@@ -119,6 +134,36 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Received message.
         message: T::Message,
     },
+
+    /// Request received from one of the peers.
+    RequestReceived {
+        /// Peer who sent the message.
+        peer: T::PeerId,
+
+        /// Associated interface.
+        interface: T::InterfaceId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Received message.
+        request: T::Request,
+    },
+
+    /// Response received from one of the peers.
+    ResponseReceived {
+        /// Peer who sent the message.
+        peer: T::PeerId,
+
+        /// Associated interface.
+        interface: T::InterfaceId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Received message.
+        response: T::Response,
+    },
 }
 
 /// Abstraction which allows `swarm-host` to maintain connections to remote peers.
@@ -158,6 +203,12 @@ pub trait NetworkBackend {
 
     /// Type identifying a message understood by the backend.
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;
+
+    /// Type identifying a request understood by the backend.
+    type Request: Debug + Send + Sync;
+
+    /// Type identifying a response understood by the backend.
+    type Response: Debug + Clone + Send + Sync;
 
     /// Handle which allows communication with a spawned interface.
     type InterfaceHandle: Interface<Self>
