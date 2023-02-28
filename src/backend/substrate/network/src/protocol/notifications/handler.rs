@@ -554,6 +554,9 @@ impl ConnectionHandler for NotifsHandler {
                             return;
                         }
 
+                        // TODO: check if the interface is already bound and use the handshake
+                        // of the bound node. If no binding has occurred yet, echo back the
+                        // received handshake and save it for later use.
                         log::info!(
                             target: "sub-libp2p",
                             "`Opening`/`Open`: echo back the same handshake",
@@ -699,23 +702,24 @@ impl ConnectionHandler for NotifsHandler {
                         ///
                         // if no node has has been bound yet, echo back the received handshake
                         let received_handshake = in_substream.received_handshake.clone();
-                        let handshake_message = if let Some(handshake) =
-                            protocol_info.config.handshake.read().clone()
-                        {
-                            log::info!(
-                                target: "sub-libp2p",
-                                "`OpenDesiredByRemote`: use handshake of the bound peer",
-                            );
+                        let handshake_message = received_handshake.clone();
+                        // let handshake_message = if let Some(handshake) =
+                        //     protocol_info.config.handshake.read().clone()
+                        // {
+                        //     log::info!(
+                        //         target: "sub-libp2p",
+                        //         "`OpenDesiredByRemote`: use handshake of the bound peer",
+                        //     );
 
-                            handshake.clone()
-                        } else {
-                            log::info!(
-                                target: "sub-libp2p",
-                                "`OpenDesiredByRemote`: echo back the received handshake",
-                            );
+                        //     handshake.clone()
+                        // } else {
+                        //     log::info!(
+                        //         target: "sub-libp2p",
+                        //         "`OpenDesiredByRemote`: echo back the received handshake",
+                        //     );
 
-                            received_handshake.clone()
-                        };
+                        //     received_handshake.clone()
+                        // };
 
                         if !*pending_opening {
                             let proto = NotificationsOut::new(
