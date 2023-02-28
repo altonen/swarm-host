@@ -56,7 +56,7 @@ pub(crate) const BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE: u64 = 16 * 1024 * 
 const NUM_HARDCODED_PEERSETS: usize = 1;
 
 /// Harcoded peerset id for syncing.
-const HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
+const _HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
 
 // Lock must always be taken in order declared here.
 pub struct Protocol {

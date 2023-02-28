@@ -1140,17 +1140,18 @@ impl NetworkBehaviour for Notifications {
     type OutEvent = NotificationsOut;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        // if the interface is already bound to a peer, use the peer protocol information
-        // otherwise use the protocol information set during node start-up
-        match &self.bound_peer {
-            Some(peer) => NotifsHandlerProto::new(
-                self.supported_protocols
-                    .get(peer)
-                    .expect("peer to exist")
-                    .clone(),
-            ),
-            None => NotifsHandlerProto::new(self.notif_protocols.clone()),
-        }
+        // // if the interface is already bound to a peer, use the peer protocol information
+        // // otherwise use the protocol information set during node start-up
+        // match &self.bound_peer {
+        //  // Some(peer) => NotifsHandlerProto::new(
+        //  //     self.supported_protocols
+        //  //         .get(peer)
+        //  //         .expect("peer to exist")
+        //  //         .clone(),
+        //  // ),
+        //  // None => NotifsHandlerProto::new(self.notif_protocols.clone()),
+        // }
+        NotifsHandlerProto::new(self.notif_protocols.clone())
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
