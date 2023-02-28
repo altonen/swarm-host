@@ -41,7 +41,7 @@ use sc_peerset::DropReason;
 use smallvec::SmallVec;
 use std::{
     cmp,
-    collections::{hash_map::Entry, VecDeque},
+    collections::{hash_map::Entry, HashMap, VecDeque},
     mem,
     pin::Pin,
     sync::Arc,
@@ -136,6 +136,18 @@ pub struct Notifications {
 
     /// Events to produce from `poll()`.
     events: VecDeque<NetworkBehaviourAction<NotificationsOut, NotifsHandlerProto>>,
+
+    /// Supported protocols of each peer.
+    ///
+    /// First element of the vector specifies the node that the interface is bound to.
+    /// Data in the storage is updated as more and more protocols are updated.
+    supported_protocols: HashMap<PeerId, Vec<handler::ProtocolConfig>>,
+
+    /// `PeerId` of the bound node.
+    bound_peer: Option<PeerId>,
+
+    /// Connected nodes and their received handshakes.
+    nodes: HashMap<sc_peerset::SetId, Vec<(PeerId, Vec<u8>)>>,
 }
 
 /// Configuration for a notifications protocol.
@@ -365,7 +377,7 @@ impl Notifications {
             .map(|cfg| handler::ProtocolConfig {
                 name: cfg.name,
                 fallback_names: cfg.fallback_names,
-                handshake: Arc::new(RwLock::new(cfg.handshake)),
+                handshake: Arc::new(RwLock::new(None)),
                 max_notification_size: cfg.max_notification_size,
             })
             .collect::<Vec<_>>();
@@ -381,6 +393,9 @@ impl Notifications {
             incoming: SmallVec::new(),
             next_incoming_index: sc_peerset::IncomingIndex(0),
             events: VecDeque::new(),
+            nodes: HashMap::new(),
+            supported_protocols: HashMap::new(),
+            bound_peer: None,
         }
     }
 
@@ -409,6 +424,23 @@ impl Notifications {
     pub fn disconnect_peer(&mut self, peer_id: &PeerId, set_id: sc_peerset::SetId) {
         trace!(target: "sub-libp2p", "External API => Disconnect({}, {:?})", peer_id, set_id);
         self.disconnect_peer_inner(peer_id, set_id, None);
+    }
+
+    fn update_protocol_handshake(&self, set: sc_peerset::SetId, peer: PeerId) {
+        // TODO: check if `peer` is the bound node
+        // TODO: if they are:
+        //         - set handshake to `None`
+        //         -
+        // if let Some(p) = self.notif_protocols.get_mut(usize::from(set)) {
+        //     *p.handshake.write() = handshake_message.into();
+        // } else {
+        //     log::error!(target: "sub-libp2p", "Unknown handshake change set: {:?}", set);
+        //     debug_assert!(false);
+        // }
+        // self.nodes
+        //     .get_mut(&set)
+        //     .expect("protocol to exist")
+        //     .retain(|(who, _)| who != &peer);
     }
 
     /// Inner implementation of `disconnect_peer`. If `ban` is `Some`, we ban the peer
@@ -467,8 +499,14 @@ impl Notifications {
                         peer_id: *peer_id,
                         set_id,
                     };
+
                     self.events
                         .push_back(NetworkBehaviourAction::GenerateEvent(event));
+                }
+
+                self.supported_protocols.remove(peer_id);
+                if std::matches!(self.bound_peer, Some(peer_id)) {
+                    self.bound_peer = None;
                 }
 
                 for (connec_id, connec_state) in connections
@@ -876,6 +914,9 @@ impl Notifications {
                         .push_back(NetworkBehaviourAction::GenerateEvent(event));
                 }
 
+                // TODO: fix handshake maybe
+                // self.update_protocol_handshake(set_id, peer_id);
+
                 for (connec_id, connec_state) in connections
                     .iter_mut()
                     .filter(|(_, s)| matches!(s, ConnectionState::Opening))
@@ -1099,7 +1140,17 @@ impl NetworkBehaviour for Notifications {
     type OutEvent = NotificationsOut;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        NotifsHandlerProto::new(self.notif_protocols.clone())
+        // if the interface is already bound to a peer, use the peer protocol information
+        // otherwise use the protocol information set during node start-up
+        match &self.bound_peer {
+            Some(peer) => NotifsHandlerProto::new(
+                self.supported_protocols
+                    .get(peer)
+                    .expect("peer to exist")
+                    .clone(),
+            ),
+            None => NotifsHandlerProto::new(self.notif_protocols.clone()),
+        }
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -1424,6 +1475,8 @@ impl NetworkBehaviour for Notifications {
                                         self.events.push_back(
                                             NetworkBehaviourAction::GenerateEvent(event),
                                         );
+                                        // TODO: fix handshake maybe
+                                        // self.update_protocol_handshake(set_id, peer_id);
                                     }
                                 }
                             } else {
@@ -1877,6 +1930,9 @@ impl NetworkBehaviour for Notifications {
                             let event = NotificationsOut::CustomProtocolClosed { peer_id, set_id };
                             self.events
                                 .push_back(NetworkBehaviourAction::GenerateEvent(event));
+
+                            // TODO: fix handshake maybe
+                            // self.update_protocol_handshake(set_id, peer_id);
                         }
                     }
 
@@ -1957,12 +2013,40 @@ impl NetworkBehaviour for Notifications {
                                 let event = NotificationsOut::CustomProtocolOpen {
                                     peer_id,
                                     set_id,
-                                    negotiated_fallback,
-                                    received_handshake,
+                                    negotiated_fallback: negotiated_fallback.clone(),
+                                    received_handshake: received_handshake.clone(),
                                     notifications_sink: notifications_sink.clone(),
                                 };
                                 self.events
                                     .push_back(NetworkBehaviourAction::GenerateEvent(event));
+
+                                // set bound node if one doesn't exist yet
+                                if let None = &self.bound_peer {
+                                    self.bound_peer = Some(peer_id);
+                                }
+
+                                let name: &ProtocolName =
+                                    &self.notif_protocols[usize::from(set_id)].name;
+                                let max_notification_size =
+                                    self.notif_protocols[usize::from(set_id)].max_notification_size;
+
+                                // update the peer protocol information to contain the negotiated protocol
+                                self.supported_protocols.entry(peer_id).or_default().insert(
+                                    set_id.into(),
+                                    handler::ProtocolConfig {
+                                        name: name.clone(),
+                                        fallback_names: negotiated_fallback
+                                            .map_or(vec![], |fallback| vec![fallback]),
+                                        handshake: Arc::new(RwLock::new(Some(received_handshake))),
+                                        max_notification_size,
+                                    },
+                                );
+
+                                log::info!(target: "sub-libp2p",
+                                    "new protocol opened for {peer_id}, all protocols: {:#?}, is bound {}?",
+                                    self.supported_protocols.get(&peer_id),
+                                    self.bound_peer == Some(peer_id),
+                                );
                             }
                             *connec_state = ConnectionState::Open(notifications_sink);
                         } else if let Some((_, connec_state)) =

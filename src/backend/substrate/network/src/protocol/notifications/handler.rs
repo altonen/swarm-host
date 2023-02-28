@@ -147,7 +147,7 @@ pub struct ProtocolConfig {
     /// Names of the protocol to use if the main one isn't available.
     pub fallback_names: Vec<ProtocolName>,
     /// Handshake of the protocol. The `RwLock` is locked every time a new substream is opened.
-    pub handshake: Arc<RwLock<Vec<u8>>>,
+    pub handshake: Arc<RwLock<Option<Vec<u8>>>>,
     /// Maximum allowed size for a notification.
     pub max_notification_size: u64,
 }
@@ -559,6 +559,20 @@ impl ConnectionHandler for NotifsHandler {
                             "`Opening`/`Open`: echo back the same handshake",
                         );
 
+                        let handshake_message = if let Some(handshake) =
+                            protocol_info.config.handshake.read().clone()
+                        {
+                            // TODO: save the other handshake somewhere so it can be used as a backup
+                            // in_substream_open.handshake.clone()
+                            handshake.clone()
+                        } else {
+                            *protocol_info.config.handshake.write() =
+                                Some(in_substream_open.handshake.clone());
+                            in_substream_open.handshake.clone()
+                        };
+
+                        todo!("not implemented properly");
+
                         // Create `handshake_message` on a separate line to be sure that the
                         // lock is released as soon as possible.
                         let handshake_message = in_substream_open.handshake;
@@ -659,36 +673,55 @@ impl ConnectionHandler for NotifsHandler {
                 let protocol_info = &mut self.protocols[protocol_index];
                 match &mut protocol_info.state {
                     State::Closed { pending_opening } => {
-                        if !*pending_opening {
-                            let proto = NotificationsOut::new(
-                                protocol_info.config.name.clone(),
-                                protocol_info.config.fallback_names.clone(),
-                                protocol_info.config.handshake.read().clone(),
-                                protocol_info.config.max_notification_size,
-                            );
-
-                            self.events_queue.push_back(
-                                ConnectionHandlerEvent::OutboundSubstreamRequest {
-                                    protocol: SubstreamProtocol::new(proto, protocol_index)
-                                        .with_timeout(OPEN_TIMEOUT),
-                                },
-                            );
-                        }
-
-                        protocol_info.state = State::Opening { in_substream: None };
+                        todo!("swarm-host cannot establish outbound connections (yet)");
+                        // if !*pending_opening {
+                        //     let proto = NotificationsOut::new(
+                        //         protocol_info.config.name.clone(),
+                        //         protocol_info.config.fallback_names.clone(),
+                        //         protocol_info.config.handshake.read().clone(),
+                        //         protocol_info.config.max_notification_size,
+                        //     );
+                        //     self.events_queue.push_back(
+                        //         ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        //             protocol: SubstreamProtocol::new(proto, protocol_index)
+                        //                 .with_timeout(OPEN_TIMEOUT),
+                        //         },
+                        //     );
+                        // }
+                        // protocol_info.state = State::Opening { in_substream: None };
                     }
                     State::OpenDesiredByRemote {
                         pending_opening,
                         in_substream,
                     } => {
-                        // let handshake_message = protocol_info.config.handshake.read().clone();
-                        let handshake_message = in_substream.received_handshake.clone();
+                        // if the interface is already bound the some node, use the handshake
+                        // of that node for substream negotiation.
+                        ///
+                        // if no node has has been bound yet, echo back the received handshake
+                        let received_handshake = in_substream.received_handshake.clone();
+                        let handshake_message = if let Some(handshake) =
+                            protocol_info.config.handshake.read().clone()
+                        {
+                            log::info!(
+                                target: "sub-libp2p",
+                                "`OpenDesiredByRemote`: use handshake of the bound peer",
+                            );
+
+                            handshake.clone()
+                        } else {
+                            log::info!(
+                                target: "sub-libp2p",
+                                "`OpenDesiredByRemote`: echo back the received handshake",
+                            );
+
+                            received_handshake.clone()
+                        };
 
                         if !*pending_opening {
                             let proto = NotificationsOut::new(
                                 protocol_info.config.name.clone(),
                                 protocol_info.config.fallback_names.clone(),
-                                handshake_message.clone(),
+                                received_handshake,
                                 protocol_info.config.max_notification_size,
                             );
 
@@ -699,11 +732,6 @@ impl ConnectionHandler for NotifsHandler {
                                 },
                             );
                         }
-
-                        log::info!(
-                            target: "sub-libp2p",
-                            "`OpenDesiredByRemote`: echo back the same handshake ",
-                        );
 
                         in_substream.send_handshake(handshake_message);
 
