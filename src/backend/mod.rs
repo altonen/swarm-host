@@ -51,7 +51,7 @@ pub trait PacketSink<T: NetworkBackend>: Debug {
     async fn send_request(
         &mut self,
         protocol: T::Protocol,
-        message: &T::Request,
+        message: T::Request,
     ) -> crate::Result<()>;
 
     /// Send response to peer.
@@ -59,7 +59,7 @@ pub trait PacketSink<T: NetworkBackend>: Debug {
     async fn send_response(
         &mut self,
         protocol: T::Protocol,
-        message: &T::Response,
+        message: T::Response,
     ) -> crate::Result<()>;
 }
 

@@ -69,7 +69,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     async fn send_request(
         &mut self,
         protocol: <SubstrateBackend as NetworkBackend>::Protocol,
-        message: &<SubstrateBackend as NetworkBackend>::Request,
+        message: <SubstrateBackend as NetworkBackend>::Request,
     ) -> crate::Result<()> {
         todo!();
     }
@@ -77,7 +77,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     async fn send_response(
         &mut self,
         protocol: <SubstrateBackend as NetworkBackend>::Protocol,
-        message: &<SubstrateBackend as NetworkBackend>::Response,
+        message: <SubstrateBackend as NetworkBackend>::Response,
     ) -> crate::Result<()> {
         todo!();
     }

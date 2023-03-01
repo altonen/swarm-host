@@ -23,6 +23,9 @@ pub type BlockId = u64;
 /// Unique message ID.
 pub type MessageId = u64;
 
+/// Unique request ID.
+pub type RequestId = u64;
+
 /// Transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Transaction {
@@ -181,6 +184,9 @@ pub enum ProtocolId {
     /// Peer exchange protocol.
     PeerExchange,
 
+    /// Block request
+    BlockRequest,
+
     /// Generic protocol.
     Generic,
 }
@@ -203,4 +209,34 @@ pub enum ConnectionType {
     /// Local node initiated the connection and must send a handshake
     /// message to remote node before doing anything else.
     Outbound,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Request {
+    /// Unique ID of the request.
+    id: RequestId,
+
+    /// Payload of the request.
+    payload: Vec<u8>,
+}
+
+impl Request {
+    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
+        Self { id, payload }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Response {
+    /// ID of the request.
+    id: RequestId,
+
+    /// Payload of the response.
+    payload: Vec<u8>,
+}
+
+impl Response {
+    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
+        Self { id, payload }
+    }
 }

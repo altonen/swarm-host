@@ -2,7 +2,7 @@
 
 use crate::{
     backend::{
-        mockchain::types::{InterfaceId, Message, PeerId, ProtocolId},
+        mockchain::types::{InterfaceId, Message, PeerId, ProtocolId, Request, Response},
         Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend,
     },
     ensure,
@@ -162,8 +162,8 @@ impl NetworkBackend for MockchainBackend {
     type InterfaceId = InterfaceId;
     type Protocol = ProtocolId;
     type Message = Message;
-    type Request = Message;
-    type Response = Message;
+    type Request = Request;
+    type Response = Response;
     type InterfaceHandle = MockchainHandle;
 
     /// Create new [`MockchainBackend`].
