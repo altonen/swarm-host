@@ -1,9 +1,10 @@
-use serde::{Deserialize, Serialize};
+use crate::backend::{mockchain::MockchainBackend, IdableRequest, NetworkBackend};
 
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
+use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
 use std::net::IpAddr;
@@ -226,6 +227,12 @@ impl Request {
     }
 }
 
+impl IdableRequest<MockchainBackend> for Request {
+    fn id(&self) -> &<MockchainBackend as NetworkBackend>::RequestId {
+        &self.id
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Response {
     /// ID of the request.
@@ -238,5 +245,13 @@ pub struct Response {
 impl Response {
     pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
+    }
+
+    pub fn id(&self) -> &RequestId {
+        &self.id
+    }
+
+    pub fn payload(&self) -> &Vec<u8> {
+        &self.payload
     }
 }

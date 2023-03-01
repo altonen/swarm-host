@@ -63,7 +63,7 @@ pub enum EdgeType {
 ///
 /// Returned either by the installed filter or by the default handler
 /// based on the interface type.
-enum RequestHandlingResult {
+pub enum RequestHandlingResult {
     /// Cause timeout for the request.
     Timeout,
 
@@ -79,7 +79,7 @@ enum RequestHandlingResult {
 ///
 /// Returned either by the installed filter or by the default handler
 /// based on the interface type.
-enum ResponseHandlingResult {
+pub enum ResponseHandlingResult {
     /// Cause timeout for the request.
     Timeout,
 
@@ -387,11 +387,17 @@ impl<T: NetworkBackend> MessageFilter<T> {
         interface: T::InterfaceId,
         peer: T::PeerId,
         protocol: &T::Protocol,
-        message: &T::Request,
-    ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
-        // TODO: what should this return?
-        // TODO: RequestHandlingResult?
-        Ok(vec![].into_iter())
+        request: &T::Request,
+    ) -> RequestHandlingResult {
+        tracing::trace!(
+            target: LOG_TARGET,
+            peer_id = ?peer,
+            interface_id = ?interface,
+            request = ?request,
+            "inject request",
+        );
+
+        RequestHandlingResult::Forward
     }
 
     //// Inject response into the [`MessageFilter`].
@@ -402,8 +408,16 @@ impl<T: NetworkBackend> MessageFilter<T> {
         interface: T::InterfaceId,
         peer: T::PeerId,
         protocol: &T::Protocol,
-        message: &T::Response,
-    ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
-        Ok(vec![].into_iter())
+        response: &T::Response,
+    ) -> ResponseHandlingResult {
+        tracing::trace!(
+            target: LOG_TARGET,
+            peer_id = ?peer,
+            interface_id = ?interface,
+            response = ?response,
+            "inject response",
+        );
+
+        ResponseHandlingResult::Forward
     }
 }

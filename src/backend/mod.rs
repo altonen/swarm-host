@@ -51,16 +51,20 @@ pub trait PacketSink<T: NetworkBackend>: Debug {
     async fn send_request(
         &mut self,
         protocol: T::Protocol,
-        message: T::Request,
-    ) -> crate::Result<()>;
+        response: T::Request,
+    ) -> crate::Result<T::RequestId>;
 
     /// Send response to peer.
-    /// TODO: add request ID?
     async fn send_response(
         &mut self,
-        protocol: T::Protocol,
-        message: T::Response,
+        request_id: T::RequestId,
+        response: T::Response,
     ) -> crate::Result<()>;
+}
+
+/// Trait allowing to query the request ID from opaque request.
+pub trait IdableRequest<T: NetworkBackend> {
+    fn id(&self) -> &T::RequestId;
 }
 
 /// Connection received an upgrade.
@@ -209,6 +213,9 @@ pub trait NetworkBackend {
     /// Unique ID identifying the interface.
     type InterfaceId: Serialize + DeserializeOwned + Debug + Copy + Clone + Eq + Hash + Send + Sync;
 
+    /// Unique ID identifying a request.
+    type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync;
+
     /// Unique ID identifying a protocol.
     type Protocol: Debug + Clone + Hash + PartialEq + Eq + Send + Sync;
 
@@ -216,7 +223,9 @@ pub trait NetworkBackend {
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;
 
     /// Type identifying a request understood by the backend.
-    type Request: Debug + Send + Sync;
+    type Request: Debug + Send + Sync + IdableRequest<Self>
+    where
+        Self: Sized;
 
     /// Type identifying a response understood by the backend.
     type Response: Debug + Clone + Send + Sync;

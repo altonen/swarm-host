@@ -71,8 +71,8 @@ impl PacketSink<MockchainBackend> for MockPacketSink {
     async fn send_request(
         &mut self,
         protocol: <MockchainBackend as NetworkBackend>::Protocol,
-        message: <MockchainBackend as NetworkBackend>::Request,
-    ) -> crate::Result<()> {
+        request: <MockchainBackend as NetworkBackend>::Request,
+    ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
         todo!();
     }
 
@@ -80,8 +80,8 @@ impl PacketSink<MockchainBackend> for MockPacketSink {
     /// TODO: add request ID?
     async fn send_response(
         &mut self,
-        protocol: <MockchainBackend as NetworkBackend>::Protocol,
-        message: <MockchainBackend as NetworkBackend>::Response,
+        request_id: <MockchainBackend as NetworkBackend>::RequestId,
+        response: <MockchainBackend as NetworkBackend>::Response,
     ) -> crate::Result<()> {
         todo!();
     }

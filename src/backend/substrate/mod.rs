@@ -1,7 +1,7 @@
 use crate::{
     backend::{
-        ConnectionUpgrade, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
-        NetworkBackend, PacketSink,
+        ConnectionUpgrade, IdableRequest, Interface, InterfaceEvent, InterfaceEventStream,
+        InterfaceType, NetworkBackend, PacketSink,
     },
     types::DEFAULT_CHANNEL_SIZE,
 };
@@ -33,6 +33,18 @@ use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 mod tests;
 
 const LOG_TARGET: &'static str = "substrate";
+
+#[derive(Debug)]
+pub struct SubstrateRequest {
+    id: usize,
+    payload: Vec<u8>,
+}
+
+impl IdableRequest<SubstrateBackend> for SubstrateRequest {
+    fn id(&self) -> &<SubstrateBackend as NetworkBackend>::RequestId {
+        &self.id
+    }
+}
 
 #[derive(Debug)]
 pub struct SubstratePacketSink {
@@ -70,13 +82,13 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
         &mut self,
         protocol: <SubstrateBackend as NetworkBackend>::Protocol,
         message: <SubstrateBackend as NetworkBackend>::Request,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<<SubstrateBackend as NetworkBackend>::RequestId> {
         todo!();
     }
 
     async fn send_response(
         &mut self,
-        protocol: <SubstrateBackend as NetworkBackend>::Protocol,
+        request_id: <SubstrateBackend as NetworkBackend>::RequestId,
         message: <SubstrateBackend as NetworkBackend>::Response,
     ) -> crate::Result<()> {
         todo!();
@@ -169,7 +181,11 @@ impl InterfaceHandle {
                                 peer,
                                 interface: interface_id,
                                 protocol,
-                                request,
+                                request: SubstrateRequest {
+                                    payload: request,
+                                    // TODO: get request id from substrate
+                                    id: 1337usize,
+                                }
                             })
                             .await
                             .expect("channel to stay open");
@@ -256,9 +272,10 @@ impl SubstrateBackend {
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;
     type InterfaceId = usize;
+    type RequestId = usize; // TODO: get from substrate
     type Protocol = ProtocolName;
     type Message = Vec<u8>;
-    type Request = Vec<u8>;
+    type Request = SubstrateRequest;
     type Response = Vec<u8>;
     type InterfaceHandle = InterfaceHandle;
 

@@ -39,8 +39,14 @@ pub enum Error {
     #[error("Filter does not exit")]
     FilterDoesntExist,
 
+    #[error("Request does not exist")]
+    RequestDoesntExist,
+
     #[error("Substrate error: `{0}`")]
     SubstrateError(sc_network_common::error::Error),
+
+    #[error("Custom error: `{0}`")]
+    Custom(String),
 }
 
 impl From<io::Error> for Error {
@@ -80,6 +86,7 @@ impl PartialEq for Error {
             (Error::LinkDoesntExist, Error::LinkDoesntExist) => true,
             (Error::FilterAlreadyExists, Error::FilterAlreadyExists) => true,
             (Error::FilterDoesntExist, Error::FilterDoesntExist) => true,
+            (Error::RequestDoesntExist, Error::RequestDoesntExist) => true,
             _ => false,
         }
     }

@@ -2,11 +2,12 @@
 
 use crate::{
     backend::{
-        ConnectionUpgrade, Interface, InterfaceEvent, InterfaceType, NetworkBackend, PacketSink,
+        ConnectionUpgrade, IdableRequest, Interface, InterfaceEvent, InterfaceType, NetworkBackend,
+        PacketSink,
     },
     ensure,
     error::Error,
-    filter::{FilterType, LinkType, MessageFilter},
+    filter::{FilterType, LinkType, MessageFilter, RequestHandlingResult, ResponseHandlingResult},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -25,7 +26,9 @@ use std::{
     pin::Pin,
 };
 
+// TODO: remove `InterfaceId` creation from backend and assign id for it in the overseer
 // TODO: get filter type from rpc
+// TODO: use spans when function calls `tracing::` multiple times
 // TODO: all links should not ben bidrectional
 // TODO: split code into functions
 // TODO: move tests to separate direcotry
@@ -35,6 +38,44 @@ use std::{
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
 
+/// Forwarded request.
+///
+/// Forwarded requests are used with noded-backed interfaces
+/// where the [`Overseer`] forwards requests received from other
+/// peer to the bound peer. When the response from bound peer is
+/// received, the response is forwarded back to the peer where the
+/// request originated from, creating the illusion that the interface
+/// responded to the request by itself.
+///
+/// This is done because the interface doesn't keep any storage by itself,
+/// and doesn't, for example, use syncing so it's actual blockchain functionality
+/// has to be backed by some other peer.
+struct ForwardedRequest<T: NetworkBackend> {
+    /// Interface where the request originated from.
+    source_interface: T::InterfaceId,
+
+    /// Peer who sent the original request.
+    source_peer: T::PeerId,
+
+    /// Original request ID.
+    request_id: T::RequestId,
+}
+
+impl<T: NetworkBackend> ForwardedRequest<T> {
+    /// Create new [`ForwardedRequest`].
+    pub fn new(
+        source_interface: T::InterfaceId,
+        source_peer: T::PeerId,
+        request_id: T::RequestId,
+    ) -> Self {
+        Self {
+            source_interface,
+            source_peer,
+            request_id,
+        }
+    }
+}
+
 /// Peer-related information.
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
@@ -42,6 +83,9 @@ struct PeerInfo<T: NetworkBackend> {
 
     /// Sink for sending messages to peer.
     sink: Box<dyn PacketSink<T> + Send>,
+
+    /// Pending forwarded requests.
+    requests: HashMap<T::RequestId, ForwardedRequest<T>>,
 }
 
 /// Interface information.
@@ -196,37 +240,13 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 },
                 event = self.event_streams.next() => match event {
                     Some(InterfaceEvent::PeerConnected { peer, interface, protocols, sink }) => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface_id = ?interface,
-                            peer_id = ?peer,
-                            "peer connected"
-                        );
-
-                        // TODO: more comprehensive error handling
-                        match self
-                            .filter
-                            .register_peer(interface, peer, FilterType::FullBypass) {
-                                Err(Error::PeerAlreadyExists) => {
-                                    tracing::warn!(
-                                        target: LOG_TARGET,
-                                        interface_id = ?interface,
-                                        peer_id = ?peer,
-                                        "peer already exists in the filter",
-                                    );
-                                }
-                                Ok(_) => {},
-                                Err(err) => panic!("unrecoverable error occurred: {err:?}"),
-                            }
-
-                        match self.interfaces.get_mut(&interface) {
-                            Some(info) => {
-                                info.peers.insert(peer,PeerInfo {
-                                protocols: HashSet::from_iter(protocols.into_iter()),
-                                sink,
-                            });
-                            },
-                            None => {}
+                        if let Err(err) = self.add_peer(interface, peer, protocols, sink) {
+                           tracing::warn!(
+                                target: LOG_TARGET,
+                                interface_id = ?interface,
+                                peer_id = ?peer,
+                                "peer already exists in the filter",
+                            );
                         }
                     }
                     Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
@@ -324,7 +344,13 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                         }
                     },
                     Some(InterfaceEvent::ResponseReceived { interface, peer, protocol, response }) => {
-                        if let Err(err) = self.inject_response(interface, peer, protocol, response).await {
+                        // TODO:
+                        let request_id = todo!();
+
+                        if let Err(err) = self
+                            .inject_response(interface, peer, protocol, request_id, response)
+                            .await
+                        {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
@@ -362,6 +388,53 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
         }
     }
 
+    fn add_peer(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocols: Vec<T::Protocol>,
+        sink: Box<dyn PacketSink<T> + Send>,
+    ) -> crate::Result<()> {
+        tracing::debug!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            peer_id = ?peer,
+            "peer connected"
+        );
+
+        // TODO: more comprehensive error handling
+        match self
+            .filter
+            .register_peer(interface, peer, FilterType::FullBypass)
+        {
+            Err(Error::PeerAlreadyExists) => {
+                tracing::warn!(
+                    target: LOG_TARGET,
+                    interface_id = ?interface,
+                    peer_id = ?peer,
+                    "peer already exists in the filter",
+                );
+            }
+            Ok(_) => {}
+            Err(err) => panic!("unrecoverable error occurred: {err:?}"),
+        }
+
+        self.interfaces
+            .get_mut(&interface)
+            .expect("interface to exist")
+            .peers
+            .insert(
+                peer,
+                PeerInfo {
+                    protocols: HashSet::from_iter(protocols.into_iter()),
+                    requests: HashMap::new(),
+                    sink,
+                },
+            );
+
+        Ok(())
+    }
+
     /// Bind node to interface.
     fn bind_node(&mut self, interface: T::InterfaceId, peer: T::PeerId) -> crate::Result<()> {
         tracing::trace!(
@@ -397,19 +470,57 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             "handle request",
         );
 
-        for (interface, peer) in self
-            .filter
-            .inject_request(interface, peer, &protocol, &request)?
-        {
-            self.interfaces
+        // TODO: zzz
+        let (bound_peer, mut bound_peer_info) = {
+            let bound_peer = self
+                .interfaces
+                .get_mut(&interface)
+                .expect("interface to exist")
+                .bound_peer
+                .expect("bound peer to exist");
+
+            let info = self
+                .interfaces
                 .get_mut(&interface)
                 .expect("interface to exist")
                 .peers
-                .get_mut(&peer)
-                .ok_or(Error::PeerDoesntExist)?
-                .sink
-                .send_request(protocol.clone(), &request)
-                .await?;
+                .get_mut(&bound_peer)
+                .expect("bound peer to exist");
+
+            (bound_peer, info)
+        };
+
+        if peer == bound_peer {
+            return Err(Error::Custom(format!(
+                "Bound peer sent a request: {bound_peer:?}"
+            )));
+        }
+
+        match self
+            .filter
+            .inject_request(interface, peer, &protocol, &request)
+        {
+            RequestHandlingResult::Timeout => todo!("timeouts not implemented"),
+            RequestHandlingResult::Reject => todo!("rejects not implemented"),
+            RequestHandlingResult::Forward => {
+                tracing::trace!(
+                    target: LOG_TARGET,
+                    interface_id = ?interface,
+                    peer_id = ?peer,
+                    protocol = ?protocol,
+                    "inject request",
+                );
+
+                let inbound_request_id = *request.id();
+                let outbound_request_id =
+                    bound_peer_info.sink.send_request(protocol, request).await?;
+
+                // TODO: save (interface, peer, inbound_request_id)
+                bound_peer_info.requests.insert(
+                    outbound_request_id,
+                    ForwardedRequest::new(interface, peer, inbound_request_id),
+                );
+            }
         }
 
         Ok(())
@@ -421,6 +532,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
         interface: T::InterfaceId,
         peer: T::PeerId,
         protocol: T::Protocol,
+        request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<()> {
         tracing::trace!(
@@ -431,22 +543,54 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             "inject response",
         );
 
-        for (interface, peer) in self
+        match self
             .filter
-            .inject_response(interface, peer, &protocol, &response)?
+            .inject_response(interface, peer, &protocol, &response)
         {
-            self.interfaces
-                .get_mut(&interface)
-                .expect("interface to exist")
-                .peers
-                .get_mut(&peer)
-                .ok_or(Error::PeerDoesntExist)?
-                .sink
-                .send_response(protocol.clone(), &response)
-                .await?;
-        }
+            ResponseHandlingResult::Timeout => todo!("timeouts not implemented"),
+            ResponseHandlingResult::Reject => todo!("rejects not implemented"),
+            ResponseHandlingResult::Forward => {
+                tracing::trace!(
+                    target: LOG_TARGET,
+                    interface_id = ?interface,
+                    peer_id = ?peer,
+                    protocol = ?protocol,
+                    "inject response",
+                );
 
-        Ok(())
+                let peer_info = self
+                    .interfaces
+                    .get_mut(&interface)
+                    .expect("interface to exist")
+                    .peers
+                    .get_mut(&peer)
+                    .ok_or(Error::PeerDoesntExist)?;
+
+                match peer_info.requests.remove(&request_id) {
+                    None => {
+                        tracing::warn!(
+                            target: LOG_TARGET,
+                            interface_id = ?interface,
+                            peer_id = ?peer,
+                            request_id = ?request_id,
+                            "forwarded request does not exist",
+                        );
+                        Err(Error::RequestDoesntExist)
+                    }
+                    Some(forwarded_request) => {
+                        self.interfaces
+                            .get_mut(&forwarded_request.source_interface)
+                            .ok_or(Error::InterfaceDoesntExist)?
+                            .peers
+                            .get_mut(&forwarded_request.source_peer)
+                            .ok_or(Error::PeerDoesntExist)?
+                            .sink
+                            .send_response(forwarded_request.request_id, response)
+                            .await
+                    }
+                }
+            }
+        }
     }
 
     /// Apply connection upgrade for an active peer.
@@ -488,7 +632,10 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::mockchain::{types::ProtocolId, MockchainBackend, MockchainHandle};
+    use crate::backend::mockchain::{
+        types::{ProtocolId, Request, Response},
+        MockchainBackend, MockchainHandle,
+    };
     use rand::Rng;
 
     // TODO: use `mockall`
@@ -533,10 +680,38 @@ mod tests {
 
     // TODO: use `mockall`
     #[derive(Debug)]
-    struct DummySink;
+    struct DummySink<T: NetworkBackend> {
+        msg_tx: mpsc::Sender<T::Message>,
+        req_tx: mpsc::Sender<T::Request>,
+        resp_tx: mpsc::Sender<T::Response>,
+    }
+
+    impl DummySink<MockchainBackend> {
+        pub fn new() -> (
+            Self,
+            mpsc::Receiver<<MockchainBackend as NetworkBackend>::Message>,
+            mpsc::Receiver<<MockchainBackend as NetworkBackend>::Request>,
+            mpsc::Receiver<<MockchainBackend as NetworkBackend>::Response>,
+        ) {
+            let (msg_tx, msg_rx) = mpsc::channel(64);
+            let (req_tx, req_rx) = mpsc::channel(64);
+            let (resp_tx, resp_rx) = mpsc::channel(64);
+
+            (
+                Self {
+                    msg_tx,
+                    req_tx,
+                    resp_tx,
+                },
+                msg_rx,
+                req_rx,
+                resp_rx,
+            )
+        }
+    }
 
     #[async_trait::async_trait]
-    impl PacketSink<MockchainBackend> for DummySink {
+    impl PacketSink<MockchainBackend> for DummySink<MockchainBackend> {
         async fn send_packet(
             &mut self,
             protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
@@ -548,17 +723,19 @@ mod tests {
         async fn send_request(
             &mut self,
             protocol: <MockchainBackend as NetworkBackend>::Protocol,
-            message: &<MockchainBackend as NetworkBackend>::Request,
-        ) -> crate::Result<()> {
-            todo!();
+            request: <MockchainBackend as NetworkBackend>::Request,
+        ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
+            self.req_tx.send(request).await.unwrap();
+            Ok(0u64)
         }
 
         async fn send_response(
             &mut self,
-            protocol: <MockchainBackend as NetworkBackend>::Protocol,
-            message: &<MockchainBackend as NetworkBackend>::Response,
+            request_id: <MockchainBackend as NetworkBackend>::RequestId,
+            response: <MockchainBackend as NetworkBackend>::Response,
         ) -> crate::Result<()> {
-            todo!();
+            self.resp_tx.send(response).await.unwrap();
+            Ok(())
         }
     }
 
@@ -582,6 +759,8 @@ mod tests {
                 .0,
             ),
         );
+
+        let (sink, _, _, _) = DummySink::new();
         overseer
             .interfaces
             .get_mut(&interface)
@@ -591,7 +770,8 @@ mod tests {
                 peer,
                 PeerInfo {
                     protocols: HashSet::from([ProtocolId::Transaction, ProtocolId::Block]),
-                    sink: Box::new(DummySink),
+                    requests: HashMap::new(),
+                    sink: Box::new(sink),
                 },
             );
 
@@ -651,6 +831,109 @@ mod tests {
                 .unwrap()
                 .protocols,
             HashSet::from([ProtocolId::Block, ProtocolId::Generic]),
+        );
+    }
+
+    #[tokio::test]
+    async fn request_forwarded_to_bound_node() {
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+
+        let mut rng = rand::thread_rng();
+        let (mut overseer, _) = Overseer::<MockchainBackend>::new();
+        let interface = rng.gen();
+        let peer1 = rng.gen();
+        let peer2 = rng.gen();
+        let peer3 = rng.gen();
+
+        overseer.interfaces.insert(
+            interface,
+            InterfaceInfo::<MockchainBackend>::new(
+                MockchainHandle::new(
+                    interface,
+                    "[::1]:0".parse().unwrap(),
+                    InterfaceType::Masquerade,
+                )
+                .await
+                .unwrap()
+                .0,
+            ),
+        );
+        overseer
+            .filter
+            .register_interface(interface, FilterType::FullBypass)
+            .expect("unique interface");
+
+        let (sink1, _, mut req_rx1, _) = DummySink::new();
+        let (sink2, _, _, _) = DummySink::new();
+        let (sink3, _, _, mut resp_rx3) = DummySink::new();
+
+        overseer
+            .add_peer(
+                interface,
+                peer1,
+                vec![ProtocolId::Transaction, ProtocolId::Block],
+                Box::new(sink1),
+            )
+            .unwrap();
+        overseer
+            .add_peer(
+                interface,
+                peer2,
+                vec![ProtocolId::Transaction, ProtocolId::Block],
+                Box::new(sink2),
+            )
+            .unwrap();
+        overseer
+            .add_peer(
+                interface,
+                peer3,
+                vec![ProtocolId::Transaction, ProtocolId::Block],
+                Box::new(sink3),
+            )
+            .unwrap();
+        overseer.bind_node(interface, peer1).unwrap();
+
+        // receive request from `peer3` and verify it's forwarded to `peer1`
+        overseer
+            .inject_request(
+                interface,
+                peer3,
+                ProtocolId::Block,
+                Request::new(0u64, vec![1, 2, 3, 4]),
+            )
+            .await
+            .unwrap();
+        assert_eq!(req_rx1.try_recv(), Ok(Request::new(0u64, vec![1, 2, 3, 4])));
+
+        // inject response to request from `peer1` and verify that it is forwarded to `peer3`
+        let request_id = overseer
+            .interfaces
+            .get(&interface)
+            .unwrap()
+            .peers
+            .get(&peer1)
+            .unwrap()
+            .requests
+            .iter()
+            .next()
+            .unwrap()
+            .1
+            .request_id;
+
+        overseer
+            .inject_response(
+                interface,
+                peer1,
+                ProtocolId::Block,
+                request_id,
+                Response::new(0u64, vec![5, 6, 7, 8]),
+            )
+            .await;
+        assert_eq!(
+            resp_rx3.try_recv(),
+            Ok(Response::new(0u64, vec![5, 6, 7, 8]))
         );
     }
 }
