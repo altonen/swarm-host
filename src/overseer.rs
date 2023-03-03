@@ -343,10 +343,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             );
                         }
                     },
-                    Some(InterfaceEvent::ResponseReceived { interface, peer, protocol, response }) => {
-                        // TODO:
-                        let request_id = todo!();
-
+                    Some(InterfaceEvent::ResponseReceived { interface, peer, protocol, request_id, response }) => {
                         if let Err(err) = self
                             .inject_response(interface, peer, protocol, request_id, response)
                             .await
@@ -372,11 +369,21 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                         }
                     },
                     Some(InterfaceEvent::InterfaceBound { interface, peer }) => {
-                        if let Err(err) = self.bind_node(interface, peer) {
+                        if let Err(err) = self.bind_interface(interface, peer) {
                             tracing::trace!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
                                 peer_id = ?peer,
+                                error = ?err,
+                                "failed to bind node to interface",
+                            );
+                        }
+                    }
+                    Some(InterfaceEvent::InterfaceUnbound { interface }) => {
+                        if let Err(err) = self.unbind_interface(interface) {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                interface_id = ?interface,
                                 error = ?err,
                                 "failed to bind node to interface",
                             );
@@ -436,7 +443,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
     }
 
     /// Bind node to interface.
-    fn bind_node(&mut self, interface: T::InterfaceId, peer: T::PeerId) -> crate::Result<()> {
+    fn bind_interface(&mut self, interface: T::InterfaceId, peer: T::PeerId) -> crate::Result<()> {
         tracing::trace!(
             target: LOG_TARGET,
             interface_id = ?interface,
@@ -451,6 +458,22 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
         ensure!(info.peers.contains_key(&peer), Error::PeerDoesntExist);
 
         info.bound_peer = Some(peer);
+        Ok(())
+    }
+
+    /// Unbind interface and release all resources.
+    fn unbind_interface(&mut self, interface: T::InterfaceId) -> crate::Result<()> {
+        tracing::trace!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            "unbind interface",
+        );
+
+        // TODO: release all resources related to interface binding
+        self.interfaces
+            .get_mut(&interface)
+            .ok_or(Error::InterfaceDoesntExist)?
+            .bound_peer = None;
         Ok(())
     }
 
@@ -893,7 +916,7 @@ mod tests {
                 Box::new(sink3),
             )
             .unwrap();
-        overseer.bind_node(interface, peer1).unwrap();
+        overseer.bind_interface(interface, peer1).unwrap();
 
         // receive request from `peer3` and verify it's forwarded to `peer1`
         overseer

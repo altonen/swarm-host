@@ -143,9 +143,6 @@ pub struct Notifications {
     /// Data in the storage is updated as more and more protocols are updated.
     supported_protocols: HashMap<PeerId, Vec<handler::ProtocolConfig>>,
 
-    /// `PeerId` of the bound node.
-    bound_peer: Option<PeerId>,
-
     /// Connected nodes and their received handshakes.
     nodes: HashMap<sc_peerset::SetId, Vec<(PeerId, Vec<u8>)>>,
 }
@@ -395,7 +392,6 @@ impl Notifications {
             events: VecDeque::new(),
             nodes: HashMap::new(),
             supported_protocols: HashMap::new(),
-            bound_peer: None,
         }
     }
 
@@ -495,18 +491,12 @@ impl Notifications {
                     .any(|(_, s)| matches!(s, ConnectionState::Open(_)))
                 {
                     trace!(target: "sub-libp2p", "External API <= Closed({}, {:?})", peer_id, set_id);
-                    let event = NotificationsOut::CustomProtocolClosed {
-                        peer_id: *peer_id,
-                        set_id,
-                    };
-
-                    self.events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(event));
-                }
-
-                self.supported_protocols.remove(peer_id);
-                if std::matches!(self.bound_peer, Some(peer_id)) {
-                    self.bound_peer = None;
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
+                        NotificationsOut::CustomProtocolClosed {
+                            peer_id: *peer_id,
+                            set_id,
+                        },
+                    ));
                 }
 
                 for (connec_id, connec_state) in connections
@@ -914,9 +904,6 @@ impl Notifications {
                         .push_back(NetworkBehaviourAction::GenerateEvent(event));
                 }
 
-                // TODO: fix handshake maybe
-                // self.update_protocol_handshake(set_id, peer_id);
-
                 for (connec_id, connec_state) in connections
                     .iter_mut()
                     .filter(|(_, s)| matches!(s, ConnectionState::Opening))
@@ -1140,6 +1127,7 @@ impl NetworkBehaviour for Notifications {
     type OutEvent = NotificationsOut;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
+        // TODO: uncomment this maybe?
         // // if the interface is already bound to a peer, use the peer protocol information
         // // otherwise use the protocol information set during node start-up
         // match &self.bound_peer {
@@ -1476,8 +1464,6 @@ impl NetworkBehaviour for Notifications {
                                         self.events.push_back(
                                             NetworkBehaviourAction::GenerateEvent(event),
                                         );
-                                        // TODO: fix handshake maybe
-                                        // self.update_protocol_handshake(set_id, peer_id);
                                     }
                                 }
                             } else {
@@ -1932,6 +1918,7 @@ impl NetworkBehaviour for Notifications {
                             self.events
                                 .push_back(NetworkBehaviourAction::GenerateEvent(event));
 
+                            panic!("what should happen here");
                             // TODO: fix handshake maybe
                             // self.update_protocol_handshake(set_id, peer_id);
                         }
@@ -2021,33 +2008,28 @@ impl NetworkBehaviour for Notifications {
                                 self.events
                                     .push_back(NetworkBehaviourAction::GenerateEvent(event));
 
-                                // set bound node if one doesn't exist yet
-                                if let None = &self.bound_peer {
-                                    self.bound_peer = Some(peer_id);
-                                }
-
-                                let name: &ProtocolName =
-                                    &self.notif_protocols[usize::from(set_id)].name;
-                                let max_notification_size =
-                                    self.notif_protocols[usize::from(set_id)].max_notification_size;
-
-                                // update the peer protocol information to contain the negotiated protocol
-                                self.supported_protocols.entry(peer_id).or_default().insert(
-                                    set_id.into(),
-                                    handler::ProtocolConfig {
-                                        name: name.clone(),
-                                        fallback_names: negotiated_fallback
-                                            .map_or(vec![], |fallback| vec![fallback]),
-                                        handshake: Arc::new(RwLock::new(Some(received_handshake))),
-                                        max_notification_size,
-                                    },
-                                );
-
-                                log::info!(target: "sub-libp2p",
-                                    "new protocol opened for {peer_id}, all protocols: {:#?}, is bound {}?",
-                                    self.supported_protocols.get(&peer_id),
-                                    self.bound_peer == Some(peer_id),
-                                );
+                                // TODO: enable this maybe
+                                // self.supported_protocols.remove(&peer_id);
+                                // let name: &ProtocolName =
+                                //     &self.notif_protocols[usize::from(set_id)].name;
+                                // let max_notification_size =
+                                //     self.notif_protocols[usize::from(set_id)].max_notification_size;
+                                // // update the peer protocol information to contain the negotiated protocol
+                                // self.supported_protocols.entry(peer_id).or_default().insert(
+                                //     set_id.into(),
+                                //     handler::ProtocolConfig {
+                                //         name: name.clone(),
+                                //         fallback_names: negotiated_fallback
+                                //             .map_or(vec![], |fallback| vec![fallback]),
+                                //         handshake: Arc::new(RwLock::new(Some(received_handshake))),
+                                //         max_notification_size,
+                                //     },
+                                // );
+                                // log::info!(target: "sub-libp2p",
+                                //     "new protocol opened for {peer_id}, all protocols: {:#?}, is bound {}?",
+                                //     self.supported_protocols.get(&peer_id),
+                                //     self.bound_peer == Some(peer_id),
+                                // );
                             }
                             *connec_state = ConnectionState::Open(notifications_sink);
                         } else if let Some((_, connec_state)) =

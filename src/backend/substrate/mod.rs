@@ -7,7 +7,7 @@ use crate::{
 };
 
 use futures::{channel, FutureExt, StreamExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{instrument::WithSubscriber, Subscriber};
 
@@ -26,8 +26,8 @@ use sc_network_common::{
 
 use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 
-// TODO: differentiate between notifications and requests?
-// TODO: new protocol opened -> apply upgrade for packetsink?
+// TODO: this code needs some heavy refactoring
+// TODO: convert `sc-network` into a module and integrate more tightly with this code
 
 #[cfg(test)]
 mod tests;
@@ -81,9 +81,22 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     async fn send_request(
         &mut self,
         protocol: <SubstrateBackend as NetworkBackend>::Protocol,
-        message: <SubstrateBackend as NetworkBackend>::Request,
+        request: <SubstrateBackend as NetworkBackend>::Request,
     ) -> crate::Result<<SubstrateBackend as NetworkBackend>::RequestId> {
-        todo!();
+        let (tx, rx) = oneshot::channel();
+
+        self.tx
+            .send(Command::SendRequest {
+                peer: self.peer,
+                protocol,
+                request: todo!(),
+                tx,
+            })
+            .await
+            .expect("channel to stay open");
+
+        // TODO: is this such a good idea?
+        Ok(rx.await.expect("channel to stay open"))
     }
 
     async fn send_response(
@@ -176,26 +189,41 @@ impl InterfaceHandle {
                             .await
                             .expect("channel to stay open");
                         }
-                        SubstrateNetworkEvent::RequestReceived { peer, protocol, request } => {
+                        SubstrateNetworkEvent::RequestReceived { peer, protocol, request_id, request } => {
                             tx.send(InterfaceEvent::RequestReceived {
                                 peer,
                                 interface: interface_id,
                                 protocol,
                                 request: SubstrateRequest {
                                     payload: request,
-                                    // TODO: get request id from substrate
-                                    id: 1337usize,
+                                    id: request_id,
                                 }
                             })
                             .await
                             .expect("channel to stay open");
                         }
-                        SubstrateNetworkEvent::ResponseReceived {peer, protocol, response } => {
+                        SubstrateNetworkEvent::ResponseReceived {peer, protocol, request_id, response } => {
                             tx.send(InterfaceEvent::ResponseReceived {
                                 peer,
                                 interface: interface_id,
                                 protocol,
+                                request_id,
                                 response,
+                            })
+                            .await
+                            .expect("channel to stay open");
+                        }
+                        SubstrateNetworkEvent::InterfaceBound { peer } => {
+                            tx.send(InterfaceEvent::InterfaceBound {
+                                interface: interface_id,
+                                peer
+                            })
+                            .await
+                            .expect("channel to stay open");
+                        }
+                        SubstrateNetworkEvent::InterfaceUnbound => {
+                            tx.send(InterfaceEvent::InterfaceUnbound {
+                                interface: interface_id,
                             })
                             .await
                             .expect("channel to stay open");
@@ -272,7 +300,7 @@ impl SubstrateBackend {
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;
     type InterfaceId = usize;
-    type RequestId = usize; // TODO: get from substrate
+    type RequestId = usize; // TODO: get from substrate eventually, requires refactoring
     type Protocol = ProtocolName;
     type Message = Vec<u8>;
     type Request = SubstrateRequest;

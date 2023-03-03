@@ -150,11 +150,11 @@ pub enum BehaviourOut {
         messages: Vec<(ProtocolName, Bytes)>,
     },
 
-    /// Now connected to a new peer for syncing purposes.
-    SyncConnected(PeerId),
+    /// Interface has been bound to a peer.
+    InterfaceBound { peer: PeerId },
 
-    /// No longer connected to a peer for syncing purposes.
-    SyncDisconnected(PeerId),
+    /// Interface unbound.
+    InterfaceUnbound,
 
     /// We have obtained identity information from a peer, including the addresses it is listening
     /// on.
@@ -322,6 +322,8 @@ impl From<CustomMessageOutcome> for BehaviourOut {
             CustomMessageOutcome::NotificationsReceived { remote, messages } => {
                 BehaviourOut::NotificationsReceived { remote, messages }
             }
+            CustomMessageOutcome::InterfaceBound { peer } => BehaviourOut::InterfaceBound { peer },
+            CustomMessageOutcome::InterfaceUnbound => BehaviourOut::InterfaceUnbound,
         }
     }
 }

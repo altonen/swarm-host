@@ -224,6 +224,10 @@ pub enum CustomMessageOutcome {
         remote: PeerId,
         messages: Vec<(ProtocolName, Bytes)>,
     },
+    /// Interface bound to a peer.
+    InterfaceBound { peer: PeerId },
+    /// Interface unbound.
+    InterfaceUnbound,
 }
 
 impl NetworkBehaviour for Protocol {
@@ -365,6 +369,10 @@ impl NetworkBehaviour for Protocol {
                     )],
                 }
             }
+            NotificationsOut::InterfaceBound { peer } => {
+                CustomMessageOutcome::InterfaceBound { peer }
+            }
+            NotificationsOut::InterfaceUnbound => CustomMessageOutcome::InterfaceUnbound,
         };
 
         Poll::Ready(NetworkBehaviourAction::GenerateEvent(outcome))

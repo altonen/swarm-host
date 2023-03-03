@@ -165,6 +165,9 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Protocol.
         protocol: T::Protocol,
 
+        /// Request ID.
+        request_id: T::RequestId,
+
         /// Received message.
         response: T::Response,
     },
@@ -178,6 +181,12 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 
         /// Peer who sent the message.
         peer: T::PeerId,
+    },
+
+    /// Interface doesn't have any node backing it.
+    InterfaceUnbound {
+        /// Associated interface.
+        interface: T::InterfaceId,
     },
 }
 
