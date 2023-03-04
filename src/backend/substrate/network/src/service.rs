@@ -19,6 +19,9 @@
 #![allow(unused)]
 
 // TODO: this code is absolutely hideous, fix it
+// TODO: add bunch of more traces
+// TODO: start using `tracing`
+// TODO: convert to a crate
 
 use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
@@ -134,8 +137,9 @@ pub enum Command {
         request: Vec<u8>,
         tx: oneshot::Sender<usize>,
     },
-    // TODO: figure out what to do with this?
     SendResponse {
+        peer: PeerId,
+        request_id: usize,
         response: Vec<u8>,
     },
 }
@@ -553,6 +557,11 @@ impl SubstrateNetwork {
                 let request_id = self.next_request_id();
                 let (res_tx, res_rx) = futures::channel::oneshot::channel();
 
+                log::debug!(
+                    target: "sub-libp2p",
+                    "send request, peer {peer}, protocol {protocol:?} request id {request_id}"
+                );
+
                 self.swarm.behaviour_mut().send_request(
                     &peer,
                     &protocol,
@@ -565,9 +574,25 @@ impl SubstrateNetwork {
                     (peer, protocol, request_id, res_rx.await)
                 }));
             }
-            Command::SendResponse { response } => {
-                // TODO: find response channel from `pending_requests`
-                todo!();
+            Command::SendResponse {
+                peer,
+                request_id,
+                response,
+            } => {
+                log::debug!(target: "sub-libp2p", "send response, peer {peer}, request id {request_id}");
+
+                match self.pending_requests.remove(&request_id) {
+                    Some(pending_response) => {
+                        pending_response.send(OutgoingResponse {
+                            result: Ok(response),
+                            reputation_changes: vec![],
+                            sent_feedback: None,
+                        });
+                    }
+                    None => {
+                        log::error!("response channel for request {request_id} no longer exists")
+                    }
+                }
             }
         }
     }
@@ -675,26 +700,13 @@ impl SubstrateNetwork {
                         .expect("channel to stay open");
                 }
             }
-            BehaviourOut::InterfaceBound { peer } => {
-                log::debug!(target: "sub-libp2p", "interface bound to peer {peer}");
-                self.event_tx
-                    .send(SubstrateNetworkEvent::InterfaceBound { peer })
-                    .await
-                    .expect("channel to stay open");
-            }
-            BehaviourOut::InterfaceUnbound => {
-                log::debug!(target: "sub-libp2p", "interface unbound");
-                self.event_tx
-                    .send(SubstrateNetworkEvent::InterfaceUnbound)
-                    .await
-                    .expect("channel to stay open");
-            }
             _ => {}
         }
     }
 
     /// Run the event loop of substrate network
     pub async fn run(mut self) {
+        // TODO: ...
         self.pending_responses.push(Box::pin(async move {
             (
                 PeerId::random(),
@@ -711,12 +723,14 @@ impl SubstrateNetwork {
             tokio::select! {
                 event = self.map.next() => match event {
                     Some((protocol, request)) => {
+                        let request_id = self.next_request_id();
                         log::warn!(
                             target: "sub-libp2p",
-                            "received request over protocol {protocol}",
+                            "request received peer {}, protocol {:?}, {request_id}",
+                            request.peer,
+                            protocol,
                         );
 
-                        let request_id = self.next_request_id();
                         self.event_tx
                             .send(SubstrateNetworkEvent::RequestReceived {
                                 peer: request.peer,

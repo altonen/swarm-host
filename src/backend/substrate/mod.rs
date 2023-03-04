@@ -89,22 +89,31 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
             .send(Command::SendRequest {
                 peer: self.peer,
                 protocol,
-                request: todo!(),
+                request: request.payload,
                 tx,
             })
             .await
             .expect("channel to stay open");
 
-        // TODO: is this such a good idea?
         Ok(rx.await.expect("channel to stay open"))
     }
 
     async fn send_response(
         &mut self,
         request_id: <SubstrateBackend as NetworkBackend>::RequestId,
-        message: <SubstrateBackend as NetworkBackend>::Response,
+        response: <SubstrateBackend as NetworkBackend>::Response,
     ) -> crate::Result<()> {
-        todo!();
+        self.tx
+            .send(Command::SendResponse {
+                peer: self.peer,
+                request_id,
+                response,
+            })
+            .await
+            .expect("channel to stay open");
+
+        // TODO: return error in case sending the response failed?
+        Ok(())
     }
 }
 

@@ -150,12 +150,6 @@ pub enum BehaviourOut {
         messages: Vec<(ProtocolName, Bytes)>,
     },
 
-    /// Interface has been bound to a peer.
-    InterfaceBound { peer: PeerId },
-
-    /// Interface unbound.
-    InterfaceUnbound,
-
     /// We have obtained identity information from a peer, including the addresses it is listening
     /// on.
     PeerIdentify {
@@ -322,8 +316,6 @@ impl From<CustomMessageOutcome> for BehaviourOut {
             CustomMessageOutcome::NotificationsReceived { remote, messages } => {
                 BehaviourOut::NotificationsReceived { remote, messages }
             }
-            CustomMessageOutcome::InterfaceBound { peer } => BehaviourOut::InterfaceBound { peer },
-            CustomMessageOutcome::InterfaceUnbound => BehaviourOut::InterfaceUnbound,
         }
     }
 }

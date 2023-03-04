@@ -490,6 +490,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             interface_id = ?interface,
             peer_id = ?peer,
             protocol = ?protocol,
+            request_id = ?request.id(),
             "handle request",
         );
 
@@ -531,14 +532,14 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     interface_id = ?interface,
                     peer_id = ?peer,
                     protocol = ?protocol,
-                    "inject request",
+                    bound_peer_id = ?bound_peer,
+                    "forward request to bound peer",
                 );
 
                 let inbound_request_id = *request.id();
                 let outbound_request_id =
                     bound_peer_info.sink.send_request(protocol, request).await?;
 
-                // TODO: save (interface, peer, inbound_request_id)
                 bound_peer_info.requests.insert(
                     outbound_request_id,
                     ForwardedRequest::new(interface, peer, inbound_request_id),
