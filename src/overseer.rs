@@ -34,6 +34,8 @@ use std::{
 // TODO: move tests to separate direcotry
 // TODO: add more tetsts
 // TODO: print messages and `Vec<u8>` separate and for separate target but in same span
+// TODO: convert `overseer` into a module
+// TODO: move all request-response handling under some other object that `overseer` owns
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";

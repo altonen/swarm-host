@@ -22,6 +22,9 @@
 // TODO: add bunch of more traces
 // TODO: start using `tracing`
 // TODO: convert to a crate
+// TODO: think more about the caching
+// TODO: caching random requests is too expensive
+// TODO: implement very simple block request handling?
 
 use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
@@ -50,16 +53,19 @@ use sc_network_common::{
         IfDisconnected, IncomingRequest, OutgoingResponse, ProtocolConfig, RequestFailure,
     },
 };
+use tokio::sync::{mpsc, oneshot};
+use tokio_stream::{wrappers::ReceiverStream, StreamMap};
+
 use std::{
     cmp,
-    collections::{HashMap, VecDeque},
-    fs, iter,
+    collections::{hash_map::DefaultHasher, HashMap, VecDeque},
+    fs,
+    hash::Hasher,
+    iter,
     num::NonZeroUsize,
     pin::Pin,
     time::Duration,
 };
-use tokio::sync::{mpsc, oneshot};
-use tokio_stream::{wrappers::ReceiverStream, StreamMap};
 
 pub use behaviour::{InboundFailure, OutboundFailure, ResponseFailure};
 pub use libp2p::identity::{error::DecodingError, Keypair, PublicKey};
@@ -161,10 +167,11 @@ pub struct SubstrateNetwork {
     notification_sinks: HashMap<(PeerId, ProtocolName), NotificationsSink>,
     map: StreamMap<ProtocolName, Pin<Box<dyn futures::Stream<Item = IncomingRequest> + Send>>>,
     next_request_id: usize,
-    pending_requests: HashMap<usize, channel::oneshot::Sender<OutgoingResponse>>,
+    pending_requests: HashMap<usize, (u64, channel::oneshot::Sender<OutgoingResponse>)>,
     pending_responses: FuturesUnordered<PendingResponse>,
     bound_peer: Option<PeerId>,
     connected_peers: VecDeque<PeerId>,
+    cached_responses: HashMap<u64, Vec<u8>>,
 }
 
 impl SubstrateNetwork {
@@ -369,6 +376,7 @@ impl SubstrateNetwork {
             pending_requests: HashMap::new(),
             pending_responses: FuturesUnordered::new(),
             connected_peers: VecDeque::new(),
+            cached_responses: HashMap::new(),
             bound_peer: None,
         })
     }
@@ -562,17 +570,42 @@ impl SubstrateNetwork {
                     "send request, peer {peer}, protocol {protocol:?} request id {request_id}"
                 );
 
-                self.swarm.behaviour_mut().send_request(
-                    &peer,
-                    &protocol,
-                    request,
-                    res_tx,
-                    IfDisconnected::ImmediateError,
-                );
+                // TODO: here check if the request has already been answered by the
+                //       the bound peer and if so, feed the response from the cache.
+                // TODO: `overseer` needs to know about the caching that's happening
+                //       in the backend or otherwise there is useless work being done.
+                let digest = {
+                    let mut hasher = DefaultHasher::new();
+                    hasher.write(&request);
+                    hasher.finish()
+                };
                 tx.send(request_id);
-                self.pending_responses.push(Box::pin(async move {
-                    (peer, protocol, request_id, res_rx.await)
-                }));
+
+                match self.cached_responses.get(&digest) {
+                    Some(response) => {
+                        self.event_tx
+                            .send(SubstrateNetworkEvent::ResponseReceived {
+                                peer,
+                                protocol,
+                                request_id,
+                                response: response.clone(),
+                            })
+                            .await
+                            .expect("channel to stay open");
+                    }
+                    None => {
+                        self.swarm.behaviour_mut().send_request(
+                            &peer,
+                            &protocol,
+                            request,
+                            res_tx,
+                            IfDisconnected::ImmediateError,
+                        );
+                        self.pending_responses.push(Box::pin(async move {
+                            (peer, protocol, request_id, res_rx.await)
+                        }));
+                    }
+                }
             }
             Command::SendResponse {
                 peer,
@@ -582,7 +615,8 @@ impl SubstrateNetwork {
                 log::debug!(target: "sub-libp2p", "send response, peer {peer}, request id {request_id}");
 
                 match self.pending_requests.remove(&request_id) {
-                    Some(pending_response) => {
+                    Some((digest, pending_response)) => {
+                        self.cached_responses.insert(digest, response.clone());
                         pending_response.send(OutgoingResponse {
                             result: Ok(response),
                             reputation_changes: vec![],
@@ -730,7 +764,16 @@ impl SubstrateNetwork {
                             request.peer,
                             protocol,
                         );
+                        let digest = {
+                            let mut hasher = DefaultHasher::new();
+                            hasher.write(&request.payload);
+                            hasher.finish()
+                        };
 
+                        log::debug!(
+                            target: "sub-libp2p",
+                            "send request to overseer for further processing"
+                        );
                         self.event_tx
                             .send(SubstrateNetworkEvent::RequestReceived {
                                 peer: request.peer,
@@ -740,7 +783,7 @@ impl SubstrateNetwork {
                             })
                             .await
                             .expect("channel to stay open");
-                        self.pending_requests.insert(request_id, request.pending_response);
+                        self.pending_requests.insert(request_id, (digest, request.pending_response));
                     },
                     None => panic!("essential task closed"),
                 },
