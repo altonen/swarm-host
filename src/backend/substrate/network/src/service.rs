@@ -28,7 +28,7 @@
 
 use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
-    config::NetworkConfiguration,
+    config::{self, NetworkConfiguration, NodeKeyConfig, Secret},
     discovery::DiscoveryConfig,
     protocol::{self, NotificationsSink, Protocol},
     transport,
@@ -38,6 +38,7 @@ use futures::{channel, prelude::*, stream::FuturesUnordered, FutureExt, Stream, 
 use libp2p::{
     core::upgrade,
     identify::Info as IdentifyInfo,
+    identity::ed25519,
     swarm::{AddressScore, ConnectionLimits, Executor, Swarm, SwarmBuilder, SwarmEvent},
     PeerId,
 };
@@ -53,6 +54,7 @@ use sc_network_common::{
         IfDisconnected, IncomingRequest, OutgoingResponse, ProtocolConfig, RequestFailure,
     },
 };
+use sp_core::H256;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, StreamMap};
 
@@ -64,6 +66,7 @@ use std::{
     iter,
     num::NonZeroUsize,
     pin::Pin,
+    str::FromStr,
     time::Duration,
 };
 
@@ -174,6 +177,15 @@ pub struct SubstrateNetwork {
     cached_responses: HashMap<u64, Vec<u8>>,
 }
 
+/// Parse a Ed25519 secret key from a hex string into a `sc_network::Secret`.
+fn parse_ed25519_secret(hex: &str) -> config::Ed25519Secret {
+    let bytes = H256::from_str(hex).unwrap();
+
+    ed25519::SecretKey::from_bytes(bytes)
+        .map(Secret::Input)
+        .unwrap()
+}
+
 impl SubstrateNetwork {
     /// Create new substrate network
     // TODO: pass socket address
@@ -183,7 +195,10 @@ impl SubstrateNetwork {
         event_tx: mpsc::Sender<SubstrateNetworkEvent>,
         command_rx: mpsc::Receiver<Command>,
     ) -> Result<Self, Error> {
-        let mut network_config = NetworkConfiguration::new_local();
+        let key_config = NodeKeyConfig::Ed25519(parse_ed25519_secret(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        ));
+        let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
 
         let block_announce_config = Self::build_block_announce_protocol();

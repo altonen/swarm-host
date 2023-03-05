@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 array-bytes = "6.0.0"
+async-stream = "0.3.4"
 async-trait = "0.1.64"
 clap = { version = "4.1.4", features = ["derive"] }
 futures = "0.3.25"
@@ -12,14 +13,14 @@ jsonrpsee = { version = "0.16.2", features = ["full"] }
 pin-project = "1.0.12"
 petgraph = "0.6.3"
 rand = "0.8.5"
+sc-network = { version = "0.10.0-dev", path = "src/backend/substrate/network/" }
+sc-network-common = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_cbor = "0.11.2"
+sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
 thiserror = "1.0.38"
 tokio = { version = "1.23.0", features = ["full"] }
 tokio-stream = "0.1.11"
 tokio-util = "0.7.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["tracing-log", "env-filter"] }
-sc-network = { version = "0.10.0-dev", path = "src/backend/substrate/network/" }
-sc-network-common = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
-async-stream = "0.3.4"

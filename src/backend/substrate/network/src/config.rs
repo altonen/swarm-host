@@ -238,6 +238,21 @@ impl NetworkConfiguration {
         config
     }
 
+    /// Get default config buth with user-supplied key
+    pub fn with_key(key_config: NodeKeyConfig) -> NetworkConfiguration {
+        let mut config = NetworkConfiguration::new("test-node", "test-client", key_config, None);
+
+        config.listen_addresses =
+            vec![
+                iter::once(multiaddr::Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
+                    .chain(iter::once(multiaddr::Protocol::Tcp(0)))
+                    .collect(),
+            ];
+
+        config.allow_non_globals_in_dht = true;
+        config
+    }
+
     /// Create new default configuration for localhost-only connection with random port (useful for
     /// testing)
     pub fn new_memory() -> NetworkConfiguration {
@@ -387,18 +402,6 @@ where
         .write(true)
         .create_new(true)
         .mode(0o600)
-        .open(path)
-}
-
-/// Opens a file containing a secret key in write mode.
-#[cfg(not(unix))]
-fn open_secret_file<P>(path: P) -> Result<fs::File, io::Error>
-where
-    P: AsRef<Path>,
-{
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
         .open(path)
 }
 

@@ -5900,6 +5900,7 @@ dependencies = [
  "sc-network-common",
  "serde",
  "serde_cbor",
+ "sp-core",
  "thiserror",
  "tokio",
  "tokio-stream",
