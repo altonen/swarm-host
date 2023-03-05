@@ -20,6 +20,41 @@ def setup_nodes():
 def run_test():
     print("run test")
 
+# Filter which discards duplicate messages sent to the destiantion peer.
+def discard_duplicates(ctx, dst_iface, src_peer, dst_iface, dst_peer, protocol, notification):
+    # TODO: verify here that `src_iface` doesn't forward duplicates to `dst_iface`
+    if ctx.peers[dst_peer].protocols[protocol].contains(notification.digest()):
+        return Drop
+    return Forward
+
+# Filter which discards duplicate messages sent to the destiantion peer.
+def discard_justification_requests(ctx, dst_iface, src_peer, dst_iface, dst_peer, protocol, notification):
+    if ctx.peers[dst_peer].protocols[protocol].contains(notification.digest()):
+        return Drop
+    return Forward
+
+def default_block_request_handler(ctx, src_iface, src_peer, protocol, request):
+    # TODO: request tip contains some recently announced hash
+    # TODO: check who was the first peer to announce this header
+    # TODO: forward request to that peer
+    # TODO: use caching if identical request has already been sent to destination
+    return Drop
+
+def install_filters():
+    sh = SwarmHost()
+
+    sh.interface1.install_filter("/sup/block-announces/1", discard_duplicates)
+    sh.interface1.install_filter("/sup/sync/2", timeout_justification_requests)
+
+def handle_block_announcement(ctx, dst_iface, src_peer, dst_iface, dst_peer, notification):
+    if ctx.peers[dst_peer].blocks.contains(notification.digest()):
+        return Drop
+
+def handle_extrinsic_announcement(ctx, dst_iface, src_peer, dst_iface, dst_peer, notification):
+    if ctx.peers[dst_peer].extrinsics.contains(notification.digest()):
+        return Drop
+    return Forward
+
 # block response handler
 def handle_block_response(ctx, dst_iface, src_peer, dst_iface, dst_peer, response):
     if response != None:
