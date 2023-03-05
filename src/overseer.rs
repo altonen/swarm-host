@@ -40,6 +40,9 @@ use std::{
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
 
+/// Logging target for binary messages.
+const LOG_TARGET_MSG: &'static str = "overseer::msg";
+
 /// Forwarded request.
 ///
 /// Forwarded requests are used with noded-backed interfaces
@@ -278,12 +281,15 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     }
                     Some(InterfaceEvent::MessageReceived { peer, interface, protocol, message }) => {
                         // TODO: span?
-                        tracing::trace!(
+                        tracing::debug!(
                             target: LOG_TARGET,
                             interface_id = ?interface,
                             peer_id = ?peer,
-                            message = ?message,
                             "message received from peer"
+                        );
+                        tracing::trace!(
+                            target: LOG_TARGET_MSG,
+                            message = ?message,
                         );
 
                         match self.filter.inject_message(
@@ -361,7 +367,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     },
                     Some(InterfaceEvent::ConnectionUpgraded { interface, peer, upgrade }) => {
                         if let Err(err) = self.apply_connection_upgrade(interface, peer, upgrade) {
-                            tracing::trace!(
+                            tracing::error!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
                                 peer_id = ?peer,
@@ -372,7 +378,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     },
                     Some(InterfaceEvent::InterfaceBound { interface, peer }) => {
                         if let Err(err) = self.bind_interface(interface, peer) {
-                            tracing::trace!(
+                            tracing::error!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
                                 peer_id = ?peer,
@@ -383,7 +389,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     }
                     Some(InterfaceEvent::InterfaceUnbound { interface }) => {
                         if let Err(err) = self.unbind_interface(interface) {
-                            tracing::trace!(
+                            tracing::error!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
                                 error = ?err,

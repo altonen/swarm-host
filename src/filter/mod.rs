@@ -17,7 +17,11 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 #[cfg(test)]
 mod tests;
 
+/// Logging target for the file.
 const LOG_TARGET: &'static str = "filter";
+
+/// Logging target for binary messages.
+const LOG_TARGET_MSG: &'static str = "filter::msg";
 
 // TODO: message -> notification
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
@@ -334,12 +338,15 @@ impl<T: NetworkBackend> MessageFilter<T> {
             .ok_or(Error::InterfaceDoesntExist)?
             .index;
 
-        tracing::trace!(
+        tracing::debug!(
             target: LOG_TARGET,
             peer_id = ?peer,
             interface_id = ?interface,
-            message = ?message,
             "inject message",
+        );
+        tracing::trace!(
+            target: LOG_TARGET_MSG,
+            message = ?message,
         );
 
         let pairs = Dfs::new(&self.links, iface_idx)
@@ -389,12 +396,15 @@ impl<T: NetworkBackend> MessageFilter<T> {
         protocol: &T::Protocol,
         request: &T::Request,
     ) -> RequestHandlingResult {
-        tracing::trace!(
+        tracing::debug!(
             target: LOG_TARGET,
             peer_id = ?peer,
             interface_id = ?interface,
-            request = ?request,
             "inject request",
+        );
+        tracing::trace!(
+            target: LOG_TARGET_MSG,
+            request = ?request,
         );
 
         RequestHandlingResult::Forward
@@ -410,12 +420,15 @@ impl<T: NetworkBackend> MessageFilter<T> {
         protocol: &T::Protocol,
         response: &T::Response,
     ) -> ResponseHandlingResult {
-        tracing::trace!(
+        tracing::debug!(
             target: LOG_TARGET,
             peer_id = ?peer,
             interface_id = ?interface,
-            response = ?response,
             "inject response",
+        );
+        tracing::trace!(
+            target: LOG_TARGET_MSG,
+            response = ?response,
         );
 
         ResponseHandlingResult::Forward

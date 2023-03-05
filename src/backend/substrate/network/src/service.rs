@@ -25,6 +25,7 @@
 // TODO: think more about the caching
 // TODO: caching random requests is too expensive
 // TODO: implement very simple block request handling?
+// TODO: relay only the first `ConnectionEstablished` to `overseer`
 
 use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
@@ -60,7 +61,7 @@ use tokio_stream::{wrappers::ReceiverStream, StreamMap};
 
 use std::{
     cmp,
-    collections::{hash_map::DefaultHasher, HashMap, VecDeque},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
     fs,
     hash::Hasher,
     iter,
@@ -175,6 +176,7 @@ pub struct SubstrateNetwork {
     bound_peer: Option<PeerId>,
     connected_peers: VecDeque<PeerId>,
     cached_responses: HashMap<u64, Vec<u8>>,
+    rename: HashSet<PeerId>,
 }
 
 /// Parse a Ed25519 secret key from a hex string into a `sc_network::Secret`.
@@ -392,6 +394,7 @@ impl SubstrateNetwork {
             pending_responses: FuturesUnordered::new(),
             connected_peers: VecDeque::new(),
             cached_responses: HashMap::new(),
+            rename: HashSet::new(),
             bound_peer: None,
         })
     }
@@ -721,10 +724,10 @@ impl SubstrateNetwork {
                 protocol: _,
                 notifications_sink: _,
             } => {
+                // TODO: zzzz
                 todo!("implement this maybe");
             }
             BehaviourOut::NotificationStreamClosed { remote, protocol } => {
-                // TODO: remove notifications sink
                 self.notification_sinks.remove(&(remote, protocol.clone()));
 
                 self.event_tx
@@ -843,6 +846,11 @@ impl SubstrateNetwork {
                             debug!(target: "sub-libp2p", "Libp2p => Connected({:?})", peer_id);
                         }
 
+                        // TODO: if this is another connection from peer, don't update bound peer information
+                        if !self.rename.insert(peer_id) {
+                            continue
+                        }
+
                         // TODO: this whole code is very dubious
                         self.event_tx.send(SubstrateNetworkEvent::PeerConnected {
                             peer: peer_id,
@@ -852,6 +860,11 @@ impl SubstrateNetwork {
 
                         // update connnected peers/bound peer information
                         if let None = self.bound_peer {
+                            log::debug!(
+                                target: "sub-libp2p",
+                                "set {peer_id} as the interface backer",
+                            );
+
                             self.bound_peer = Some(peer_id);
                             self.event_tx.send(
                                 SubstrateNetworkEvent::InterfaceBound { peer: peer_id },
@@ -859,6 +872,10 @@ impl SubstrateNetwork {
                             .await
                             .expect("channel to stay open");
                         } else {
+                            log::debug!(
+                                target: "sub-libp2p",
+                                "push {peer_id} to potential interface backers",
+                            );
                             self.connected_peers.push_back(peer_id);
                         }
                     }
@@ -876,17 +893,33 @@ impl SubstrateNetwork {
                         );
 
                         // TODO: send peerdisconnected event!
+                        self.event_tx.send(SubstrateNetworkEvent::PeerDisconnected {
+                            peer: peer_id,
+                        })
+                        .await
+                        .expect("channel to stay open");
+                        self.rename.remove(&peer_id);
 
                         // update connected peer/bound peer information
                         if self.bound_peer == Some(peer_id) {
                             if let Some(peer) = self.connected_peers.pop_front() {
+                                log::debug!(
+                                    target: "sub-libp2p",
+                                    "set {peer_id} as the interface backer",
+                                );
+
                                 self.bound_peer = Some(peer);
                                 self.event_tx.send(
-                                    SubstrateNetworkEvent::InterfaceBound { peer: peer_id },
+                                    SubstrateNetworkEvent::InterfaceBound { peer },
                                 )
                                 .await
                                 .expect("channel to stay open");
                             } else {
+                                log::debug!(
+                                    target: "sub-libp2p",
+                                    "interface does not have any backers",
+                                );
+
                                 self.bound_peer = None;
                                 self
                                 .event_tx
@@ -895,6 +928,10 @@ impl SubstrateNetwork {
                                 .expect("channel to stay open");
                             }
                         } else {
+                            log::debug!(
+                                target: "sub-libp2p",
+                                "remove {peer_id} from list of interface backers",
+                            );
                             self.connected_peers.retain(|peer| peer != &peer_id);
                         }
                     },
