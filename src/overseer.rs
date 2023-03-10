@@ -222,7 +222,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 
                         result.send(self.filter.unlink_interface(first, second));
                     }
-                    OverseerEvent::AddFilter { interface, filter_name, result } => {
+                    OverseerEvent::InstallFilter { interface, filter_name, result } => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             interface = ?interface,
@@ -234,7 +234,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             Err(Error::InterfaceDoesntExist),
                             |info| {
                                 match info.handle.filter(&filter_name) {
-                                    Some(filter) => self.filter.add_filter(interface, filter),
+                                    Some(filter) => self.filter.install_filter(interface, filter),
                                     None => Err(Error::FilterDoesntExist),
                                 }
                             }

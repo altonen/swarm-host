@@ -23,6 +23,7 @@ const LOG_TARGET: &'static str = "filter";
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "filter::msg";
 
+// TODO: create separate filter task for each new interface
 // TODO: message -> notification
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
 // TODO: start using `mockall`
@@ -301,8 +302,8 @@ impl<T: NetworkBackend> MessageFilter<T> {
         Ok(())
     }
 
-    /// Add custom packet filter.
-    pub fn add_filter(
+    /// Add custom filter for notifications.
+    pub fn install_filter(
         &mut self,
         interface: T::InterfaceId,
         filter: Box<
@@ -317,6 +318,16 @@ impl<T: NetworkBackend> MessageFilter<T> {
                 Ok(())
             }
         }
+    }
+
+    /// Add custom filter for requests.
+    pub fn install_request_filter(&mut self, interface: T::InterfaceId) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Add custom filter for respones.
+    pub fn install_response_filter(&mut self, interface: T::InterfaceId) -> crate::Result<()> {
+        todo!();
     }
 
     /// Inject message into [`MessageFilter`].

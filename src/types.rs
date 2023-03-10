@@ -60,7 +60,7 @@ pub enum OverseerEvent<T: NetworkBackend> {
     /// Filter is identified by their and the actual function is queried
     /// from the intalled backend. This means that the filter must be have
     /// been compiled as part of the network backend when `swarm-host` was built.
-    AddFilter {
+    InstallFilter {
         /// Interface ID.
         interface: T::InterfaceId,
 
