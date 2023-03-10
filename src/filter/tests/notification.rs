@@ -61,8 +61,12 @@ fn custom_message_filter() {
         true
     };
 
-    filter.install_filter(0usize, Box::new(msg_filter)).unwrap();
-    filter.install_filter(1usize, Box::new(msg_filter)).unwrap();
+    filter
+        .install_notification_filter(0usize, Box::new(msg_filter))
+        .unwrap();
+    filter
+        .install_notification_filter(1usize, Box::new(msg_filter))
+        .unwrap();
 
     // random valid message is forwarded
     assert_eq!(

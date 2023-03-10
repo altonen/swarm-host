@@ -141,7 +141,7 @@ where
         .unwrap();
 
     module
-        .register_async_method("install_filter", |params, ctx| async move {
+        .register_async_method("install_notification_filter", |params, ctx| async move {
             let mut params = params.sequence();
             let interface: T::InterfaceId = params
                 .next()
@@ -159,7 +159,7 @@ where
 
             let (tx, rx) = oneshot::channel();
             match ctx
-                .send(OverseerEvent::InstallFilter {
+                .send(OverseerEvent::InstallNotificationFilter {
                     interface,
                     filter_name,
                     result: tx,

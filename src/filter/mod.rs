@@ -303,7 +303,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
     }
 
     /// Add custom filter for notifications.
-    pub fn install_filter(
+    pub fn install_notification_filter(
         &mut self,
         interface: T::InterfaceId,
         filter: Box<

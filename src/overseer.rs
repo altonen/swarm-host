@@ -234,7 +234,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             Err(Error::InterfaceDoesntExist),
                             |info| {
                                 match info.handle.filter(&filter_name) {
-                                    Some(filter) => self.filter.install_filter(interface, filter),
+                                    Some(filter) => self.filter.install_notification_filter(interface, filter),
                                     None => Err(Error::FilterDoesntExist),
                                 }
                             }
