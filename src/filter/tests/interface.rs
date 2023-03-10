@@ -1,9 +1,15 @@
-use super::*;
-use crate::backend::mockchain::{
-    types::{InterfaceId, Message, PeerId, Transaction},
-    MockchainBackend,
+use crate::{
+    backend::mockchain::{
+        types::{InterfaceId, Message, PeerId, Transaction},
+        MockchainBackend,
+    },
+    error::Error,
+    filter::{FilterType, LinkType, MessageFilter},
 };
+
 use rand::Rng;
+
+use std::collections::HashSet;
 
 // TODO: add tests `IngressOnly` and `EgressOnly`
 
@@ -508,8 +514,8 @@ fn custom_message_filter() {
         true
     };
 
-    filter.add_filter(0usize, Box::new(msg_filter)).unwrap();
-    filter.add_filter(1usize, Box::new(msg_filter)).unwrap();
+    filter.install_filter(0usize, Box::new(msg_filter)).unwrap();
+    filter.install_filter(1usize, Box::new(msg_filter)).unwrap();
 
     // random valid message is forwarded
     assert_eq!(
