@@ -226,7 +226,15 @@ pub trait NetworkBackend {
     type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync;
 
     /// Unique ID identifying a protocol.
-    type Protocol: Debug + Clone + Hash + PartialEq + Eq + Send + Sync;
+    type Protocol: Serialize
+        + DeserializeOwned
+        + Debug
+        + Clone
+        + Hash
+        + PartialEq
+        + Eq
+        + Send
+        + Sync;
 
     /// Type identifying a message understood by the backend.
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;

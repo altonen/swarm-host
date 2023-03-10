@@ -7,13 +7,14 @@ use crate::{
 };
 
 use futures::{channel, FutureExt, StreamExt};
+use serde::{Deserialize, Deserializer};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{instrument::WithSubscriber, Subscriber};
 
 use sc_network::{
-    config::NetworkConfiguration, Command, NodeType, PeerId, ProtocolName, SubstrateNetwork,
-    SubstrateNetworkEvent,
+    config::NetworkConfiguration, Command, NodeType, PeerId, ProtocolName as SubstrateProtocolName,
+    SubstrateNetwork, SubstrateNetworkEvent,
 };
 use sc_network_common::{
     config::{
@@ -33,6 +34,53 @@ use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
 mod tests;
 
 const LOG_TARGET: &'static str = "substrate";
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ProtocolName(SubstrateProtocolName);
+
+impl serde::Serialize for ProtocolName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&*(self.0))
+    }
+}
+
+struct ProtocolNameVisitor;
+use std::fmt;
+
+use serde::de::{self, Visitor};
+
+impl<'de> Visitor<'de> for ProtocolNameVisitor {
+    type Value = ProtocolName;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(ProtocolName(SubstrateProtocolName::from(value.to_owned())))
+    }
+}
+
+impl<'de> Deserialize<'de> for ProtocolName {
+    fn deserialize<D>(deserializer: D) -> Result<ProtocolName, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(ProtocolNameVisitor)
+    }
+}
+
+impl ProtocolName {
+    fn new(protocol: SubstrateProtocolName) -> Self {
+        Self(protocol)
+    }
+}
 
 #[derive(Debug)]
 pub struct SubstrateRequest {
@@ -69,7 +117,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
         self.tx
             .send(Command::SendNotification {
                 peer: self.peer,
-                protocol: protocol.expect("protocol to exist"),
+                protocol: protocol.expect("protocol to exist").0,
                 message: message.to_vec(),
             })
             .await
@@ -88,7 +136,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
         self.tx
             .send(Command::SendRequest {
                 peer: self.peer,
-                protocol,
+                protocol: protocol.0,
                 request: request.payload,
                 tx,
             })
@@ -171,7 +219,7 @@ impl InterfaceHandle {
                                 peer,
                                 interface: interface_id,
                                 upgrade: ConnectionUpgrade::ProtocolOpened {
-                                    protocols: HashSet::from([protocol]),
+                                    protocols: HashSet::from([ProtocolName(protocol)]),
                                 }
                             })
                             .await
@@ -182,7 +230,7 @@ impl InterfaceHandle {
                                 peer,
                                 interface: interface_id,
                                 upgrade: ConnectionUpgrade::ProtocolClosed {
-                                    protocols: HashSet::from([protocol]),
+                                    protocols: HashSet::from([ProtocolName(protocol)]),
                                 }
                             })
                             .await
@@ -192,7 +240,7 @@ impl InterfaceHandle {
                             tx.send(InterfaceEvent::MessageReceived {
                                 peer,
                                 interface: interface_id,
-                                protocol,
+                                protocol: ProtocolName(protocol),
                                 message: notification,
                             })
                             .await
@@ -202,7 +250,7 @@ impl InterfaceHandle {
                             tx.send(InterfaceEvent::RequestReceived {
                                 peer,
                                 interface: interface_id,
-                                protocol,
+                                protocol: ProtocolName(protocol),
                                 request: SubstrateRequest {
                                     payload: request,
                                     id: request_id,
@@ -215,7 +263,7 @@ impl InterfaceHandle {
                             tx.send(InterfaceEvent::ResponseReceived {
                                 peer,
                                 interface: interface_id,
-                                protocol,
+                                protocol: ProtocolName(protocol),
                                 request_id,
                                 response,
                             })

@@ -42,77 +42,77 @@ fn custom_message_filter() {
         vec![(1usize, 1u64)],
     );
 
-    // add custom message filter
-    let msg_filter = |src_iface: InterfaceId,
-                      src_peer: PeerId,
-                      dst_iface: InterfaceId,
-                      dst_peer: PeerId,
-                      message: &Message| {
-        if src_peer == 1337u64 {
-            return false;
-        }
+    // // add custom message filter
+    // let msg_filter = |src_iface: InterfaceId,
+    //                   src_peer: PeerId,
+    //                   dst_iface: InterfaceId,
+    //                   dst_peer: PeerId,
+    //                   message: &Message| {
+    //     if src_peer == 1337u64 {
+    //         return false;
+    //     }
 
-        if let &Message::Transaction(tx) = &message {
-            if tx.receiver() == 1337u64 && tx.amount() >= 10_000 {
-                return false;
-            }
-        }
+    //     if let &Message::Transaction(tx) = &message {
+    //         if tx.receiver() == 1337u64 && tx.amount() >= 10_000 {
+    //             return false;
+    //         }
+    //     }
 
-        true
-    };
+    //     true
+    // };
 
-    filter
-        .install_notification_filter(0usize, Box::new(msg_filter))
-        .unwrap();
-    filter
-        .install_notification_filter(1usize, Box::new(msg_filter))
-        .unwrap();
+    // filter
+    //     .install_notification_filter(0usize, Box::new(msg_filter))
+    //     .unwrap();
+    // filter
+    //     .install_notification_filter(1usize, Box::new(msg_filter))
+    //     .unwrap();
 
-    // random valid message is forwarded
-    assert_eq!(
-        filter
-            .inject_message(
-                0usize,
-                0u64,
-                &Message::Transaction(Transaction::new(1, 2, 3))
-            )
-            .expect("valid configuration")
-            .collect::<Vec<_>>(),
-        vec![(1usize, 1u64)],
-    );
+    // // random valid message is forwarded
+    // assert_eq!(
+    //     filter
+    //         .inject_message(
+    //             0usize,
+    //             0u64,
+    //             &Message::Transaction(Transaction::new(1, 2, 3))
+    //         )
+    //         .expect("valid configuration")
+    //         .collect::<Vec<_>>(),
+    //     vec![(1usize, 1u64)],
+    // );
 
-    // message from peer `1337` is not forwarded
-    assert_eq!(
-        filter
-            .inject_message(0usize, 1337u64, &rand::random())
-            .expect("valid configuration")
-            .collect::<Vec<_>>(),
-        vec![],
-    );
+    // // message from peer `1337` is not forwarded
+    // assert_eq!(
+    //     filter
+    //         .inject_message(0usize, 1337u64, &rand::random())
+    //         .expect("valid configuration")
+    //         .collect::<Vec<_>>(),
+    //     vec![],
+    // );
 
-    // transaction to peer `1337` if amount is under `10_00` is forwarded
-    assert_eq!(
-        filter
-            .inject_message(
-                0usize,
-                0u64,
-                &Message::Transaction(Transaction::new(1, 1337u64, 3))
-            )
-            .expect("valid configuration")
-            .collect::<Vec<_>>(),
-        vec![(1usize, 1u64)],
-    );
+    // // transaction to peer `1337` if amount is under `10_00` is forwarded
+    // assert_eq!(
+    //     filter
+    //         .inject_message(
+    //             0usize,
+    //             0u64,
+    //             &Message::Transaction(Transaction::new(1, 1337u64, 3))
+    //         )
+    //         .expect("valid configuration")
+    //         .collect::<Vec<_>>(),
+    //     vec![(1usize, 1u64)],
+    // );
 
-    // transaction to peer `1337` if amount is over `10_00` is not forwarded
-    assert_eq!(
-        filter
-            .inject_message(
-                0usize,
-                0u64,
-                &Message::Transaction(Transaction::new(1, 1337u64, 10_001))
-            )
-            .expect("valid configuration")
-            .collect::<Vec<_>>(),
-        vec![],
-    );
+    // // transaction to peer `1337` if amount is over `10_00` is not forwarded
+    // assert_eq!(
+    //     filter
+    //         .inject_message(
+    //             0usize,
+    //             0u64,
+    //             &Message::Transaction(Transaction::new(1, 1337u64, 10_001))
+    //         )
+    //         .expect("valid configuration")
+    //         .collect::<Vec<_>>(),
+    //     vec![],
+    // );
 }

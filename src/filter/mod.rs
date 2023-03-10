@@ -10,9 +10,13 @@ use petgraph::{
     graph::{DiGraph, EdgeIndex, NodeIndex},
     visit::{Dfs, Walker},
 };
+use pyo3::prelude::*;
 use tracing::Level;
 
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    fmt::Debug,
+};
 
 #[cfg(test)]
 mod tests;
@@ -23,6 +27,7 @@ const LOG_TARGET: &'static str = "filter";
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "filter::msg";
 
+// TODO: move all `pyo3`-related code behind an interface
 // TODO: create separate filter task for each new interface
 // TODO: message -> notification
 // TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
@@ -96,6 +101,7 @@ pub enum ResponseHandlingResult {
 }
 
 /// Interface-related information.
+#[derive(Debug)]
 struct Interface<T: NetworkBackend> {
     /// Message filtering mode.
     filter: FilterType,
@@ -108,6 +114,9 @@ struct Interface<T: NetworkBackend> {
 
     /// Index to the link graph.
     index: NodeIndex,
+
+    /// Notification filters.
+    notification_filters: HashMap<T::Protocol, String>,
 }
 
 /// Object implementing message filtering for `swarm-host`.
@@ -135,7 +144,7 @@ pub struct MessageFilter<T: NetworkBackend> {
     >,
 }
 
-impl<T: NetworkBackend> MessageFilter<T> {
+impl<T: NetworkBackend + Debug> MessageFilter<T> {
     /// Create new [`MessageFilter`].
     pub fn new() -> Self {
         Self {
@@ -168,6 +177,7 @@ impl<T: NetworkBackend> MessageFilter<T> {
                     index: self.links.add_node(interface),
                     peers: Default::default(),
                     links: Default::default(),
+                    notification_filters: Default::default(),
                 });
 
                 Ok(())
@@ -306,18 +316,50 @@ impl<T: NetworkBackend> MessageFilter<T> {
     pub fn install_notification_filter(
         &mut self,
         interface: T::InterfaceId,
-        filter: Box<
-            dyn Fn(T::InterfaceId, T::PeerId, T::InterfaceId, T::PeerId, &T::Message) -> bool
-                + Send,
-        >,
+        protocol: T::Protocol,
+        filter_code: String,
     ) -> crate::Result<()> {
-        match self.filters.entry(interface) {
-            Entry::Occupied(_) => Err(Error::FilterAlreadyExists),
-            Entry::Vacant(entry) => {
-                entry.insert(filter);
-                Ok(())
-            }
-        }
+        let iface = self
+            .interfaces
+            .get_mut(&interface)
+            .ok_or(Error::InterfaceDoesntExist)?;
+
+        tracing::debug!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            ?protocol,
+            "install notification filter"
+        );
+
+        // TODO: abstract this behind some interface
+        Python::with_gil(|py| -> Result<(), Error> {
+            PyModule::from_code(py, &filter_code, "", "")
+                .map_err(|error| {
+                    tracing::error!(
+                        target:LOG_TARGET,
+                        interface_id = ?interface,
+                        ?error,
+                        ?filter_code,
+                        "`PyO3` failed to initialize filter code",
+                    );
+                    Error::InvalidFilter(filter_code.clone())
+                })?
+                .getattr("filter_notification")
+                .map_err(|error| {
+                    tracing::error!(
+                        target: LOG_TARGET,
+                        interface_id = ?interface,
+                        ?error,
+                        ?filter_code,
+                        "didn't find `filter_notification()` from supplied code",
+                    );
+                    Error::InvalidFilter(filter_code.clone())
+                })
+                .map(|_| {
+                    iface.notification_filters.insert(protocol, filter_code);
+                    ()
+                })
+        })
     }
 
     /// Add custom filter for requests.

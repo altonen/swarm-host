@@ -47,6 +47,9 @@ pub enum Error {
 
     #[error("Custom error: `{0}`")]
     Custom(String),
+
+    #[error("Invalid filter code: `{0}`")]
+    InvalidFilter(String),
 }
 
 impl From<io::Error> for Error {

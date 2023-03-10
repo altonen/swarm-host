@@ -222,25 +222,19 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 
                         result.send(self.filter.unlink_interface(first, second));
                     }
-                    OverseerEvent::InstallFilter { interface, filter_name, result } => {
+                    OverseerEvent::InstallNotificationFilter { interface, protocol, filter_code, result } => {
                         tracing::debug!(
                             target: LOG_TARGET,
                             interface = ?interface,
-                            filter_name = filter_name,
-                            "add filter",
+                            "install notification filter",
                         );
 
-                        let call_result = self.interfaces.get(&interface).map_or(
-                            Err(Error::InterfaceDoesntExist),
-                            |info| {
-                                match info.handle.filter(&filter_name) {
-                                    Some(filter) => self.filter.install_notification_filter(interface, filter),
-                                    None => Err(Error::FilterDoesntExist),
-                                }
-                            }
-                        );
-
-                        result.send(call_result).expect("channel to stay open");
+                        result
+                            .send(
+                                self.filter
+                                    .install_notification_filter(interface, protocol, filter_code),
+                            )
+                            .expect("channel to stay open");
                     }
                 },
                 event = self.event_streams.next() => match event {

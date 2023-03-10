@@ -60,13 +60,15 @@ pub enum OverseerEvent<T: NetworkBackend> {
     /// Filter is identified by their and the actual function is queried
     /// from the intalled backend. This means that the filter must be have
     /// been compiled as part of the network backend when `swarm-host` was built.
-    // TODO: this needs more thought
     InstallNotificationFilter {
         /// Interface ID.
         interface: T::InterfaceId,
 
-        /// Filter name.
-        filter_name: String,
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Filter code.
+        filter_code: String,
 
         /// Result of the unlink operation.
         result: oneshot::Sender<crate::Result<()>>,

@@ -146,22 +146,25 @@ where
             let interface: T::InterfaceId = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Interface ID missing")))?;
-            let filter_name: String = params
+            let protocol: T::Protocol = params
                 .next()
-                .map_err(|_| Error::Custom(String::from("Filter name missing")))?;
+                .map_err(|_| Error::Custom(String::from("Protocol missing")))?;
+            let filter_code: String = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("Filter code missing")))?;
 
             tracing::debug!(
                 target: LOG_TARGET,
                 interface_id = ?interface,
-                filter_name = filter_name,
-                "add filter"
+                "install notification filter"
             );
 
             let (tx, rx) = oneshot::channel();
             match ctx
                 .send(OverseerEvent::InstallNotificationFilter {
                     interface,
-                    filter_name,
+                    protocol,
+                    filter_code,
                     result: tx,
                 })
                 .await
