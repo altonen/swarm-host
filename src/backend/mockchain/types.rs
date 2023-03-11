@@ -1,5 +1,9 @@
 use crate::backend::{mockchain::MockchainBackend, IdableRequest, NetworkBackend};
 
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyList, PyString, PyTuple},
+};
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
@@ -28,11 +32,21 @@ pub type MessageId = u64;
 pub type RequestId = u64;
 
 /// Transaction.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
 pub struct Transaction {
     sender: AccountId,
     receiver: AccountId,
     amount: u64,
+}
+
+impl IntoPy<PyObject> for Transaction {
+    fn into_py(self, py: Python) -> PyObject {
+        let tx_dict = PyDict::new(py);
+        tx_dict.set_item("sender", self.sender).unwrap();
+        tx_dict.set_item("receiver", self.receiver).unwrap();
+        tx_dict.set_item("amount", self.amount).unwrap();
+        tx_dict.into()
+    }
 }
 
 impl Transaction {
@@ -60,10 +74,27 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
 pub struct Block {
     time: u64,
     transactions: Vec<Transaction>,
+}
+
+impl IntoPy<PyObject> for Block {
+    fn into_py(self, py: Python) -> PyObject {
+        let blk_dict = PyDict::new(py);
+        blk_dict.set_item("time", self.time).unwrap();
+
+        let tx_list = PyList::empty(py);
+        for tx in self.transactions.into_iter() {
+            let tx_dict = PyDict::new(py);
+            tx_dict.set_item("payload", tx.into_py(py)).unwrap();
+            tx_list.append(tx_dict).unwrap();
+        }
+
+        blk_dict.set_item("transactions", tx_list);
+        blk_dict.into()
+    }
 }
 
 impl Block {
@@ -82,7 +113,7 @@ impl Block {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
 pub struct Vote {
     block: BlockId,
     peer: PeerId,
@@ -95,7 +126,17 @@ impl Vote {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+impl IntoPy<PyObject> for Vote {
+    fn into_py(self, py: Python) -> PyObject {
+        let vote_dict = PyDict::new(py);
+        vote_dict.set_item("block", self.block).unwrap();
+        vote_dict.set_item("peer", self.peer).unwrap();
+        vote_dict.set_item("vote", self.vote).unwrap();
+        vote_dict.into()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
 pub struct Dispute {
     block: BlockId,
     peer: PeerId,
@@ -107,7 +148,16 @@ impl Dispute {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+impl IntoPy<PyObject> for Dispute {
+    fn into_py(self, py: Python) -> PyObject {
+        let dispute_dict = PyDict::new(py);
+        dispute_dict.set_item("block", self.block).unwrap();
+        dispute_dict.set_item("peer", self.peer).unwrap();
+        dispute_dict.into()
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
 pub struct Pex {
     peers: Vec<(String, u16)>,
 }
@@ -118,6 +168,23 @@ impl Pex {
     }
 }
 
+impl IntoPy<PyObject> for Pex {
+    fn into_py(self, py: Python) -> PyObject {
+        let pex_dict = PyDict::new(py);
+
+        let pex_list = PyList::empty(py);
+        for pair in &self.peers {
+            // TODO: use tuple instead of dict
+            let entry = PyDict::new(py);
+            entry.set_item("Entry", pair);
+            pex_list.append(entry).unwrap();
+        }
+
+        pex_dict.set_item("peers", pex_list);
+        pex_dict.into()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Message {
     Transaction(Transaction),
@@ -125,6 +192,49 @@ pub enum Message {
     Vote(Vote),
     Dispute(Dispute),
     PeerExchange(Pex),
+}
+
+impl IntoPy<PyObject> for Message {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            Message::Transaction(transaction) => {
+                let mut dict = PyDict::new(py);
+                dict.set_item("Transaction", transaction.into_py(py))
+                    .unwrap();
+                dict.into()
+            }
+            Message::Block(block) => {
+                let mut dict = PyDict::new(py);
+                dict.set_item("Block", block.into_py(py)).unwrap();
+                dict.into()
+            }
+            Message::Vote(vote) => {
+                let mut dict = PyDict::new(py);
+                dict.set_item("Vote", vote.into_py(py)).unwrap();
+                dict.into()
+            }
+            Message::Dispute(dispute) => {
+                let mut dict = PyDict::new(py);
+                dict.set_item("Transaction", dispute.into_py(py)).unwrap();
+                dict.into()
+            }
+            Message::PeerExchange(pex) => {
+                let mut dict = PyDict::new(py);
+                dict.set_item("PeerExchange", pex.into_py(py)).unwrap();
+                dict.into()
+            }
+        }
+    }
+}
+
+impl<'a> FromPyObject<'a> for Message {
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        todo!();
+        // let bytes = object.extract::<&[u8]>().unwrap();
+        // PyResult::Ok(PeerId(
+        //     SubstratePeerId::from_bytes(bytes).expect("valid peer id"),
+        // ))
+    }
 }
 
 impl Distribution<Message> for Standard {
@@ -190,6 +300,19 @@ pub enum ProtocolId {
 
     /// Generic protocol.
     Generic,
+}
+
+impl IntoPy<PyObject> for ProtocolId {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match self {
+            ProtocolId::Transaction => PyString::new(py, "Transaction").into(),
+            ProtocolId::Block => PyString::new(py, "Block").into(),
+            ProtocolId::PeerExchange => PyString::new(py, "PeerExchange").into(),
+            ProtocolId::BlockRequest => PyString::new(py, "BlockRequest").into(),
+            ProtocolId::Generic => PyString::new(py, "Generic").into(),
+            _ => todo!(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

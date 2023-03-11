@@ -1,6 +1,6 @@
 use crate::{
     backend::mockchain::{
-        types::{InterfaceId, Message, PeerId, Transaction},
+        types::{InterfaceId, Message, PeerId, ProtocolId, Transaction},
         MockchainBackend,
     },
     error::Error,
@@ -82,16 +82,18 @@ fn unknown_interface_for_peer() {
 }
 
 #[test]
-fn inject_message_unknown_interface() {
+fn inject_notification_unknown_interface() {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
     let mut filter = MessageFilter::<MockchainBackend>::new();
-    if let Err(err) = filter.inject_message(0usize, 0u64, &rand::random()) {
+    if let Err(err) =
+        filter.inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
+    {
         assert_eq!(err, Error::InterfaceDoesntExist);
     } else {
-        panic!("invalid response from `inject_message()`");
+        panic!("invalid response from `inject_notification()`");
     }
 }
 
@@ -117,7 +119,7 @@ fn interface_full_bypass_two_peers_one_interface() {
 
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![(0usize, 1u64)],
@@ -149,7 +151,12 @@ fn interface_full_bypass_n_peers_one_interface() {
     }
 
     let peers = filter
-        .inject_message(0usize, selected_peer, &rand::random())
+        .inject_notification(
+            0usize,
+            selected_peer,
+            &ProtocolId::Transaction,
+            &rand::random(),
+        )
         .expect("valid configuration")
         .collect::<HashSet<_>>();
 
@@ -186,7 +193,7 @@ fn interface_drop() {
     );
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![],
@@ -219,7 +226,7 @@ fn two_interfaces_no_link() {
     // doesn't get forwarded to `peer1` because it's on a different different interface.
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![],
@@ -256,7 +263,7 @@ fn two_linked_interfaces() {
     // inject message to first interface and verify it's forwarded to the other interface
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![(1usize, 1u64)],
@@ -293,7 +300,7 @@ fn peer_connected_to_two_linked_interfaces_receives() {
     // inject message to first interface and verify it's forwarded to the other interface
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![(1usize, 0u64)],
@@ -325,7 +332,7 @@ fn peer_connected_to_two_unlinked_interfaces() {
     // inject message to first interface and verify it's forwarded to the other interface
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![],
@@ -363,7 +370,7 @@ fn linked_interfaces_with_dropall() {
     // by the second interface because its type is `InterfaceType::DropAll`
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![],
@@ -400,7 +407,7 @@ fn link_message_unlink() {
     // inject message to first interface and verify it's forwarded to the other interface
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![(1usize, 1u64)],
@@ -412,7 +419,7 @@ fn link_message_unlink() {
     // verify that messages don't flow between the interfaces anymore
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![],
@@ -448,7 +455,12 @@ fn chained_interfaces() {
     }
 
     let forwards = filter
-        .inject_message(selected, selected.try_into().unwrap(), &rand::random())
+        .inject_notification(
+            selected,
+            selected.try_into().unwrap(),
+            &ProtocolId::Transaction,
+            &rand::random(),
+        )
         .expect("valid configuration")
         .collect::<HashSet<_>>();
 
@@ -481,7 +493,7 @@ fn test_function() {
 
     assert_eq!(
         filter
-            .inject_message(0usize, 0u64, &rand::random())
+            .inject_notification(0usize, 0u64, &ProtocolId::Transaction, &rand::random())
             .expect("valid configuration")
             .collect::<Vec<_>>(),
         vec![(0usize, 1u64)],

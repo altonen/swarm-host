@@ -279,16 +279,17 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                             target: LOG_TARGET,
                             interface_id = ?interface,
                             peer_id = ?peer,
-                            "message received from peer"
+                            "notification received from peer"
                         );
                         tracing::trace!(
                             target: LOG_TARGET_MSG,
                             message = ?message,
                         );
 
-                        match self.filter.inject_message(
+                        match self.filter.inject_notification(
                             interface,
                             peer,
+                            &protocol,
                             &message
                         ) {
                             Ok(routing_table) => for (interface, peer) in routing_table {

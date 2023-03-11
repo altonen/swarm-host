@@ -7,14 +7,15 @@ use crate::{
 };
 
 use futures::{channel, FutureExt, StreamExt};
-use serde::{Deserialize, Deserializer};
+use pyo3::{conversion::AsPyPointer, prelude::*, types::PyBytes, FromPyObject, IntoPy};
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{instrument::WithSubscriber, Subscriber};
 
 use sc_network::{
-    config::NetworkConfiguration, Command, NodeType, PeerId, ProtocolName as SubstrateProtocolName,
-    SubstrateNetwork, SubstrateNetworkEvent,
+    config::NetworkConfiguration, Command, NodeType, PeerId as SubstratePeerId,
+    ProtocolName as SubstrateProtocolName, SubstrateNetwork, SubstrateNetworkEvent,
 };
 use sc_network_common::{
     config::{
@@ -116,9 +117,9 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     ) -> crate::Result<()> {
         self.tx
             .send(Command::SendNotification {
-                peer: self.peer,
+                peer: self.peer.0,
                 protocol: protocol.expect("protocol to exist").0,
-                message: message.to_vec(),
+                message: message.0.clone(), // TODO: remove this clone
             })
             .await
             .expect("channel to stay open");
@@ -135,7 +136,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 
         self.tx
             .send(Command::SendRequest {
-                peer: self.peer,
+                peer: self.peer.0,
                 protocol: protocol.0,
                 request: request.payload,
                 tx,
@@ -153,7 +154,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     ) -> crate::Result<()> {
         self.tx
             .send(Command::SendResponse {
-                peer: self.peer,
+                peer: self.peer.0,
                 request_id,
                 response,
             })
@@ -198,17 +199,17 @@ impl InterfaceHandle {
                     event = event_rx.recv() => match event.expect("channel to stay open") {
                         SubstrateNetworkEvent::PeerConnected { peer } => {
                             tx.send(InterfaceEvent::PeerConnected {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 protocols: Vec::new(),
-                                sink: Box::new(SubstratePacketSink::new(peer, command_tx.clone())),
+                                sink: Box::new(SubstratePacketSink::new(PeerId(peer), command_tx.clone())),
                             })
                             .await
                             .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::PeerDisconnected { peer } => {
                             tx.send(InterfaceEvent::PeerDisconnected {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                             })
                             .await
@@ -216,7 +217,7 @@ impl InterfaceHandle {
                         }
                         SubstrateNetworkEvent::ProtocolOpened { peer, protocol } => {
                             tx.send(InterfaceEvent::ConnectionUpgraded {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 upgrade: ConnectionUpgrade::ProtocolOpened {
                                     protocols: HashSet::from([ProtocolName(protocol)]),
@@ -227,7 +228,7 @@ impl InterfaceHandle {
                         }
                         SubstrateNetworkEvent::ProtocolClosed { peer, protocol } => {
                             tx.send(InterfaceEvent::ConnectionUpgraded {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 upgrade: ConnectionUpgrade::ProtocolClosed {
                                     protocols: HashSet::from([ProtocolName(protocol)]),
@@ -238,17 +239,17 @@ impl InterfaceHandle {
                         }
                         SubstrateNetworkEvent::NotificationReceived { peer, protocol, notification } => {
                             tx.send(InterfaceEvent::MessageReceived {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 protocol: ProtocolName(protocol),
-                                message: notification,
+                                message: Message(notification),
                             })
                             .await
                             .expect("channel to stay open");
                         }
                         SubstrateNetworkEvent::RequestReceived { peer, protocol, request_id, request } => {
                             tx.send(InterfaceEvent::RequestReceived {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 protocol: ProtocolName(protocol),
                                 request: SubstrateRequest {
@@ -261,7 +262,7 @@ impl InterfaceHandle {
                         }
                         SubstrateNetworkEvent::ResponseReceived {peer, protocol, request_id, response } => {
                             tx.send(InterfaceEvent::ResponseReceived {
-                                peer,
+                                peer: PeerId(peer),
                                 interface: interface_id,
                                 protocol: ProtocolName(protocol),
                                 request_id,
@@ -273,7 +274,7 @@ impl InterfaceHandle {
                         SubstrateNetworkEvent::InterfaceBound { peer } => {
                             tx.send(InterfaceEvent::InterfaceBound {
                                 interface: interface_id,
-                                peer
+                                peer: PeerId(peer),
                             })
                             .await
                             .expect("channel to stay open");
@@ -353,13 +354,47 @@ impl SubstrateBackend {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct PeerId(SubstratePeerId);
+
+impl IntoPy<PyObject> for PeerId {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        self.0.to_bytes().into_py(py)
+    }
+}
+
+impl<'a> FromPyObject<'a> for PeerId {
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        let bytes = object.extract::<&[u8]>().unwrap();
+
+        PyResult::Ok(PeerId(
+            SubstratePeerId::from_bytes(bytes).expect("valid peer id"),
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, FromPyObject)]
+pub struct Message(Vec<u8>);
+
+impl IntoPy<PyObject> for Message {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        self.0.into_py(py)
+    }
+}
+
+impl IntoPy<PyObject> for ProtocolName {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        self.0.into_py(py)
+    }
+}
+
 #[async_trait::async_trait]
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;
     type InterfaceId = usize;
     type RequestId = usize; // TODO: get from substrate eventually, requires refactoring
     type Protocol = ProtocolName;
-    type Message = Vec<u8>;
+    type Message = Message;
     type Request = SubstrateRequest;
     type Response = Vec<u8>;
     type InterfaceHandle = InterfaceHandle;

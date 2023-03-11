@@ -18,6 +18,7 @@ use std::{
     fmt::Debug,
 };
 
+mod executor;
 #[cfg(test)]
 mod tests;
 
@@ -372,30 +373,32 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         todo!();
     }
 
-    /// Inject message into [`MessageFilter`].
+    /// Inject notification into [`MessageFilter`].
     ///
-    /// The message is processed based on the source peer and interface IDs and message type
-    /// using any user-installed filters to further alter the message processing.
+    /// The notification is processed based on the source peer and interface IDs and notification
+    /// type using any user-installed filters to further alter the notification processing.
     ///
     /// After the processing is done, a list of `(interface ID, peer ID)` pairs are returned
-    /// to caller who can then forward the message to correct peers.
-    pub fn inject_message(
+    /// to caller who can then forward the notification to correct peers.
+    pub fn inject_notification(
         &mut self,
-        interface: T::InterfaceId,
-        peer: T::PeerId,
+        src_interface: T::InterfaceId,
+        src_peer: T::PeerId,
+        protocol: &T::Protocol,
         message: &T::Message,
     ) -> crate::Result<(impl Iterator<Item = (T::InterfaceId, T::PeerId)>)> {
         let iface_idx = self
             .interfaces
-            .get(&interface)
+            .get(&src_interface)
             .ok_or(Error::InterfaceDoesntExist)?
             .index;
 
         tracing::debug!(
             target: LOG_TARGET,
-            peer_id = ?peer,
-            interface_id = ?interface,
-            "inject message",
+            peer_id = ?src_peer,
+            interface_id = ?src_interface,
+            ?protocol,
+            "inject notification",
         );
         tracing::trace!(
             target: LOG_TARGET_MSG,
@@ -405,28 +408,52 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         let pairs = Dfs::new(&self.links, iface_idx)
             .iter(&self.links)
             .map(|nx| {
-                let iface_id = self.links.node_weight(nx).expect("entry to exist");
-                let iface = self.interfaces.get(iface_id).expect("interface to exist");
+                let dst_interface = self.links.node_weight(nx).expect("entry to exist");
+                let dst_iface = self
+                    .interfaces
+                    .get(dst_interface)
+                    .expect("interface to exist");
 
-                match iface.filter {
+                match dst_iface.filter {
                     FilterType::DropAll => None,
                     FilterType::FullBypass => Some(
-                        iface
+                        dst_iface
                             .peers
                             .iter()
-                            .filter_map(|&iface_peer| {
+                            .filter_map(|&dst_peer| {
                                 // don't forward message to source
-                                if iface_id == &interface && iface_peer == peer {
+                                if dst_interface == &src_interface && dst_peer == src_peer {
                                     return None;
                                 }
 
-                                self.filters.get(iface_id).map_or(
-                                    Some((*iface_id, iface_peer)),
-                                    |filter| {
-                                        filter(interface, peer, *iface_id, iface_peer, &message)
-                                            .then_some((*iface_id, iface_peer))
-                                    },
-                                )
+                                match dst_iface.notification_filters.get(&protocol) {
+                                    Some(filter) => {
+                                        Python::with_gil(|py| {
+                                            let fun = PyModule::from_code(py, &filter, "", "")
+                                                .expect("code to be loaded successfully")
+                                                .getattr("filter_notification")
+                                                .expect("`filter_notifications()` to exist");
+
+                                            // TODO: remove clones
+                                            let result = fun
+                                                .call1((
+                                                    src_interface,
+                                                    src_peer,
+                                                    *dst_interface,
+                                                    dst_peer,
+                                                    protocol.clone(),
+                                                    message.clone(),
+                                                ))
+                                                .unwrap()
+                                                .extract::<bool>()
+                                                .unwrap();
+
+                                            result
+                                        })
+                                        .then_some((*dst_interface, dst_peer))
+                                    }
+                                    None => Some((*dst_interface, dst_peer)),
+                                }
                             })
                             .collect::<Vec<_>>(),
                     ),

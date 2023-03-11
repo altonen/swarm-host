@@ -2,6 +2,7 @@
 use crate::types::OverseerEvent;
 
 use futures::stream::Stream;
+use pyo3::{prelude::*, AsPyPointer, FromPyObject, IntoPy};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{io::AsyncWrite, sync::mpsc::Sender};
 
@@ -12,6 +13,7 @@ use std::{
 pub mod mockchain;
 pub mod substrate;
 
+// TODO: `pyo3` stuff should absolutely not be here
 // TODO: rename `packet/Packet` to `Notification`
 // TODO: rename `PeerId` to `Source`
 // TODO: define generic `Address` type
@@ -217,10 +219,30 @@ pub trait Interface<T: NetworkBackend> {
 #[async_trait::async_trait]
 pub trait NetworkBackend {
     /// Unique ID identifying a peer.
-    type PeerId: Debug + Copy + Clone + Eq + Hash + Send + Sync;
+    type PeerId: Debug
+        + Copy
+        + Clone
+        + Eq
+        + Hash
+        + Send
+        + Sync
+        // TODO: zzz
+        + for<'a> FromPyObject<'a>
+        + IntoPy<PyObject>;
 
     /// Unique ID identifying the interface.
-    type InterfaceId: Serialize + DeserializeOwned + Debug + Copy + Clone + Eq + Hash + Send + Sync;
+    type InterfaceId: Serialize
+        + DeserializeOwned
+        + Debug
+        + Copy
+        + Clone
+        + Eq
+        + Hash
+        + Send
+        + Sync
+        // TODO: zzz
+        + for<'a> FromPyObject<'a>
+        + IntoPy<PyObject>;
 
     /// Unique ID identifying a request.
     type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync;
@@ -234,10 +256,13 @@ pub trait NetworkBackend {
         + PartialEq
         + Eq
         + Send
-        + Sync;
+        + Sync
+        + IntoPy<PyObject>;
 
     /// Type identifying a message understood by the backend.
-    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync;
+    // TODO: zzz
+    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoPy<PyObject>;
+    // + AsPyPointer; // TODO: zzz
 
     /// Type identifying a request understood by the backend.
     type Request: Debug + Send + Sync + IdableRequest<Self>
