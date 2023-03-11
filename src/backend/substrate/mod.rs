@@ -382,12 +382,6 @@ impl IntoPy<PyObject> for Message {
     }
 }
 
-impl IntoPy<PyObject> for ProtocolName {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        self.0.into_py(py)
-    }
-}
-
 #[async_trait::async_trait]
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;

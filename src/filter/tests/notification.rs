@@ -44,7 +44,6 @@ def filter_notification(
     src_peer,
     dst_interface,
     dst_peer,
-    protocol,
     notification
 ):
     if src_peer == 1337:

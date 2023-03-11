@@ -441,7 +441,6 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                                                     src_peer,
                                                     *dst_interface,
                                                     dst_peer,
-                                                    protocol.clone(),
                                                     message.clone(),
                                                 ))
                                                 .unwrap()

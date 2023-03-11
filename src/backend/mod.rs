@@ -256,8 +256,7 @@ pub trait NetworkBackend {
         + PartialEq
         + Eq
         + Send
-        + Sync
-        + IntoPy<PyObject>;
+        + Sync;
 
     /// Type identifying a message understood by the backend.
     // TODO: zzz

@@ -302,19 +302,6 @@ pub enum ProtocolId {
     Generic,
 }
 
-impl IntoPy<PyObject> for ProtocolId {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self {
-            ProtocolId::Transaction => PyString::new(py, "Transaction").into(),
-            ProtocolId::Block => PyString::new(py, "Block").into(),
-            ProtocolId::PeerExchange => PyString::new(py, "PeerExchange").into(),
-            ProtocolId::BlockRequest => PyString::new(py, "BlockRequest").into(),
-            ProtocolId::Generic => PyString::new(py, "Generic").into(),
-            _ => todo!(),
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Handshake {
     /// Unique ID of the peer.
