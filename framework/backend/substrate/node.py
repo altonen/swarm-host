@@ -1,13 +1,21 @@
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
 
+from scalecodec.type_registry import load_type_registry_preset
+from scalecodec.base import RuntimeConfiguration, ScaleBytes
+
 from os.path import exists
 import os
 import logging
 import subprocess
 import time
 
+# TODO: add ability to query rpc and ws ports
+
 class InvalidConfiguration(Exception):
+    pass
+
+class RpcQueryError(Exception):
     pass
 
 class Node():
@@ -153,8 +161,27 @@ class Node():
             type_registry_preset = self.type_registry_preset,
         )
 
-        # TODO: get chain metadata and return the SCALE-encoded object
-        # TODO: fetch peer id from chain
+        # get local peer id
+        result = self.substrate.rpc_request("system_localPeerId", params = None).get("result")
+        if result is not None:
+            logging.debug("local peer id: %s" % (result))
+            self.local_peer_id = result
+        else:
+            raise RpcQueryError("failed to fetch local peer id: `%s`" % (response['error']['message']))
+
+        # fetch metadata for filters
+        response = self.substrate.rpc_request("state_getMetadata", params = None)
+
+        if 'error' in response:
+            raise RpcQueryError("failed to fetch metadata: `%s`" % (response['error']['message']))
+
+        if response.get('result'):
+            RuntimeConfiguration().update_type_registry(load_type_registry_preset(name="core"))
+            self.metadata = RuntimeConfiguration().create_scale_object(
+                'MetadataVersioned', data=ScaleBytes(response.get('result'))
+            )
+            self.metadata.decode()
+
         return self
 
     def __del__(self):
