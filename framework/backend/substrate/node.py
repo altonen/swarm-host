@@ -5,6 +5,9 @@ import logging
 import subprocess
 import time
 
+class InvalidConfiguration(Exception):
+    pass
+
 class Node():
     """
         Start a generic Substrate node.
@@ -18,20 +21,41 @@ class Node():
         Specify P2P port.
     """
     def with_p2p_port(self, p2p_port):
+        logging.debug("rpc port: `%d`" % (p2p_port))
+
         self.exec_arguments.append("--port")
-        self.exec_arguments.append(p2p_port)
+        self.exec_arguments.append(str(p2p_port))
         return self
 
     """
         Specify RPC port.
     """
     def with_rpc_port(self, rpc_port):
+        logging.debug("rpc port: `%d`" % (rpc_port))
+
         self.exec_arguments.append("--rpc-port")
-        self.exec_arguments.append(rpc_port)
+        self.exec_arguments.append(str(rpc_port))
         return self
 
     def with_binary_path(self, path):
+        logging.debug("binary path: `%s`" % (path))
+
         self.path = path
+        return self
+
+    """
+        Specify base path.
+    """
+    def with_base_path(self, path = None, tmp = None):
+        if tmp == True and path is None:
+            logging.debug("base path: `--tmp`")
+            self.exec_arguments.append("--tmp")
+        elif path is not None and tmp is None:
+            logging.debug("base path: `%s`" % (path))
+            self.exec_arguments.append("--base-path")
+            self.exec_arguments.append(path)
+        else:
+            raise InvalidConfiguration("`path` and `tmp` are mutually exclusive")
         return self
 
     def build(self):
@@ -49,6 +73,7 @@ class Node():
             args,
             stdout=self.logfile,
             stderr=subprocess.STDOUT,
+            env={"RUST_LOG": "sub-libp2p=debug,info"}
         )
         print("hello")
 
@@ -61,8 +86,8 @@ class Node():
         return self
 
     def __del__(self):
-        pass
-        # self.process.terminate()
+        print("destroy node")
+        self.process.terminate()
 
     """
         Get chain metadata.
