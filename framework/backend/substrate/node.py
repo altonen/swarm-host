@@ -136,6 +136,15 @@ class Node():
             return self
         else:
             raise InvalidConfiguration("must provide either path to file or `dev = True`")
+    """
+        Specify reserved peer.
+    """
+    def with_reserved_peer(self, peer_address):
+        logging.debug("reserved peer: `%s`" % (peer_address))
+
+        self.exec_arguments.append("--reserved-nodes")
+        self.exec_arguments.append(peer_address)
+        return self
 
     def build(self):
         logging.info("launch node: path {}, arguments {}".format(self.path, self.exec_arguments))
