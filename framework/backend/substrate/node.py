@@ -75,18 +75,18 @@ class Node():
             stderr=subprocess.STDOUT,
             env={"RUST_LOG": "sub-libp2p=debug,info"}
         )
-        print("hello")
 
         # TODO: start node here and wait for a second in order to let it start
         # self.substrate = SubstrateInterface(
         #     url = "ws://127.0.0.1:%d" % (rpc_port),
         #     type_registry_preset = type_registry_preset,
         # )
+
         # TODO: get chain metadata and return the SCALE-encoded object
+        # TODO: fetch peer id from chain
         return self
 
     def __del__(self):
-        print("destroy node")
         self.process.terminate()
 
     """
