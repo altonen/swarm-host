@@ -10,16 +10,31 @@ logging.basicConfig(
 )
 
 nodes = []
-for i in range(0, 5):
-    try:
-        nodes.append(
-            NodeTemplate()\
-                .with_p2p_port(i + 7000)\
-                .with_rpc_port(i + 8000)\
-                .with_ws_port(i + 9000)\
-                .with_base_path(tmp = True)\
-                .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
-                .build()
-        )
-    except InvalidConfiguration:
-        print("invalid node configuration")
+nodes.append(NodeTemplate()\
+    .with_p2p_port(0 + 7000)\
+    .with_rpc_port(0 + 8000)\
+    .with_ws_port(0 + 9944)\
+    .with_profile("alice")\
+    .with_force_authoring()\
+    .with_chain_spec(dev = True)\
+    .with_base_path(tmp = True)\
+    .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
+    .build()
+)
+
+# for i in range(1, 5):
+#     try:
+#         nodes.append(
+#             NodeTemplate()\
+#                 .with_p2p_port(i + 7000)\
+#                 .with_rpc_port(i + 8000)\
+#                 .with_ws_port(i + 9000)\
+#                 .with_chain_spec(dev = True)\
+#                 .with_base_path(tmp = True)\
+#                 .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
+#                 .build()
+#         )
+#     except InvalidConfiguration:
+#         print("invalid node configuration")
+
+# time.sleep(60)

@@ -97,10 +97,11 @@ class Node():
             - `bob`
             - `charlie`
             - `dave`
+            - `even`
             - `ferdie`
     """
     def with_profile(self, profile):
-        allowed_profiles = ["alice", "bob", "charlie", "dave", "ferdie"]
+        allowed_profiles = ["alice", "bob", "charlie", "dave", "eve", "ferdie"]
         if profile not in allowed_profiles:
             raise InvalidConfiguration("`%s` not in allowed profiles" % (profile))
 
@@ -154,6 +155,8 @@ class Node():
             stderr=subprocess.STDOUT,
             env={"RUST_LOG": "sub-libp2p=debug,info"}
         )
+
+        # TODO: zzz
         time.sleep(1)
 
         self.substrate = SubstrateInterface(
@@ -191,7 +194,13 @@ class Node():
         Get chain metadata.
     """
     def get_metadata(self):
-        pass
+        self.metadata
+
+    """
+        Get local peer ID.
+    """
+    def get_local_peer_id(self):
+        return self.local_peer_id
 
     """
         Submit extrinsic.

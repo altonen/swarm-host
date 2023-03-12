@@ -2,44 +2,6 @@ from utils.swarm_host import SwarmHost
 from backend.mockchain import MockChain
 import time
 
-# TODO: think about possible attacks
-# TODO: think about possible test cases
-# TODO: how to express them in python?
-# TODO: think about how to observe network effects?
-
-# TODO: setup subfunctions
-def setup_swarm_host():
-    print("setup swarm host")
-
-def parition_network():
-    print("partition network")
-
-def setup_nodes():
-    print("setup nodes")
-
-def run_test():
-    print("run test")
-
-# Filter which discards duplicate messages sent to the destiantion peer.
-def discard_duplicates(ctx, dst_iface, src_peer, dst_iface, dst_peer, protocol, notification):
-    # TODO: verify here that `src_iface` doesn't forward duplicates to `dst_iface`
-    if ctx.peers[dst_peer].protocols[protocol].contains(notification.digest()):
-        return Drop
-    return Forward
-
-# Filter which discards duplicate messages sent to the destiantion peer.
-def discard_justification_requests(ctx, dst_iface, src_peer, dst_iface, dst_peer, protocol, notification):
-    if ctx.peers[dst_peer].protocols[protocol].contains(notification.digest()):
-        return Drop
-    return Forward
-
-def default_block_request_handler(ctx, src_iface, src_peer, protocol, request):
-    # TODO: request tip contains some recently announced hash
-    # TODO: check who was the first peer to announce this header
-    # TODO: forward request to that peer
-    # TODO: use caching if identical request has already been sent to destination
-    return Drop
-
 def install_filters():
     sh = SwarmHost()
 
