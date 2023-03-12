@@ -25,6 +25,7 @@ class Node():
 
         self.exec_arguments.append("--port")
         self.exec_arguments.append(str(p2p_port))
+        self.p2p_port = p2p_port
         return self
 
     """
@@ -35,6 +36,18 @@ class Node():
 
         self.exec_arguments.append("--rpc-port")
         self.exec_arguments.append(str(rpc_port))
+        self.rpc_port = rpc_port
+        return self
+
+    """
+        Specify WebSocket RPC port.
+    """
+    def with_ws_port(self, ws_port):
+        logging.debug("ws port: `%d`" % (ws_port))
+
+        self.exec_arguments.append("--ws-port")
+        self.exec_arguments.append(str(ws_port))
+        self.ws_port = ws_port
         return self
 
     def with_binary_path(self, path):
@@ -62,8 +75,9 @@ class Node():
         logging.info("launch node: path {}, arguments {}".format(self.path, self.exec_arguments))
 
         self.logfile = open(
-            "/tmp/%s-%d" % (
+            "/tmp/%s-%d-%d" % (
                 self.type_registry_preset,
+                self.p2p_port,
                 int(time.time())
             ),
             "w"
@@ -75,12 +89,12 @@ class Node():
             stderr=subprocess.STDOUT,
             env={"RUST_LOG": "sub-libp2p=debug,info"}
         )
+        time.sleep(3)
 
-        # TODO: start node here and wait for a second in order to let it start
-        # self.substrate = SubstrateInterface(
-        #     url = "ws://127.0.0.1:%d" % (rpc_port),
-        #     type_registry_preset = type_registry_preset,
-        # )
+        self.substrate = SubstrateInterface(
+            url = "ws://127.0.0.1:%d" % (self.ws_port),
+            type_registry_preset = self.type_registry_preset,
+        )
 
         # TODO: get chain metadata and return the SCALE-encoded object
         # TODO: fetch peer id from chain
@@ -114,4 +128,7 @@ class NodeTemplate(Node):
         Start template node.
     """
     def __init__(self):
-        super().__init__(type_registry_preset = "node-template", default_path = "/usr/local/bin/node-template")
+        super().__init__(
+            type_registry_preset = "substrate-node-template",
+            default_path = "/usr/local/bin/node-template"
+        )
