@@ -423,10 +423,10 @@ impl SubstrateNetwork {
             max_notification_size: 16 * 1024 * 1024,
             handshake: None,
             set_config: SetConfig {
-                in_peers: 0,
-                out_peers: 0,
+                in_peers: 40,
+                out_peers: 40,
                 reserved_nodes: Vec::new(),
-                non_reserved_mode: NonReservedPeerMode::Deny,
+                non_reserved_mode: NonReservedPeerMode::Accept,
             },
         }
     }
@@ -439,10 +439,10 @@ impl SubstrateNetwork {
             max_notification_size: 1024 * 1024,
             handshake: None,
             set_config: SetConfig {
-                in_peers: 0,
-                out_peers: 0,
+                in_peers: 40,
+                out_peers: 40,
                 reserved_nodes: Vec::new(),
-                non_reserved_mode: NonReservedPeerMode::Deny,
+                non_reserved_mode: NonReservedPeerMode::Accept,
             },
         }
     }
