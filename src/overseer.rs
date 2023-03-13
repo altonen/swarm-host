@@ -222,17 +222,23 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 
                         result.send(self.filter.unlink_interface(first, second));
                     }
-                    OverseerEvent::InstallNotificationFilter { interface, protocol, filter_code, result } => {
+                    OverseerEvent::InstallNotificationFilter { interface,
+                         protocol,
+                         context,
+                         filter_code,
+                         result
+                    } => {
                         tracing::debug!(
                             target: LOG_TARGET,
-                            interface = ?interface,
+                            interface_id = ?interface,
+                            ?protocol,
                             "install notification filter",
                         );
 
                         result
                             .send(
                                 self.filter
-                                    .install_notification_filter(interface, protocol, filter_code),
+                                    .install_notification_filter(interface, protocol, context, filter_code),
                             )
                             .expect("channel to stay open");
                     }

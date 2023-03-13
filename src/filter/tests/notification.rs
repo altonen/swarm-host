@@ -40,6 +40,7 @@ fn custom_message_filter() {
     // TODO: shold take context?
     let filter_code = "
 def filter_notification(
+    context,
     src_interface,
     src_peer,
     dst_interface,
@@ -83,7 +84,7 @@ def filter_notification(
     );
 
     filter
-        .install_notification_filter(0usize, protocol_name, filter_code.to_owned())
+        .install_notification_filter(0usize, protocol_name, vec![], filter_code.to_owned())
         .unwrap();
 
     // random valid message is forwarded

@@ -117,7 +117,7 @@ struct Interface<T: NetworkBackend> {
     index: NodeIndex,
 
     /// Notification filters.
-    notification_filters: HashMap<T::Protocol, String>,
+    notification_filters: HashMap<T::Protocol, (Vec<u8>, String)>,
 }
 
 /// Object implementing message filtering for `swarm-host`.
@@ -318,6 +318,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         &mut self,
         interface: T::InterfaceId,
         protocol: T::Protocol,
+        context: Vec<u8>,
         filter_code: String,
     ) -> crate::Result<()> {
         let iface = self
@@ -357,7 +358,9 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                     Error::InvalidFilter(filter_code.clone())
                 })
                 .map(|_| {
-                    iface.notification_filters.insert(protocol, filter_code);
+                    iface
+                        .notification_filters
+                        .insert(protocol, (context, filter_code));
                     ()
                 })
         })
@@ -427,7 +430,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                                 }
 
                                 match dst_iface.notification_filters.get(&protocol) {
-                                    Some(filter) => {
+                                    Some((context, filter)) => {
                                         Python::with_gil(|py| {
                                             let fun = PyModule::from_code(py, &filter, "", "")
                                                 .expect("code to be loaded successfully")
@@ -435,8 +438,11 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                                                 .expect("`filter_notifications()` to exist");
 
                                             // TODO: remove clones
+                                            // TODO: absolutely hideous
+                                            // TODO: add ability to pass context as mutable reference
                                             let result = fun
                                                 .call1((
+                                                    context.clone().into_py(py),
                                                     src_interface,
                                                     src_peer,
                                                     *dst_interface,

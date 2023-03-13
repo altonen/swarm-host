@@ -149,6 +149,9 @@ where
             let protocol: T::Protocol = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Protocol missing")))?;
+            let context: Vec<u8> = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("Context missing")))?;
             let filter_code: String = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Filter code missing")))?;
@@ -164,6 +167,7 @@ where
                 .send(OverseerEvent::InstallNotificationFilter {
                     interface,
                     protocol,
+                    context,
                     filter_code,
                     result: tx,
                 })
