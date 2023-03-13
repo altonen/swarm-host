@@ -143,13 +143,14 @@ where
     module
         .register_async_method("install_notification_filter", |params, ctx| async move {
             let mut params = params.sequence();
+            tracing::info!(target: LOG_TARGET, "zzz {:?}", params);
             let interface: T::InterfaceId = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Interface ID missing")))?;
             let protocol: T::Protocol = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Protocol missing")))?;
-            let context: Vec<u8> = params
+            let context: String = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Context missing")))?;
             let filter_code: String = params

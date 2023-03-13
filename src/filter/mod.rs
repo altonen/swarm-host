@@ -117,7 +117,7 @@ struct Interface<T: NetworkBackend> {
     index: NodeIndex,
 
     /// Notification filters.
-    notification_filters: HashMap<T::Protocol, (Vec<u8>, String)>,
+    notification_filters: HashMap<T::Protocol, (String, String)>,
 }
 
 /// Object implementing message filtering for `swarm-host`.
@@ -318,7 +318,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         &mut self,
         interface: T::InterfaceId,
         protocol: T::Protocol,
-        context: Vec<u8>,
+        context: String,
         filter_code: String,
     ) -> crate::Result<()> {
         let iface = self
@@ -332,6 +332,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
             ?protocol,
             "install notification filter"
         );
+
+        tracing::info!(target: LOG_TARGET, filter_code);
 
         // TODO: abstract this behind some interface
         Python::with_gil(|py| -> Result<(), Error> {

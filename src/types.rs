@@ -68,7 +68,7 @@ pub enum OverseerEvent<T: NetworkBackend> {
         protocol: T::Protocol,
 
         // User-specified context that is passed on to the filter.
-        context: Vec<u8>,
+        context: String,
 
         /// Filter code.
         filter_code: String,
