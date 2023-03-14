@@ -398,15 +398,18 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
             .ok_or(Error::InterfaceDoesntExist)?
             .index;
 
-        tracing::debug!(
+        tracing::span!(target: LOG_TARGET, Level::DEBUG, "inject notification").enter();
+        tracing::event!(
             target: LOG_TARGET,
+            Level::DEBUG,
             peer_id = ?src_peer,
             interface_id = ?src_interface,
             ?protocol,
             "inject notification",
         );
-        tracing::trace!(
+        tracing::event!(
             target: LOG_TARGET_MSG,
+            Level::TRACE,
             message = ?message,
         );
 
@@ -433,7 +436,13 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
 
                                 match dst_iface.notification_filters.get(&protocol) {
                                     Some((context, filter)) => {
-                                        Python::with_gil(|py| {
+                                        let result = Python::with_gil(|py| {
+                                            tracing::event!(
+                                                target: LOG_TARGET,
+                                                Level::DEBUG,
+                                                "execute custom notification filter",
+                                            );
+
                                             let fun = PyModule::from_code(py, &filter, "", "")
                                                 .expect("code to be loaded successfully")
                                                 .getattr("filter_notification")
@@ -455,9 +464,29 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                                                 .extract::<bool>()
                                                 .unwrap();
 
+                                            tracing::event!(
+                                                target: LOG_TARGET,
+                                                Level::DEBUG,
+                                                ?result,
+                                                "filter execution done",
+                                            );
+
                                             result
-                                        })
-                                        .then_some((*dst_interface, dst_peer))
+                                        });
+
+                                        if result {
+                                            tracing::event!(
+                                                target: LOG_TARGET,
+                                                Level::DEBUG,
+                                                interface_id = ?dst_interface,
+                                                peer_id = ?dst_peer,
+                                                ?protocol,
+                                                "forward message to peer",
+                                            );
+                                            Some((*dst_interface, dst_peer))
+                                        } else {
+                                            return None;
+                                        }
                                     }
                                     None => Some((*dst_interface, dst_peer)),
                                 }

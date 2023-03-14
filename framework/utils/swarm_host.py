@@ -1,6 +1,7 @@
 from jsonrpcclient import parse, request
 import requests
 
+import logging
 import subprocess
 import time
 
@@ -13,21 +14,21 @@ class SwarmHost:
         args = [
             MOCKCHAIN_EXE,
             "--rpc-port", str(rpc_port),
-            "--backend", backend
+            "--backend", backend,
         ]
 
         self.process = subprocess.Popen(
             args,
-            stdout=self.logfile,
-            stderr=subprocess.STDOUT,
-            env={"RUST_LOG": "overseer,mockchain,rpc,filter=trace"}
+            stdout = self.logfile,
+            stderr = subprocess.STDOUT,
+            env = {"RUST_LOG": "overseer,mockchain,rpc,filter=trace,sub-libp2p=debug,filter::msg=off"}
         )
 
     def __del__(self):
         self.process.terminate()
 
     def create_interface(self, address):
-        print("create interface %s" % (address))
+        logging.info("create interface %s" % (address))
 
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
@@ -43,7 +44,7 @@ class SwarmHost:
         return None
 
     def link_interface(self, iface1_id, iface2_id):
-        print("link interfaces %d %d" % (iface1_id, iface2_id))
+        logging.info("link interfaces %d %d" % (iface1_id, iface2_id))
 
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
@@ -59,4 +60,26 @@ class SwarmHost:
         return None
 
     def unlink_interace(self):
-        print("unlink interface")
+        logging.info("unlink interface")
+
+    """
+        Install filter for protocol.
+
+        TODO: document properly
+    """
+    def install_notification_filter(self, interface, protocol, ctx, filter):
+        logging.info("install notification filter for %s" % (protocol))
+
+        response = requests.post(
+            "http://localhost:%d/" % (self.rpc_port),
+            json = request(
+                "install_notification_filter",
+                params = [interface, protocol, ctx, filter],
+            )
+        )
+        if "result" in response.json():
+            print("success %s" % (response.json()["result"]))
+            return response.json()["result"]
+        elif "error" in response.json():
+            print("failure %s" % (response.json()["error"]))
+            return response.json()["error"]

@@ -162,11 +162,11 @@ class Node():
             args,
             stdout=self.logfile,
             stderr=subprocess.STDOUT,
-            env={"RUST_LOG": "sub-libp2p=debug,info"}
+            env={"RUST_LOG": "sub-libp2p,sync=debug,info,tx=debug"}
         )
 
         # TODO: zzz
-        time.sleep(1)
+        time.sleep(2)
 
         self.substrate = SubstrateInterface(
             url = "ws://127.0.0.1:%d" % (self.ws_port),
@@ -188,9 +188,11 @@ class Node():
             raise RpcQueryError("failed to fetch metadata: `%s`" % (response['error']['message']))
 
         if response.get('result'):
+            self.raw_metadata = bytearray.fromhex(response.get('result')[2:])
+            print("%s..%s" % (response.get('result')[:10], response.get('result')[-10:]))
             RuntimeConfiguration().update_type_registry(load_type_registry_preset(name="core"))
             self.metadata = RuntimeConfiguration().create_scale_object(
-                'MetadataVersioned', data=ScaleBytes(response.get('result'))
+                'MetadataVersioned', data = ScaleBytes(response.get('result'))
             )
             self.metadata.decode()
 
@@ -203,7 +205,7 @@ class Node():
         Get chain metadata.
     """
     def get_metadata(self):
-        self.metadata
+        return self.raw_metadata
 
     """
         Get local peer ID.
@@ -214,8 +216,44 @@ class Node():
     """
         Submit extrinsic.
     """
-    def submit_extrinsic(self, extrinsic):
-        print("submit extrinsic '{}'".format(extrinsic))
+    def submit_extrinsic(self, call_module, call_function, call_params):
+        logging.info("submit extrinsic: module `%s`, function `%s`, params `%s`".format(
+            call_module,
+            call_function,
+            call_params
+        ))
+
+        keypair = Keypair.create_from_uri('//Alice')
+        call = self.substrate.compose_call(
+            call_module,
+            call_function,
+            call_params
+        )
+        extrinsic = self.substrate.create_signed_extrinsic(
+            call = call,
+            keypair = keypair,
+            era = {'period': 64}
+        )
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+
+            print('Extrinsic "{}" included in block "{}"'.format(
+                receipt.extrinsic_hash, receipt.block_hash
+            ))
+
+            if receipt.is_success:
+
+                print('✅ Success, triggered events:')
+                for event in receipt.triggered_events:
+                    print(f'* {event.value}')
+
+            else:
+                print('⚠️ Extrinsic Failed: ', receipt.error_message)
+
+
+        except SubstrateRequestException as e:
+            print("Failed to send: {}".format(e))
+
         pass
 
 class Polkadot(Node):
