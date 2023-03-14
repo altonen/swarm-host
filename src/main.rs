@@ -80,6 +80,13 @@ async fn main() {
         .try_init()
         .expect("to succeed");
 
+    // capture `SIGINT` and exit process
+    // see https://github.com/PyO3/pyo3/issues/2576 for more details
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        std::process::exit(0);
+    });
+
     match flags.backend {
         NetworkBackendType::Mockchain => run_mockchain_backend(flags).await,
         NetworkBackendType::Substrate => run_substrate_backend(flags).await,
