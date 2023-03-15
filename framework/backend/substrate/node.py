@@ -189,7 +189,6 @@ class Node():
 
         if response.get('result'):
             self.raw_metadata = bytearray.fromhex(response.get('result')[2:])
-            print("%s..%s" % (response.get('result')[:10], response.get('result')[-10:]))
             RuntimeConfiguration().update_type_registry(load_type_registry_preset(name="core"))
             self.metadata = RuntimeConfiguration().create_scale_object(
                 'MetadataVersioned', data = ScaleBytes(response.get('result'))

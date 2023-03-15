@@ -6,6 +6,8 @@ from scalecodec.base import RuntimeConfiguration, ScaleBytes
 
 import base64
 
+# TODO: this needs to be a module
+
 # Filter `notification` received from (`src_interface`, `src_peer`).
 # 
 # Check if `self.interface` should forward `notification` to  (`dst_interface`, `dst_peer`).
