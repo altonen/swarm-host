@@ -17,19 +17,34 @@ logging.basicConfig(
 
 # time.sleep(1)
 
-# iface1_addr = "127.0.0.1:4444"
-# response = requests.post(
-#     "http://localhost:%d/" % (8884),
-#     json = request(
-#         "create_interface",
-#         params = [iface1_addr],
-#     )
-# )
+iface1_addr = "127.0.0.1:4444"
+response = requests.post(
+    "http://localhost:%d/" % (8884),
+    json = request(
+        "create_interface",
+        params = [iface1_addr],
+    )
+)
 
 # iface1_id = host.create_interface(iface1_addr)
 # print("interface id '%d'" % iface1_id)
 
-# time.sleep(3)
+
+filter = open("block-announce-filter.py").read()
+# context = base64.b64encode(nodes[0].get_metadata()).decode('utf-8')
+
+response = requests.post(
+    "http://localhost:%d/" % (8884),
+    json = request(
+        "install_notification_filter",
+        params = [0, "/sup/block-announces/1", "", filter],
+    )
+)
+# host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)
+
+print("filter installed")
+
+time.sleep(3)
 
 # TODO: launching new nodes has to be made easier (better defaults)
 nodes = []
@@ -56,26 +71,26 @@ nodes.append(NodeTemplate()\
     .build()
 )
 
-filter = open("transaction-filter.py").read()
-context = base64.b64encode(nodes[0].get_metadata()).decode('utf-8')
+# filter = open("transaction-filter.py").read()
+# context = base64.b64encode(nodes[0].get_metadata()).decode('utf-8')
 
-response = requests.post(
-    "http://localhost:%d/" % (8884),
-    json = request(
-        "install_notification_filter",
-        params = [0, "/sup/transactions/1", context, filter],
-    )
-)
-# host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)
+# response = requests.post(
+#     "http://localhost:%d/" % (8884),
+#     json = request(
+#         "install_notification_filter",
+#         params = [0, "/sup/transactions/1", context, filter],
+#     )
+# )
+# # host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)
 
-nodes[0].submit_extrinsic(
-    call_module = 'Balances',
-    call_function = 'transfer',
-    call_params = {
-        'dest': '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
-        'value': 1 * 10**15
-    }
-)
+# nodes[0].submit_extrinsic(
+#     call_module = 'Balances',
+#     call_function = 'transfer',
+#     call_params = {
+#         'dest': '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+#         'value': 1 * 10**15
+#     }
+# )
 
 while True:
     time.sleep(200)
