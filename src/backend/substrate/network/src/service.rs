@@ -204,17 +204,17 @@ impl SubstrateNetwork {
         let mut map = StreamMap::new();
 
         let block_announce_config = Self::build_block_announce_protocol();
-        let sync_config = Self::build_sync_protocol(&mut map);
-        let state_config = Self::build_state_sync_protocol(&mut map);
-        let warp_config = Self::build_warp_sync_protocol(&mut map);
-        let light_config = Self::build_light_protocol(&mut map);
+        // let sync_config = Self::build_sync_protocol(&mut map);
+        // let state_config = Self::build_state_sync_protocol(&mut map);
+        // let warp_config = Self::build_warp_sync_protocol(&mut map);
+        // let light_config = Self::build_light_protocol(&mut map);
 
-        network_config.request_response_protocols.extend(vec![
-            sync_config,
-            state_config,
-            warp_config,
-            light_config,
-        ]);
+        // network_config.request_response_protocols.extend(vec![
+        //     sync_config,
+        //     state_config,
+        //     warp_config,
+        //     light_config,
+        // ]);
         network_config
             .listen_addresses
             .push("/ip6/::1/tcp/8888".parse().unwrap());
