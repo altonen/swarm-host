@@ -173,23 +173,6 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Received message.
         response: T::Response,
     },
-
-    /// Interface was bound to a peer.
-    ///
-    /// Requests should be sent to this peer if they're forwarded.
-    InterfaceBound {
-        /// Associated interface.
-        interface: T::InterfaceId,
-
-        /// Peer who sent the message.
-        peer: T::PeerId,
-    },
-
-    /// Interface doesn't have any node backing it.
-    InterfaceUnbound {
-        /// Associated interface.
-        interface: T::InterfaceId,
-    },
 }
 
 /// Abstraction which allows `swarm-host` to maintain connections to remote peers.

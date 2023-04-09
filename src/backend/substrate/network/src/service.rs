@@ -93,13 +93,9 @@ type PendingResponse = Pin<
 #[derive(Debug)]
 pub enum SubstrateNetworkEvent {
     /// Peer connected.
-    PeerConnected {
-        peer: PeerId,
-    },
+    PeerConnected { peer: PeerId },
     /// Peer disconnected.
-    PeerDisconnected {
-        peer: PeerId,
-    },
+    PeerDisconnected { peer: PeerId },
     /// Peer opened a protocol.
     ProtocolOpened {
         peer: PeerId,
@@ -128,10 +124,6 @@ pub enum SubstrateNetworkEvent {
         request_id: usize,
         response: Vec<u8>,
     },
-    InterfaceBound {
-        peer: PeerId,
-    },
-    InterfaceUnbound,
 }
 
 #[derive(Debug)]
@@ -173,8 +165,6 @@ pub struct SubstrateNetwork {
     next_request_id: usize,
     pending_requests: HashMap<usize, (u64, channel::oneshot::Sender<OutgoingResponse>)>,
     pending_responses: FuturesUnordered<PendingResponse>,
-    bound_peer: Option<PeerId>,
-    connected_peers: VecDeque<PeerId>,
     cached_responses: HashMap<u64, Vec<u8>>,
     rename: HashSet<PeerId>,
 }
@@ -204,17 +194,17 @@ impl SubstrateNetwork {
         let mut map = StreamMap::new();
 
         let block_announce_config = Self::build_block_announce_protocol();
-        // let sync_config = Self::build_sync_protocol(&mut map);
-        // let state_config = Self::build_state_sync_protocol(&mut map);
-        // let warp_config = Self::build_warp_sync_protocol(&mut map);
-        // let light_config = Self::build_light_protocol(&mut map);
+        let sync_config = Self::build_sync_protocol(&mut map);
+        let state_config = Self::build_state_sync_protocol(&mut map);
+        let warp_config = Self::build_warp_sync_protocol(&mut map);
+        let light_config = Self::build_light_protocol(&mut map);
 
-        // network_config.request_response_protocols.extend(vec![
-        //     sync_config,
-        //     state_config,
-        //     warp_config,
-        //     light_config,
-        // ]);
+        network_config.request_response_protocols.extend(vec![
+            sync_config,
+            state_config,
+            warp_config,
+            light_config,
+        ]);
         network_config
             .listen_addresses
             .push("/ip6/::1/tcp/8888".parse().unwrap());
@@ -392,10 +382,8 @@ impl SubstrateNetwork {
             next_request_id: 0usize,
             pending_requests: HashMap::new(),
             pending_responses: FuturesUnordered::new(),
-            connected_peers: VecDeque::new(),
             cached_responses: HashMap::new(),
             rename: HashSet::new(),
-            bound_peer: None,
         })
     }
 
@@ -858,26 +846,6 @@ impl SubstrateNetwork {
                         .await
                         .expect("channel to stay open");
 
-                        // update connnected peers/bound peer information
-                        if let None = self.bound_peer {
-                            log::debug!(
-                                target: "sub-libp2p",
-                                "set {peer_id} as the interface backer",
-                            );
-
-                            self.bound_peer = Some(peer_id);
-                            self.event_tx.send(
-                                SubstrateNetworkEvent::InterfaceBound { peer: peer_id },
-                            )
-                            .await
-                            .expect("channel to stay open");
-                        } else {
-                            log::debug!(
-                                target: "sub-libp2p",
-                                "push {peer_id} to potential interface backers",
-                            );
-                            self.connected_peers.push_back(peer_id);
-                        }
                     }
                     SwarmEvent::ConnectionClosed {
                         peer_id,
@@ -899,41 +867,6 @@ impl SubstrateNetwork {
                         .await
                         .expect("channel to stay open");
                         self.rename.remove(&peer_id);
-
-                        // update connected peer/bound peer information
-                        if self.bound_peer == Some(peer_id) {
-                            if let Some(peer) = self.connected_peers.pop_front() {
-                                log::debug!(
-                                    target: "sub-libp2p",
-                                    "set {peer_id} as the interface backer",
-                                );
-
-                                self.bound_peer = Some(peer);
-                                self.event_tx.send(
-                                    SubstrateNetworkEvent::InterfaceBound { peer },
-                                )
-                                .await
-                                .expect("channel to stay open");
-                            } else {
-                                log::debug!(
-                                    target: "sub-libp2p",
-                                    "interface does not have any backers",
-                                );
-
-                                self.bound_peer = None;
-                                self
-                                .event_tx
-                                .send(SubstrateNetworkEvent::InterfaceUnbound)
-                                .await
-                                .expect("channel to stay open");
-                            }
-                        } else {
-                            log::debug!(
-                                target: "sub-libp2p",
-                                "remove {peer_id} from list of interface backers",
-                            );
-                            self.connected_peers.retain(|peer| peer != &peer_id);
-                        }
                     },
                     SwarmEvent::NewListenAddr { address, .. } => {
                         trace!(target: "sub-libp2p", "Libp2p => NewListenAddr({})", address);

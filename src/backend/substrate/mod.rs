@@ -271,21 +271,6 @@ impl InterfaceHandle {
                             .await
                             .expect("channel to stay open");
                         }
-                        SubstrateNetworkEvent::InterfaceBound { peer } => {
-                            tx.send(InterfaceEvent::InterfaceBound {
-                                interface: interface_id,
-                                peer: PeerId(peer),
-                            })
-                            .await
-                            .expect("channel to stay open");
-                        }
-                        SubstrateNetworkEvent::InterfaceUnbound => {
-                            tx.send(InterfaceEvent::InterfaceUnbound {
-                                interface: interface_id,
-                            })
-                            .await
-                            .expect("channel to stay open");
-                        }
                     },
                 }
             }

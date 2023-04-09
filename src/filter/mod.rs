@@ -165,8 +165,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
     ) -> crate::Result<()> {
         tracing::info!(
             target: LOG_TARGET,
-            interface_id = ?interface,
-            filter = ?filter,
+            ?interface,
+            ?filter,
             "register interface",
         );
 
@@ -213,7 +213,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
             target: LOG_TARGET,
             interface = ?first,
             interface = ?second,
-            link = ?link,
+            ?link,
             "link interfaces",
         );
 
@@ -328,7 +328,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
 
         tracing::debug!(
             target: LOG_TARGET,
-            interface_id = ?interface,
+            ?interface,
             ?protocol,
             "install notification filter"
         );
@@ -402,16 +402,12 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         tracing::event!(
             target: LOG_TARGET,
             Level::DEBUG,
-            peer_id = ?src_peer,
-            interface_id = ?src_interface,
+            peer = ?src_peer,
+            interface = ?src_interface,
             ?protocol,
             "inject notification",
         );
-        tracing::event!(
-            target: LOG_TARGET_MSG,
-            Level::TRACE,
-            message = ?message,
-        );
+        tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?message,);
 
         let pairs = Dfs::new(&self.links, iface_idx)
             .iter(&self.links)
@@ -512,16 +508,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         protocol: &T::Protocol,
         request: &T::Request,
     ) -> RequestHandlingResult {
-        tracing::debug!(
-            target: LOG_TARGET,
-            peer_id = ?peer,
-            interface_id = ?interface,
-            "inject request",
-        );
-        tracing::trace!(
-            target: LOG_TARGET_MSG,
-            request = ?request,
-        );
+        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject request",);
+        tracing::trace!(target: LOG_TARGET_MSG, ?request,);
 
         RequestHandlingResult::Forward
     }
@@ -536,16 +524,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         protocol: &T::Protocol,
         response: &T::Response,
     ) -> ResponseHandlingResult {
-        tracing::debug!(
-            target: LOG_TARGET,
-            peer_id = ?peer,
-            interface_id = ?interface,
-            "inject response",
-        );
-        tracing::trace!(
-            target: LOG_TARGET_MSG,
-            response = ?response,
-        );
+        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject response",);
+        tracing::trace!(target: LOG_TARGET_MSG, ?response,);
 
         ResponseHandlingResult::Forward
     }
