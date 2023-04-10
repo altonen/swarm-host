@@ -118,43 +118,17 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
                     OverseerEvent::CreateInterface { address, result } => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            address = ?address,
-                            "create new interface",
-                        );
-
-                        match self.backend.spawn_interface(address, InterfaceType::Masquerade).await {
-                            Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
-                                Entry::Vacant(entry) => {
-                                    tracing::trace!(
-                                        target: LOG_TARGET,
-                                        "interface created"
-                                    );
-
-                                    // NOTE: it is logic error for the interface to exist in `MessageFilter`
-                                    // if it doesn't exist in `self.interfaces` so `expect` is justified.
-                                    self
-                                        .filter
-                                        .register_interface(*handle.id(), FilterType::FullBypass)
-                                        .expect("unique interface");
-                                    self.event_streams.push(event_stream);
-                                    result.send(Ok(*handle.id())).expect("channel to stay open");
-                                    entry.insert(InterfaceInfo::new(handle));
-                                },
-                                Entry::Occupied(_) => tracing::error!(
-                                    target: LOG_TARGET,
-                                    id = ?*handle.id(),
-                                    "duplicate interface id"
-                                ),
-                            }
+                        match self.create_interface(address).await {
+                            Ok(interface) => result.send(Ok(interface)).expect("channel to stay open"),
                             Err(err) => {
                                 tracing::error!(
                                     target: LOG_TARGET,
-                                    error = ?err,
-                                    "failed to start interface"
+                                    ?address,
+                                    ?err,
+                                    "failed to crate interface",
                                 );
-                            },
+                                result.send(Err(err)).expect("channel to stay open");
+                            }
                         }
                     }
                     OverseerEvent::LinkInterface { first, second, result } => {
@@ -335,6 +309,39 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                     _ => {},
                 }
             }
+        }
+    }
+
+    async fn create_interface(&mut self, address: SocketAddr) -> crate::Result<T::InterfaceId> {
+        tracing::debug!(
+            target: LOG_TARGET,
+            address = ?address,
+            "create new interface",
+        );
+
+        match self
+            .backend
+            .spawn_interface(address, InterfaceType::Masquerade)
+            .await
+        {
+            Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
+                Entry::Vacant(entry) => {
+                    tracing::trace!(target: LOG_TARGET, "interface created");
+
+                    // NOTE: it is logic error for the interface to exist in `MessageFilter`
+                    // if it doesn't exist in `self.interfaces` so `expect` is justified.
+                    self.filter
+                        .register_interface(*handle.id(), FilterType::FullBypass)
+                        .expect("unique interface");
+                    self.event_streams.push(event_stream);
+
+                    let id = *handle.id();
+                    entry.insert(InterfaceInfo::new(handle));
+                    Ok(id)
+                }
+                Entry::Occupied(_) => Err(Error::InterfaceAlreadyExists),
+            },
+            Err(err) => Err(err),
         }
     }
 

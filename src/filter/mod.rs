@@ -508,8 +508,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         protocol: &T::Protocol,
         request: &T::Request,
     ) -> RequestHandlingResult {
-        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject request",);
-        tracing::trace!(target: LOG_TARGET_MSG, ?request,);
+        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject request");
+        tracing::trace!(target: LOG_TARGET_MSG, ?request);
 
         RequestHandlingResult::Forward
     }
@@ -524,8 +524,8 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         protocol: &T::Protocol,
         response: &T::Response,
     ) -> ResponseHandlingResult {
-        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject response",);
-        tracing::trace!(target: LOG_TARGET_MSG, ?response,);
+        tracing::warn!(target: LOG_TARGET, ?peer, ?interface, "inject response");
+        tracing::trace!(target: LOG_TARGET_MSG, ?response);
 
         ResponseHandlingResult::Forward
     }
