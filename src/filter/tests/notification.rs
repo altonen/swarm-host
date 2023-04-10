@@ -84,7 +84,7 @@ def filter_notification(
     );
 
     filter
-        .install_notification_filter(0usize, protocol_name, vec![], filter_code.to_owned())
+        .install_notification_filter(0usize, protocol_name, String::new(), filter_code.to_owned())
         .unwrap();
 
     // random valid message is forwarded
