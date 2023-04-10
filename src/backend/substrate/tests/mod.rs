@@ -4,8 +4,7 @@ use crate::backend::{substrate::SubstrateBackend, InterfaceType, NetworkBackend}
 async fn launch_substrate_masquerade() {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init()
-        .expect("to succeed");
+        .try_init();
 
     let mut backend = SubstrateBackend::new();
 
@@ -14,7 +13,7 @@ async fn launch_substrate_masquerade() {
         .await
         .unwrap();
 
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-    }
+    // loop {
+    //     tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    // }
 }
