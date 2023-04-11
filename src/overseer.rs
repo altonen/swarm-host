@@ -328,16 +328,17 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 Entry::Vacant(entry) => {
                     tracing::trace!(target: LOG_TARGET, "interface created");
 
-                    // NOTE: it is logic error for the interface to exist in `MessageFilter`
+                    // it is logic error for the interface to exist in `MessageFilter`
                     // if it doesn't exist in `self.interfaces` so `expect` is justified.
+                    let interface_id = *handle.id();
+
                     self.filter
-                        .register_interface(*handle.id(), FilterType::FullBypass)
+                        .register_interface(interface_id, FilterType::FullBypass)
                         .expect("unique interface");
                     self.event_streams.push(event_stream);
-
-                    let id = *handle.id();
                     entry.insert(InterfaceInfo::new(handle));
-                    Ok(id)
+
+                    Ok(interface_id)
                 }
                 Entry::Occupied(_) => Err(Error::InterfaceAlreadyExists),
             },

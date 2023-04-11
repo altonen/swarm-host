@@ -4,6 +4,7 @@ use crate::{
     backend::{InterfaceType, NetworkBackend},
     ensure,
     error::Error,
+    types::DEFAULT_CHANNEL_SIZE,
 };
 
 use petgraph::{
@@ -11,6 +12,7 @@ use petgraph::{
     visit::{Dfs, Walker},
 };
 use pyo3::prelude::*;
+use tokio::sync::mpsc;
 use tracing::Level;
 
 use std::{
@@ -528,5 +530,496 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
         tracing::trace!(target: LOG_TARGET_MSG, ?response);
 
         ResponseHandlingResult::Forward
+    }
+}
+
+/// Events produced by [`Filter`].
+#[derive(Debug)]
+pub enum FilterEvent {}
+
+/// Commands sent by `Overseer` to [`Filter`].
+#[derive(Debug)]
+pub enum FilterCommand<T: NetworkBackend> {
+    /// Register peer to [`Filter`].
+    RegisterPeer {
+        /// Peer ID.
+        peer: T::PeerId,
+    },
+
+    /// Unregister peer from [`Filter`].
+    UnregisterPeer {
+        /// Peer ID.
+        peer: T::PeerId,
+    },
+
+    /// Install filter.
+    InitializeFilter {
+        /// Filter code.
+        filter: String,
+
+        /// Optional filter context.
+        context: Option<String>,
+    },
+
+    /// Install notification filter.
+    InstallNotificationFilter {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Filter code.
+        filter: String,
+
+        /// Optional filter context.
+        context: Option<String>,
+    },
+
+    /// Install request filter.
+    InstallRequestFilter {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Filter code.
+        filter: String,
+
+        /// Optional filter context.
+        context: Option<String>,
+    },
+
+    /// Install response filter.
+    InstallResponseFilter {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Filter code.
+        filter: String,
+
+        /// Optional filter context.
+        context: Option<String>,
+    },
+
+    /// Inject notification to filter.
+    InjectNotification {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Notification.
+        notification: T::Message,
+    },
+
+    InjectRequest {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Request.
+        request: T::Request,
+    },
+
+    /// Inject response to filter.
+    InjectResponse {
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Request ID.
+        request_id: T::RequestId,
+
+        /// Response.
+        response: T::Response,
+    },
+}
+
+/// Handle which allows allows `Overseer` to interact with filter
+pub struct FilterHandle<T: NetworkBackend> {
+    /// TX channel for sending commands to [`Filter`].
+    tx: mpsc::Sender<FilterCommand<T>>,
+}
+
+impl<T: NetworkBackend + 'static> FilterHandle<T> {
+    /// Create new [`FilterHandle`].
+    pub fn new(tx: mpsc::Sender<FilterCommand<T>>) -> Self {
+        Self { tx }
+    }
+
+    /// Register peer to [`Filter`].
+    pub async fn register_peer(&self, peer: T::PeerId) {
+        self.tx
+            .send(FilterCommand::RegisterPeer { peer })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Register peer from [`Filter`].
+    pub async fn unregister_peer(&self, peer: T::PeerId) {
+        self.tx
+            .send(FilterCommand::UnregisterPeer { peer })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Initialize filter context.
+    ///
+    /// Pass in the initialization code and any additional context, if needed.
+    pub async fn initialize_filter(&self, filter: String, context: Option<String>) {
+        self.tx
+            .send(FilterCommand::InitializeFilter { filter, context })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Install notification filter.
+    pub async fn install_notification_filter(
+        &self,
+        protocol: T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) {
+        self.tx
+            .send(FilterCommand::InstallNotificationFilter {
+                protocol,
+                filter,
+                context,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Install request filter.
+    pub async fn install_request_filter(
+        &self,
+        protocol: T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) {
+        self.tx
+            .send(FilterCommand::InstallRequestFilter {
+                protocol,
+                filter,
+                context,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Install response filter.
+    pub async fn install_response_filter(
+        &self,
+        protocol: T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) {
+        self.tx
+            .send(FilterCommand::InstallResponseFilter {
+                protocol,
+                filter,
+                context,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Inject notification to filter.
+    pub async fn inject_notification(
+        &self,
+        protocol: T::Protocol,
+        peer: T::PeerId,
+        notification: T::Message,
+    ) {
+        self.tx
+            .send(FilterCommand::InjectNotification {
+                protocol,
+                peer,
+                notification,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Inject request to filter.
+    pub async fn inject_request(
+        &self,
+        protocol: T::Protocol,
+        peer: T::PeerId,
+        request: T::Request,
+    ) {
+        self.tx
+            .send(FilterCommand::InjectRequest {
+                protocol,
+                peer,
+                request,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Inject response to filter.
+    pub async fn inject_response(
+        &self,
+        protocol: T::Protocol,
+        request_id: T::RequestId,
+        response: T::Response,
+    ) {
+        self.tx
+            .send(FilterCommand::InjectResponse {
+                protocol,
+                request_id,
+                response,
+            })
+            .await
+            .expect("channel to stay open");
+    }
+}
+
+struct NewFilter<T: NetworkBackend> {
+    /// RX channel for listening to commands from `Overseer`.
+    command_rx: mpsc::Receiver<FilterCommand<T>>,
+
+    /// TX channel for sending events to `Overseer`.
+    event_tx: mpsc::Sender<FilterEvent>,
+
+    /// Registered peers.
+    peers: HashMap<T::PeerId, ()>,
+}
+
+impl<T: NetworkBackend + 'static> NewFilter<T> {
+    pub fn new(event_tx: mpsc::Sender<FilterEvent>) -> FilterHandle<T> {
+        let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+
+        // create new filter, starts its event loop and return a handle which
+        // allows `Overseer` to interact with the filter.
+        tokio::spawn(async move {
+            NewFilter {
+                command_rx: rx,
+                event_tx,
+                peers: HashMap::new(),
+            }
+            .run()
+            .await;
+        });
+
+        FilterHandle::new(tx)
+    }
+
+    async fn run(mut self) {
+        loop {
+            tokio::select! {
+                command = self.command_rx.recv() => match command.expect("channel to stay open ") {
+                    FilterCommand::RegisterPeer { peer } => {
+                        if let Err(error) = self.register_peer(peer) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                ?error,
+                                "failed to register peer",
+                            );
+                        }
+                    }
+                    FilterCommand::UnregisterPeer { peer } => {
+                        if let Err(error) = self.unregister_peer(&peer) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                ?error,
+                                "failed to unregister peer",
+                            );
+                        }
+                    }
+                    FilterCommand::InitializeFilter {
+                        filter,
+                        context,
+                    } => {
+                        if let Err(error) = self.initialize_filter(filter, context) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?error,
+                                "failed to install filter",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InstallNotificationFilter {
+                        protocol,
+                        filter,
+                        context,
+                    } => {
+                        if let Err(error) = self.install_notification_filter(&protocol, filter, context) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                ?error,
+                                "failed to install notification filter",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InstallRequestFilter {
+                        protocol,
+                        filter,
+                        context,
+                    } => {
+                        if let Err(error) = self.install_request_filter(&protocol, filter, context) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                ?error,
+                                "failed to install request filter",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InstallResponseFilter {
+                        protocol,
+                        filter,
+                        context,
+                    } => {
+                        if let Err(error) = self.install_response_filter(&protocol, filter, context) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                "failed to install response filter",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InjectNotification {
+                        peer,
+                        protocol,
+                        notification,
+                    } => {
+                        if let Err(error) = self.inject_notification(&protocol, peer, notification) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                ?peer,
+                                ?error,
+                                "failed to inject notification",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InjectRequest {
+                        peer,
+                        protocol,
+                        request,
+                    } => {
+                        if let Err(error) = self.inject_request(&protocol, peer, request) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                ?peer,
+                                ?error,
+                                "failed to inject request",
+                            );
+                        }
+                        todo!();
+                    }
+                    FilterCommand::InjectResponse {
+                        protocol,
+                        request_id,
+                        response,
+                    } => {
+                        if let Err(error) = self.inject_response(&protocol, request_id, response) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?protocol,
+                                ?error,
+                                "failed to inject response",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Register peer to [`MessageFilter`].
+    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?peer, "register peer");
+
+        match self.peers.entry(peer) {
+            Entry::Vacant(entry) => {
+                entry.insert(());
+                Ok(())
+            }
+            Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
+        }
+    }
+
+    /// Unregister peer to [`MessageFilter`].
+    fn unregister_peer(&mut self, peer: &T::PeerId) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?peer, "unregister peer");
+
+        self.peers
+            .remove(&peer)
+            .map_or(Err(Error::PeerDoesntExist), |_| Ok(()))
+    }
+
+    /// Install filter context.
+    fn initialize_filter(&self, filter: String, context: Option<String>) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Install notification filter.
+    fn install_notification_filter(
+        &self,
+        protocol: &T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Install request filter.
+    fn install_request_filter(
+        &self,
+        protocol: &T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Install response filter.
+    fn install_response_filter(
+        &self,
+        protocol: &T::Protocol,
+        filter: String,
+        context: Option<String>,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Inject notification to filter.
+    fn inject_notification(
+        &self,
+        protocol: &T::Protocol,
+        peer: T::PeerId,
+        notification: T::Message,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Inject request to filter.
+    fn inject_request(
+        &self,
+        protocol: &T::Protocol,
+        peer: T::PeerId,
+        request: T::Request,
+    ) -> crate::Result<()> {
+        todo!();
+    }
+
+    /// Inject response to filter.
+    fn inject_response(
+        &self,
+        protocol: &T::Protocol,
+        request_id: T::RequestId,
+        response: T::Response,
+    ) -> crate::Result<()> {
+        todo!();
     }
 }
