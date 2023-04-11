@@ -200,7 +200,7 @@ pub trait Interface<T: NetworkBackend> {
 
 /// Traits which each network backend must implement.
 #[async_trait::async_trait]
-pub trait NetworkBackend: Debug {
+pub trait NetworkBackend: Debug + 'static {
     /// Unique ID identifying a peer.
     type PeerId: Debug
         + Copy

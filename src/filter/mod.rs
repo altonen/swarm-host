@@ -639,7 +639,7 @@ pub struct FilterHandle<T: NetworkBackend> {
     tx: mpsc::Sender<FilterCommand<T>>,
 }
 
-impl<T: NetworkBackend + 'static> FilterHandle<T> {
+impl<T: NetworkBackend> FilterHandle<T> {
     /// Create new [`FilterHandle`].
     pub fn new(tx: mpsc::Sender<FilterCommand<T>>) -> Self {
         Self { tx }
@@ -774,7 +774,7 @@ impl<T: NetworkBackend + 'static> FilterHandle<T> {
     }
 }
 
-struct NewFilter<T: NetworkBackend> {
+pub struct Filter<T: NetworkBackend> {
     /// RX channel for listening to commands from `Overseer`.
     command_rx: mpsc::Receiver<FilterCommand<T>>,
 
@@ -785,14 +785,14 @@ struct NewFilter<T: NetworkBackend> {
     peers: HashMap<T::PeerId, ()>,
 }
 
-impl<T: NetworkBackend + 'static> NewFilter<T> {
+impl<T: NetworkBackend> Filter<T> {
     pub fn new(event_tx: mpsc::Sender<FilterEvent>) -> FilterHandle<T> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         // create new filter, starts its event loop and return a handle which
         // allows `Overseer` to interact with the filter.
         tokio::spawn(async move {
-            NewFilter {
+            Filter {
                 command_rx: rx,
                 event_tx,
                 peers: HashMap::new(),
@@ -1020,6 +1020,15 @@ impl<T: NetworkBackend + 'static> NewFilter<T> {
         request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_response()").entered();
+        tracing::event!(
+            target: LOG_TARGET,
+            Level::TRACE,
+            ?protocol,
+            ?request_id,
+            "inject response",
+        );
+
+        Ok(())
     }
 }

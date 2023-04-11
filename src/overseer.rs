@@ -7,7 +7,10 @@ use crate::{
     },
     ensure,
     error::Error,
-    filter::{FilterType, LinkType, MessageFilter, RequestHandlingResult, ResponseHandlingResult},
+    filter::{
+        Filter, FilterEvent, FilterHandle, FilterType, LinkType, MessageFilter,
+        RequestHandlingResult, ResponseHandlingResult,
+    },
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -59,13 +62,17 @@ struct InterfaceInfo<T: NetworkBackend> {
 
     /// Interface peers.
     peers: HashMap<T::PeerId, PeerInfo<T>>,
+
+    /// Filter for the interface.
+    filter: FilterHandle<T>,
 }
 
 impl<T: NetworkBackend> InterfaceInfo<T> {
     /// Create new [`InterfaceInfo`] from `T::InterfaceHandle`.
-    pub fn new(handle: T::InterfaceHandle) -> Self {
+    pub fn new(handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
         Self {
             handle,
+            filter,
             peers: HashMap::new(),
         }
     }
@@ -88,6 +95,12 @@ pub struct Overseer<T: NetworkBackend> {
     /// Event streams for spawned interfaces.
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
 
+    /// Events received from the filters.
+    filter_events: mpsc::Receiver<FilterEvent>,
+
+    /// TX channel passed to new `Filter`s.
+    filter_event_tx: mpsc::Sender<FilterEvent>,
+
     /// Message filters.
     filter: MessageFilter<T>,
 }
@@ -96,6 +109,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
     /// Create new [`Overseer`].
     pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (filter_event_tx, filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         (
             Self {
@@ -105,6 +119,8 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 overseer_tx: overseer_tx.clone(),
                 filter: MessageFilter::new(),
                 interfaces: HashMap::new(),
+                filter_events,
+                filter_event_tx,
             },
             overseer_tx,
         )
@@ -174,100 +190,33 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 },
                 event = self.event_streams.next() => match event {
                     Some(InterfaceEvent::PeerConnected { peer, interface, protocols, sink }) => {
-                        if let Err(err) = self.add_peer(interface, peer, protocols, sink) {
+                        if let Err(err) = self.register_peer(interface, peer, protocols, sink).await {
+                           tracing::warn!(
+                                target: LOG_TARGET,
+                                ?interface,
+                                ?peer,
+                                "failed to register peer",
+                            );
+                        }
+                    }
+                    Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
+                        if let Err(err) = self.unregister_peer(interface, peer).await {
+                           tracing::warn!(
+                                target: LOG_TARGET,
+                                ?interface,
+                                ?peer,
+                                "failed to unregister peer",
+                            );
+                        }
+                    }
+                    Some(InterfaceEvent::MessageReceived { interface, peer, protocol, message }) => {
+                        if let Err(err) = self.inject_notification(interface, peer, protocol, message).await {
                            tracing::warn!(
                                 target: LOG_TARGET,
                                 interface_id = ?interface,
                                 peer_id = ?peer,
                                 "peer already exists in the filter",
                             );
-                        }
-                    }
-                    Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface_id = ?interface,
-                            peer_id = ?peer,
-                            "peer disconnected"
-                        );
-
-                        match self.interfaces.get_mut(&interface) {
-                            None => tracing::error!(
-                                target: LOG_TARGET,
-                                interface = ?interface,
-                                peer_id = ?peer,
-                                "interface does not exist",
-                            ),
-                            Some(info) => if info.peers.remove(&peer).is_none() {
-                                tracing::warn!(
-                                    target: LOG_TARGET,
-                                    interface_id = ?interface,
-                                    peer_id = ?peer,
-                                    "peer does not exist",
-                                );
-                            }
-                        }
-                    }
-                    Some(InterfaceEvent::MessageReceived { peer, interface, protocol, message }) => {
-                        // TODO: span?
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface_id = ?interface,
-                            peer_id = ?peer,
-                            "notification received from peer"
-                        );
-                        tracing::trace!(
-                            target: LOG_TARGET_MSG,
-                            message = ?message,
-                        );
-
-                        match self.filter.inject_notification(
-                            interface,
-                            peer,
-                            &protocol,
-                            &message
-                        ) {
-                            Ok(routing_table) => for (interface, peer) in routing_table {
-                                match self
-                                    .interfaces
-                                    .get_mut(&interface)
-                                    .expect("interface to exist")
-                                    .peers
-                                    .get_mut(&peer)
-                                {
-                                    None => tracing::error!(
-                                        target: LOG_TARGET,
-                                        interface_id = ?interface,
-                                        peer_id = ?peer,
-                                        "peer does not exist"
-                                    ),
-                                    Some(peer_info) => {
-                                        match peer_info.sink.send_packet(Some(protocol.clone()), &message).await {
-                                            Ok(_) =>
-                                                tracing::trace!(
-                                                    target: LOG_TARGET,
-                                                    interface_id = ?interface,
-                                                    peer_id = ?peer,
-                                                    "message sent to peer",
-                                                ),
-                                            Err(err) => tracing::error!(
-                                                target: LOG_TARGET,
-                                                interface_id = ?interface,
-                                                peer_id = ?peer,
-                                                error = ?err,
-                                                "failed to send message"
-                                            ),
-                                        }
-                                    }
-                                }
-                            }
-                            Err(err) => tracing::error!(
-                                target: LOG_TARGET,
-                                interface_id = ?interface,
-                                peer_id = ?peer,
-                                err = ?err,
-                                "failed to inject message into `MessageFilter`",
-                            ),
                         }
                     }
                     Some(InterfaceEvent::RequestReceived { interface, peer, protocol, request }) => {
@@ -307,6 +256,9 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                         }
                     },
                     _ => {},
+                },
+                event = self.filter_events.recv() => match event.expect("channel to stay open") {
+                    _ => todo!(),
                 }
             }
         }
@@ -326,17 +278,13 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
         {
             Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                 Entry::Vacant(entry) => {
-                    tracing::trace!(target: LOG_TARGET, "interface created");
-
-                    // it is logic error for the interface to exist in `MessageFilter`
-                    // if it doesn't exist in `self.interfaces` so `expect` is justified.
                     let interface_id = *handle.id();
+                    let filter = Filter::new(self.filter_event_tx.clone());
 
-                    self.filter
-                        .register_interface(interface_id, FilterType::FullBypass)
-                        .expect("unique interface");
+                    tracing::trace!(target: LOG_TARGET, interface = ?interface_id, "interface created");
+
                     self.event_streams.push(event_stream);
-                    entry.insert(InterfaceInfo::new(handle));
+                    entry.insert(InterfaceInfo::new(handle, filter));
 
                     Ok(interface_id)
                 }
@@ -346,45 +294,77 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
         }
     }
 
-    fn add_peer(
+    async fn register_peer(
         &mut self,
         interface: T::InterfaceId,
         peer: T::PeerId,
         protocols: Vec<T::Protocol>,
         sink: Box<dyn PacketSink<T> + Send>,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "peer connected");
+        tracing::debug!(
+            target: LOG_TARGET,
+            ?interface,
+            ?peer,
+            ?protocols,
+            "peer connected"
+        );
 
-        // TODO: more comprehensive error handling
-        match self
-            .filter
-            .register_peer(interface, peer, FilterType::FullBypass)
-        {
-            Err(Error::PeerAlreadyExists) => {
-                tracing::warn!(
-                    target: LOG_TARGET,
-                    interface_id = ?interface,
-                    peer_id = ?peer,
-                    "peer already exists in the filter",
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.peers.insert(
+                    peer,
+                    PeerInfo {
+                        protocols: HashSet::from_iter(protocols.into_iter()),
+                        sink,
+                    },
                 );
+
+                // TODO: pass protocols?
+                info.filter.register_peer(peer).await;
+                Ok(())
             }
-            Ok(_) => {}
-            Err(err) => panic!("unrecoverable error occurred: {err:?}"),
         }
+    }
 
-        self.interfaces
-            .get_mut(&interface)
-            .expect("interface to exist")
-            .peers
-            .insert(
-                peer,
-                PeerInfo {
-                    protocols: HashSet::from_iter(protocols.into_iter()),
-                    sink,
-                },
-            );
+    async fn unregister_peer(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "peer disconnected");
 
-        Ok(())
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => match info.peers.remove(&peer) {
+                None => Err(Error::PeerDoesntExist),
+                Some(_) => {
+                    info.filter.unregister_peer(peer).await;
+                    Ok(())
+                }
+            },
+        }
+    }
+
+    async fn inject_notification(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+        notification: T::Message,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "inject notification");
+        tracing::trace!(target: LOG_TARGET_MSG, ?notification);
+
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter
+                    .inject_notification(protocol, peer, notification)
+                    .await;
+                Ok(())
+            }
+        }
     }
 
     /// Inject request to `MessageFilter` and possibly route it to some connected peer.
@@ -401,10 +381,16 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             ?peer,
             ?protocol,
             request_id = ?request.id(),
-            "handle request",
+            "inject request",
         );
 
-        Ok(())
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter.inject_request(protocol, peer, request).await;
+                Ok(())
+            }
+        }
     }
 
     /// Inject response to `MessageFilter` and possibly route it to some connected peer.
@@ -424,7 +410,15 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             "inject response",
         );
 
-        Ok(())
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter
+                    .inject_response(protocol, request_id, response)
+                    .await;
+                Ok(())
+            }
+        }
     }
 
     /// Apply connection upgrade for an active peer.
@@ -579,6 +573,7 @@ mod tests {
         let (mut overseer, _) = Overseer::<MockchainBackend>::new();
         let interface = rng.gen();
         let peer = rng.gen();
+        let filter = Filter::new(overseer.filter_event_tx.clone());
 
         overseer.interfaces.insert(
             interface,
@@ -591,6 +586,7 @@ mod tests {
                 .await
                 .unwrap()
                 .0,
+                filter,
             ),
         );
 
