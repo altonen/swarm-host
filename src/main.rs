@@ -24,6 +24,7 @@ use std::net::SocketAddr;
 
 mod backend;
 mod error;
+mod executor;
 mod filter;
 mod overseer;
 mod rpc;

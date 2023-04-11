@@ -20,7 +20,6 @@ use std::{
     fmt::Debug,
 };
 
-mod executor;
 #[cfg(test)]
 mod tests;
 
