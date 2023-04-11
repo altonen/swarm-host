@@ -48,8 +48,23 @@ pub enum Error {
     #[error("Custom error: `{0}`")]
     Custom(String),
 
+    #[error("Filter error: `{0}`")]
+    FilterError(FilterError),
+
+    #[error("Executor error: `{0}`")]
+    ExecutorError(String),
+}
+
+#[derive(Error, Debug)]
+pub enum FilterError {
     #[error("Invalid filter code: `{0}`")]
     InvalidFilter(String),
+}
+
+impl From<pyo3::PyErr> for Error {
+    fn from(error: pyo3::PyErr) -> Self {
+        Error::ExecutorError(error.to_string())
+    }
 }
 
 impl From<io::Error> for Error {

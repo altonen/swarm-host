@@ -12,6 +12,7 @@ use rand::Rng;
 use std::collections::HashSet;
 
 // TODO: add tests `IngressOnly` and `EgressOnly`
+// TODO: remove this code
 
 #[test]
 fn register_new_interface() {

@@ -7,6 +7,7 @@ use crate::{
     },
     ensure,
     error::Error,
+    executor::Executor,
     filter::{
         Filter, FilterEvent, FilterHandle, FilterType, LinkType, MessageFilter,
         RequestHandlingResult, ResponseHandlingResult,
@@ -79,7 +80,7 @@ impl<T: NetworkBackend> InterfaceInfo<T> {
 }
 
 /// Object overseeing `swarm-host` execution.
-pub struct Overseer<T: NetworkBackend> {
+pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Network-specific functionality.
     backend: T,
 
@@ -103,9 +104,12 @@ pub struct Overseer<T: NetworkBackend> {
 
     /// Message filters.
     filter: MessageFilter<T>,
+
+    /// Executor
+    _marker: std::marker::PhantomData<E>,
 }
 
-impl<T: NetworkBackend + Debug> Overseer<T> {
+impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     /// Create new [`Overseer`].
     pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -121,6 +125,7 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
                 interfaces: HashMap::new(),
                 filter_events,
                 filter_event_tx,
+                _marker: Default::default(),
             },
             overseer_tx,
         )
@@ -279,12 +284,14 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
             Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                 Entry::Vacant(entry) => {
                     let interface_id = *handle.id();
-                    let filter = Filter::new(self.filter_event_tx.clone());
+                    let (filter, filter_handle) =
+                        Filter::<T, E>::new(interface_id, self.filter_event_tx.clone());
 
                     tracing::trace!(target: LOG_TARGET, interface = ?interface_id, "interface created");
 
                     self.event_streams.push(event_stream);
-                    entry.insert(InterfaceInfo::new(handle, filter));
+                    entry.insert(InterfaceInfo::new(handle, filter_handle));
+                    tokio::spawn(filter.run());
 
                     Ok(interface_id)
                 }
@@ -460,9 +467,12 @@ impl<T: NetworkBackend + Debug> Overseer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::mockchain::{
-        types::{ProtocolId, Request, Response},
-        MockchainBackend, MockchainHandle,
+    use crate::{
+        backend::mockchain::{
+            types::{ProtocolId, Request, Response},
+            MockchainBackend, MockchainHandle,
+        },
+        executor::python::PythonExecutor,
     };
     use rand::Rng;
 
@@ -570,10 +580,13 @@ mod tests {
     #[tokio::test]
     async fn apply_connection_upgrade() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend>::new();
+        let (mut overseer, _) = Overseer::<MockchainBackend, PythonExecutor>::new();
         let interface = rng.gen();
         let peer = rng.gen();
-        let filter = Filter::new(overseer.filter_event_tx.clone());
+        let (filter, filter_handle) = Filter::<MockchainBackend, PythonExecutor>::new(
+            interface,
+            overseer.filter_event_tx.clone(),
+        );
 
         overseer.interfaces.insert(
             interface,
@@ -586,7 +599,7 @@ mod tests {
                 .await
                 .unwrap()
                 .0,
-                filter,
+                filter_handle,
             ),
         );
 

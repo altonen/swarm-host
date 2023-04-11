@@ -3,7 +3,8 @@
 use crate::{
     backend::{InterfaceType, NetworkBackend},
     ensure,
-    error::Error,
+    error::{Error, FilterError},
+    executor::Executor,
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -29,6 +30,7 @@ const LOG_TARGET: &'static str = "filter";
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "filter::msg";
 
+// TODO: move interface linking to overseer
 // TODO: move all `pyo3`-related code behind an interface
 // TODO: create separate filter task for each new interface
 // TODO: message -> notification
@@ -347,7 +349,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                         ?filter_code,
                         "`PyO3` failed to initialize filter code",
                     );
-                    Error::InvalidFilter(filter_code.clone())
+                    Error::FilterError(FilterError::InvalidFilter(filter_code.clone()))
                 })?
                 .getattr("filter_notification")
                 .map_err(|error| {
@@ -358,7 +360,7 @@ impl<T: NetworkBackend + Debug> MessageFilter<T> {
                         ?filter_code,
                         "didn't find `filter_notification()` from supplied code",
                     );
-                    Error::InvalidFilter(filter_code.clone())
+                    Error::FilterError(FilterError::InvalidFilter(filter_code.clone()))
                 })
                 .map(|_| {
                     iface
@@ -773,7 +775,13 @@ impl<T: NetworkBackend> FilterHandle<T> {
     }
 }
 
-pub struct Filter<T: NetworkBackend> {
+pub struct Filter<T: NetworkBackend, E: Executor<T>> {
+    /// Executor.
+    executor: Option<E>,
+
+    /// Interface ID.
+    interface: T::InterfaceId,
+
     /// RX channel for listening to commands from `Overseer`.
     command_rx: mpsc::Receiver<FilterCommand<T>>,
 
@@ -784,26 +792,26 @@ pub struct Filter<T: NetworkBackend> {
     peers: HashMap<T::PeerId, ()>,
 }
 
-impl<T: NetworkBackend> Filter<T> {
-    pub fn new(event_tx: mpsc::Sender<FilterEvent>) -> FilterHandle<T> {
+impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
+    pub fn new(
+        interface: T::InterfaceId,
+        event_tx: mpsc::Sender<FilterEvent>,
+    ) -> (Filter<T, E>, FilterHandle<T>) {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-        // create new filter, starts its event loop and return a handle which
-        // allows `Overseer` to interact with the filter.
-        tokio::spawn(async move {
-            Filter {
+        (
+            Filter::<T, E> {
+                interface,
                 command_rx: rx,
                 event_tx,
                 peers: HashMap::new(),
-            }
-            .run()
-            .await;
-        });
-
-        FilterHandle::new(tx)
+                executor: None,
+            },
+            FilterHandle::new(tx),
+        )
     }
 
-    async fn run(mut self) {
+    pub async fn run(mut self) {
         loop {
             tokio::select! {
                 command = self.command_rx.recv() => match command.expect("channel to stay open ") {
@@ -831,7 +839,7 @@ impl<T: NetworkBackend> Filter<T> {
                         filter,
                         context,
                     } => {
-                        if let Err(error) = self.initialize_filter(filter, context) {
+                        if let Err(error) = self.initialize_filter(self.interface, filter, context) {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?error,
@@ -935,7 +943,7 @@ impl<T: NetworkBackend> Filter<T> {
         }
     }
 
-    /// Register peer to [`MessageFilter`].
+    /// Register peer to [`Filter`].
     fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "register peer");
 
@@ -948,7 +956,7 @@ impl<T: NetworkBackend> Filter<T> {
         }
     }
 
-    /// Unregister peer to [`MessageFilter`].
+    /// Unregister peer to [`Filter`].
     fn unregister_peer(&mut self, peer: &T::PeerId) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "unregister peer");
 
@@ -958,8 +966,16 @@ impl<T: NetworkBackend> Filter<T> {
     }
 
     /// Install filter context.
-    fn initialize_filter(&self, filter: String, context: Option<String>) -> crate::Result<()> {
-        todo!();
+    fn initialize_filter(
+        &mut self,
+        interface: T::InterfaceId,
+        filter: String,
+        context: Option<String>,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?interface, "initialize new filter");
+
+        self.executor = Some(E::new(interface, filter, context)?);
+        Ok(())
     }
 
     /// Install notification filter.
@@ -1009,7 +1025,16 @@ impl<T: NetworkBackend> Filter<T> {
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_request()").entered();
+        tracing::event!(
+            target: LOG_TARGET,
+            Level::TRACE,
+            ?protocol,
+            "inject request"
+        );
+        tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?request);
+
+        Ok(())
     }
 
     /// Inject response to filter.
@@ -1027,6 +1052,7 @@ impl<T: NetworkBackend> Filter<T> {
             ?request_id,
             "inject response",
         );
+        tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?response);
 
         Ok(())
     }

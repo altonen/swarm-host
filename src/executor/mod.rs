@@ -11,9 +11,9 @@ pub enum RequestHandlingResult {}
 /// Response handling result.
 pub enum ResponseHandlingResult {}
 
-pub trait Executor<T: NetworkBackend> {
+pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Create new [`Executor`].
-    fn new() -> crate::Result<Self>
+    fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized;
 
@@ -22,9 +22,6 @@ pub trait Executor<T: NetworkBackend> {
 
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId);
-
-    /// Initialize filter context.
-    fn initialize_filter(&mut self, code: String, context: Option<String>) -> crate::Result<()>;
 
     /// Install notification filter for `protocol`.
     fn install_notification_filter(

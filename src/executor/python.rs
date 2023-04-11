@@ -6,14 +6,69 @@ use crate::{
     },
 };
 
-pub struct PythonExecutor {}
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyList},
+    FromPyPointer,
+};
+use tracing::Level;
+
+/// Logging target for the file.
+const LOG_TARGET: &'static str = "executor::python";
+
+struct Context(*mut pyo3::ffi::PyObject);
+
+unsafe impl Send for Context {}
+unsafe impl Sync for Context {}
+
+// TODO: generate random key for the python executor so that
+// there is appropriate isolation between filters
+pub struct PythonExecutor {
+    /// Initialize context.
+    context: Context,
+
+    /// Generic filter code.
+    code: String,
+
+    /// Installed notification filter, if any.
+    notification_filter: Option<String>,
+
+    /// Installed request filter, if any.
+    request_filter: Option<String>,
+
+    /// Installed response filter, if any.
+    response_filter: Option<String>,
+}
 
 impl<T: NetworkBackend> Executor<T> for PythonExecutor {
-    fn new() -> crate::Result<Self>
+    fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized,
     {
-        todo!();
+        tracing::debug!(
+            target: LOG_TARGET,
+            ?interface,
+            ?code,
+            ?context,
+            "initialize new executor"
+        );
+
+        let context = Python::with_gil(|py| -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
+            let fun =
+                PyModule::from_code(py, &code, "", format!("module{:?}", interface).as_str())?
+                    .getattr("initialize_ctx")?;
+            let context = fun.call1((context,))?;
+
+            Ok(Into::<Py<PyAny>>::into(context).into_ptr())
+        })?;
+
+        Ok(Self {
+            context: Context(context),
+            code,
+            notification_filter: None,
+            request_filter: None,
+            response_filter: None,
+        })
     }
 
     /// Register `peer` to filter.
@@ -23,11 +78,6 @@ impl<T: NetworkBackend> Executor<T> for PythonExecutor {
 
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId) {
-        todo!();
-    }
-
-    /// Initialize filter context.
-    fn initialize_filter(&mut self, code: String, context: Option<String>) -> crate::Result<()> {
         todo!();
     }
 
