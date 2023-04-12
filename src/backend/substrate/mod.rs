@@ -3,6 +3,7 @@ use crate::{
         ConnectionUpgrade, IdableRequest, Interface, InterfaceEvent, InterfaceEventStream,
         InterfaceType, NetworkBackend, PacketSink,
     },
+    executor::IntoExecutorObject,
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -345,6 +346,15 @@ pub struct PeerId(SubstratePeerId);
 impl IntoPy<PyObject> for PeerId {
     fn into_py(self, py: Python<'_>) -> PyObject {
         self.0.to_bytes().into_py(py)
+    }
+}
+
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        todo!();
     }
 }
 

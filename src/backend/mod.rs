@@ -1,5 +1,5 @@
 #![allow(unused)]
-use crate::types::OverseerEvent;
+use crate::{executor::IntoExecutorObject, types::OverseerEvent};
 
 use futures::stream::Stream;
 use pyo3::{prelude::*, AsPyPointer, FromPyObject, IntoPy};
@@ -211,7 +211,8 @@ pub trait NetworkBackend: Debug + 'static {
         + Sync
         // TODO: zzz
         + for<'a> FromPyObject<'a>
-        + IntoPy<PyObject>;
+        + IntoPy<PyObject>
+        + IntoExecutorObject;
 
     /// Unique ID identifying the interface.
     type InterfaceId: Serialize

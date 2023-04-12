@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use crate::{
     backend::NetworkBackend,
-    error::Error,
+    error::{Error, ExecutorError},
     executor::{
-        Executor, NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
+        Executor, IntoExecutorObject, NotificationHandlingResult, RequestHandlingResult,
+        ResponseHandlingResult,
     },
 };
 
@@ -46,7 +47,11 @@ pub struct PyO3Executor {
     response_filter: Option<String>,
 }
 
-impl<T: NetworkBackend> Executor<T> for PyO3Executor {
+impl<T: NetworkBackend> Executor<T> for PyO3Executor
+where
+    for<'a> <T as NetworkBackend>::PeerId:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+{
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized,
@@ -102,7 +107,7 @@ impl<T: NetworkBackend> Executor<T> for PyO3Executor {
         Python::with_gil(|py| {
             let fun = PyModule::from_code(py, &code, "", format!("module{}", self.key).as_str())?
                 .getattr("filter_notification")?;
-            let _ = fun.call1(((), (), ()))?;
+            let _ = fun.call1((None::<()>, None::<()>, None::<()>))?;
 
             self.notification_filter = Some(code);
             Ok(())
@@ -126,10 +131,37 @@ impl<T: NetworkBackend> Executor<T> for PyO3Executor {
     /// Inject `notification` from `peer` to filter.
     fn inject_notification(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<NotificationHandlingResult> {
-        todo!();
+        let notification_filter_code = self
+            .notification_filter
+            .as_ref()
+            .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
+
+        tracing::event!(
+            target: LOG_TARGET,
+            Level::TRACE,
+            ?protocol,
+            "inject notification"
+        );
+
+        Python::with_gil(|py| -> pyo3::PyResult<()> {
+            let fun = PyModule::from_code(
+                py,
+                notification_filter_code,
+                "",
+                format!("module{}", self.key).as_str(),
+            )?
+            .getattr("filter_notification")?;
+            let peer_py = peer.into_executor_object(py);
+
+            let _ = fun.call1(((), peer_py, ()))?;
+            Ok(())
+        })
+        .map(|_| NotificationHandlingResult::Reject)
+        .map_err(From::from)
     }
 
     /// Inject `notification` from `peer` to filter.

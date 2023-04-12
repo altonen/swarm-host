@@ -4,7 +4,7 @@ use crate::{
     backend::{InterfaceType, NetworkBackend},
     ensure,
     error::{Error, ExecutorError, FilterError},
-    executor::Executor,
+    executor::{Executor, NotificationHandlingResult},
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -1014,12 +1014,42 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
     /// Inject notification to filter.
     fn inject_notification(
-        &self,
+        &mut self,
         protocol: &T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_notification()").entered();
+        tracing::event!(
+            target: LOG_TARGET,
+            Level::TRACE,
+            ?protocol,
+            "inject notification"
+        );
+
+        match self
+            .executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .inject_notification(protocol, peer, notification)?
+        {
+            NotificationHandlingResult::Reject => {
+                tracing::event!(target: LOG_TARGET, Level::TRACE, "reject notification");
+                Ok(())
+            }
+            NotificationHandlingResult::Delay { delay } => {
+                tracing::event!(
+                    target: LOG_TARGET,
+                    Level::TRACE,
+                    ?delay,
+                    "delay forwarding the notification",
+                );
+
+                // TODO: create futures which is polled by `Filter`
+
+                Ok(())
+            }
+        }
     }
 
     /// Inject request to filter.

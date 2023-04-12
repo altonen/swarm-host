@@ -1,4 +1,7 @@
-use crate::backend::{mockchain::MockchainBackend, IdableRequest, NetworkBackend};
+use crate::{
+    backend::{mockchain::MockchainBackend, IdableRequest, NetworkBackend},
+    executor::IntoExecutorObject,
+};
 
 use pyo3::{
     prelude::*,
@@ -30,6 +33,16 @@ pub type MessageId = u64;
 
 /// Unique request ID.
 pub type RequestId = u64;
+
+// TODO: type conversions should be kept in one place
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::PeerId {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        self.into_py(context)
+    }
+}
 
 /// Transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]

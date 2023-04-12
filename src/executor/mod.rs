@@ -3,13 +3,31 @@ use crate::{backend::NetworkBackend, error::Error};
 pub mod pyo3;
 
 /// Notification handling result.
-pub enum NotificationHandlingResult {}
+pub enum NotificationHandlingResult {
+    /// Reject the notification and don't forward to anyone
+    Reject,
+
+    /// Delay forwarding the received notification,
+    Delay {
+        /// Delay in seconds.
+        delay: usize,
+    },
+}
 
 /// Request handling result.
 pub enum RequestHandlingResult {}
 
 /// Response handling result.
 pub enum ResponseHandlingResult {}
+
+/// Trait which allows converting types defined by the `NetworkBackend` into types that `Executor` understands.
+pub trait IntoExecutorObject {
+    type NativeType;
+    type Context<'a>;
+
+    /// Convert `NetworkBackend` type into something executor understands.
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType;
+}
 
 pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Create new [`Executor`].
@@ -40,6 +58,7 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Inject `notification` from `peer` to filter.
     fn inject_notification(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<NotificationHandlingResult>;
