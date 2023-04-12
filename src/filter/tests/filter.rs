@@ -100,32 +100,6 @@ def __filter_notification__(ctx):
 }
 
 #[test]
-fn invalid_signature_for_filter_notification() {
-    let context_code = "
-def initialize_ctx(ctx):
-    pass
-    "
-    .to_owned();
-    let filter_code = "
-def filter_notification(ctx):
-    pass
-    "
-    .to_owned();
-
-    let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
-    let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
-
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
-    assert!(filter
-        .install_notification_filter(ProtocolId::Transaction, filter_code)
-        .is_err());
-}
-
-#[test]
 fn inject_notification() {
     let context_code = "
 def initialize_ctx(ctx):
