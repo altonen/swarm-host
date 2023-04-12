@@ -14,7 +14,7 @@ use pyo3::{
 use tracing::Level;
 
 /// Logging target for the file.
-const LOG_TARGET: &'static str = "executor::python";
+const LOG_TARGET: &'static str = "executor::pyo3";
 
 struct Context(*mut pyo3::ffi::PyObject);
 
@@ -23,7 +23,7 @@ unsafe impl Sync for Context {}
 
 // TODO: generate random key for the python executor so that
 // there is appropriate isolation between filters
-pub struct PythonExecutor {
+pub struct PyO3Executor {
     /// Initialize context.
     context: Context,
 
@@ -40,7 +40,7 @@ pub struct PythonExecutor {
     response_filter: Option<String>,
 }
 
-impl<T: NetworkBackend> Executor<T> for PythonExecutor {
+impl<T: NetworkBackend> Executor<T> for PyO3Executor {
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized,

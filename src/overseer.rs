@@ -472,7 +472,7 @@ mod tests {
             types::{ProtocolId, Request, Response},
             MockchainBackend, MockchainHandle,
         },
-        executor::python::PythonExecutor,
+        executor::pyo3::PyO3Executor,
     };
     use rand::Rng;
 
@@ -580,10 +580,10 @@ mod tests {
     #[tokio::test]
     async fn apply_connection_upgrade() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend, PythonExecutor>::new();
+        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor>::new();
         let interface = rng.gen();
         let peer = rng.gen();
-        let (filter, filter_handle) = Filter::<MockchainBackend, PythonExecutor>::new(
+        let (filter, filter_handle) = Filter::<MockchainBackend, PyO3Executor>::new(
             interface,
             overseer.filter_event_tx.clone(),
         );

@@ -3,7 +3,7 @@
 use crate::{
     backend::{mockchain::MockchainBackend, substrate::SubstrateBackend, NetworkBackendType},
     error::Error,
-    executor::python::PythonExecutor,
+    executor::pyo3::PyO3Executor,
     overseer::Overseer,
     rpc::run_server,
 };
@@ -47,7 +47,7 @@ struct Flags {
 }
 
 async fn run_mockchain_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<MockchainBackend, PythonExecutor>::new();
+    let (mut overseer, tx) = Overseer::<MockchainBackend, PyO3Executor>::new();
     tokio::spawn(async move { overseer.run().await });
 
     run_server(
@@ -60,7 +60,7 @@ async fn run_mockchain_backend(flags: Flags) {
 }
 
 async fn run_substrate_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<SubstrateBackend, PythonExecutor>::new();
+    let (mut overseer, tx) = Overseer::<SubstrateBackend, PyO3Executor>::new();
     tokio::spawn(async move { overseer.run().await });
 
     run_server(

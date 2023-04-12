@@ -1,6 +1,6 @@
 use crate::{backend::NetworkBackend, error::Error};
 
-pub mod python;
+pub mod pyo3;
 
 /// Notification handling result.
 pub enum NotificationHandlingResult {}

@@ -1,5 +1,5 @@
 use crate::{
-    backend::mockchain::MockchainBackend, error::Error, executor::python::PythonExecutor,
+    backend::mockchain::MockchainBackend, error::Error, executor::pyo3::PyO3Executor,
     filter::Filter,
 };
 
@@ -18,7 +18,7 @@ def initialize_ctx(ctx):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PythonExecutor>::new(interface, tx);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
@@ -37,7 +37,7 @@ def invalid_name_for_context_initialization_function(ctx):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PythonExecutor>::new(interface, tx);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
