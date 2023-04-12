@@ -366,6 +366,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         match self.interfaces.get_mut(&interface) {
             None => Err(Error::InterfaceDoesntExist),
             Some(info) => {
+                // TODO: inject the notification to all linked interfaces
                 info.filter
                     .inject_notification(protocol, peer, notification)
                     .await;

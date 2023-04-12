@@ -1022,6 +1022,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Inject notification to filter.
+    // TODO: should this take source where source `Enum { Peer(PeerId), Interface(InterfaceId, PeerId) }`
     fn inject_notification(
         &mut self,
         protocol: &T::Protocol,
@@ -1042,8 +1043,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
             .inject_notification(protocol, peer, notification)?
         {
-            NotificationHandlingResult::Reject => {
-                tracing::event!(target: LOG_TARGET, Level::TRACE, "reject notification");
+            NotificationHandlingResult::Drop => {
+                tracing::event!(target: LOG_TARGET, Level::TRACE, "drop notification");
                 Ok(())
             }
             NotificationHandlingResult::Delay { delay } => {

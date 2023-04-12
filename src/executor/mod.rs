@@ -3,9 +3,10 @@ use crate::{backend::NetworkBackend, error::Error};
 pub mod pyo3;
 
 /// Notification handling result.
+#[derive(Debug, PartialEq, Eq)]
 pub enum NotificationHandlingResult {
-    /// Reject the notification and don't forward to anyone
-    Reject,
+    /// Drop the notification and don't forward it to anyone
+    Drop,
 
     /// Delay forwarding the received notification,
     Delay {

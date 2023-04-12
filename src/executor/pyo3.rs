@@ -25,6 +25,22 @@ struct Context(*mut pyo3::ffi::PyObject);
 unsafe impl Send for Context {}
 unsafe impl Sync for Context {}
 
+impl<'a> FromPyObject<'a> for NotificationHandlingResult {
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        let dict = object.downcast::<PyDict>()?;
+
+        if dict.get_item(&"Drop").is_some() {
+            return PyResult::Ok(Self::Drop);
+        } else if let Some(delay) = dict.get_item(&"Delay") {
+            let delay = delay.extract::<usize>()?;
+            return PyResult::Ok(Self::Delay { delay });
+        }
+
+        // TODO: return error instead
+        panic!("invalid value received from python")
+    }
+}
+
 /// `PyO3` executor.
 pub struct PyO3Executor {
     /// Initialize context.
@@ -140,7 +156,6 @@ where
         Python::with_gil(|py| {
             let fun = PyModule::from_code(py, &code, "", format!("module{}", self.key).as_str())?
                 .getattr("filter_notification")?;
-            let _ = fun.call1((None::<()>, None::<()>, None::<()>))?;
 
             self.notification_filter = Some(code);
             Ok(())
@@ -180,7 +195,7 @@ where
             "inject notification"
         );
 
-        Python::with_gil(|py| -> pyo3::PyResult<()> {
+        Python::with_gil(|py| -> pyo3::PyResult<NotificationHandlingResult> {
             let fun = PyModule::from_code(
                 py,
                 notification_filter_code,
@@ -198,10 +213,8 @@ where
             let peer_py = peer.into_executor_object(py);
             let notification_py = notification.into_executor_object(py);
 
-            let _ = fun.call1((ctx, peer_py, notification_py))?;
-            Ok(())
+            Ok(fun.call1((ctx, peer_py, notification_py))?.extract()?)
         })
-        .map(|_| NotificationHandlingResult::Reject)
         .map_err(From::from)
     }
 

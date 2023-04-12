@@ -137,6 +137,7 @@ def filter_notification(ctx, peer, notification):
     if peer is not None:
         print('peer %d' % (peer))
     print(notification)
+    return {'Drop': None}
     "
     .to_owned();
 
