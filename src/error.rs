@@ -52,10 +52,19 @@ pub enum Error {
     FilterError(FilterError),
 
     #[error("Executor error: `{0}`")]
-    ExecutorError(String),
+    ExecutorError(ExecutorError),
+}
+
+#[derive(Error, Debug)]
+pub enum ExecutorError {
+    #[error("Runtime error: `{0}`")]
+    RuntimeError(String),
 
     #[error("Executor does not exist")]
     ExecutorDoesntExist,
+
+    #[error("Filter does not exist")]
+    FilterDoesntExist,
 }
 
 #[derive(Error, Debug)]
@@ -66,7 +75,7 @@ pub enum FilterError {
 
 impl From<pyo3::PyErr> for Error {
     fn from(error: pyo3::PyErr) -> Self {
-        Error::ExecutorError(error.to_string())
+        Error::ExecutorError(ExecutorError::RuntimeError(error.to_string()))
     }
 }
 

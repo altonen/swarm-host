@@ -3,7 +3,7 @@
 use crate::{
     backend::{InterfaceType, NetworkBackend},
     ensure,
-    error::{Error, FilterError},
+    error::{Error, ExecutorError, FilterError},
     executor::Executor,
     types::DEFAULT_CHANNEL_SIZE,
 };
@@ -988,7 +988,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
         self.executor
             .as_mut()
-            .ok_or(Error::ExecutorDoesntExist)?
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
             .install_notification_filter(protocol, filter)
     }
 
