@@ -826,7 +826,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         }
                     }
                     FilterCommand::UnregisterPeer { peer } => {
-                        if let Err(error) = self.unregister_peer(&peer) {
+                        if let Err(error) = self.unregister_peer(peer) {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?peer,
@@ -949,6 +949,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
         match self.peers.entry(peer) {
             Entry::Vacant(entry) => {
+                self.executor
+                    .as_mut()
+                    .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+                    .register_peer(peer)?;
                 entry.insert(());
                 Ok(())
             }
@@ -957,12 +961,17 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Unregister peer to [`Filter`].
-    fn unregister_peer(&mut self, peer: &T::PeerId) -> crate::Result<()> {
+    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "unregister peer");
 
         self.peers
             .remove(&peer)
-            .map_or(Err(Error::PeerDoesntExist), |_| Ok(()))
+            .map_or(Err(Error::PeerDoesntExist), |_| {
+                self.executor
+                    .as_mut()
+                    .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+                    .unregister_peer(peer)
+            })
     }
 
     /// Install filter context.

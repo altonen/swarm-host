@@ -36,10 +36,10 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
         Self: Sized;
 
     /// Register `peer` to filter.
-    fn register_peer(&mut self, peer: T::PeerId);
+    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
 
     /// Unregister `peer` from filter.
-    fn unregister_peer(&mut self, peer: T::PeerId);
+    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
 
     /// Install notification filter for `protocol`.
     fn install_notification_filter(

@@ -11,8 +11,8 @@ use crate::{
 use rand::Rng;
 use tokio::sync::mpsc;
 
-#[tokio::test]
-async fn initialize_filter() {
+#[test]
+fn initialize_filter() {
     // TODO: move somewhere else?
     let filter_code = "
 def initialize_ctx(ctx):
@@ -30,8 +30,8 @@ def initialize_ctx(ctx):
         .is_ok());
 }
 
-#[tokio::test]
-async fn context_initialization_function_missing() {
+#[test]
+fn context_initialization_function_missing() {
     // TODO: move somewhere else?
     let filter_code = "
 def invalid_name_for_context_initialization_function(ctx):
@@ -49,8 +49,8 @@ def invalid_name_for_context_initialization_function(ctx):
         .is_err());
 }
 
-#[tokio::test]
-async fn install_notification_filter() {
+#[test]
+fn install_notification_filter() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
@@ -75,8 +75,8 @@ def filter_notification(ctx, peer, notification):
         .is_ok());
 }
 
-#[tokio::test]
-async fn notification_filter_missing() {
+#[test]
+fn notification_filter_missing() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
@@ -101,8 +101,8 @@ def __filter_notification__(ctx):
         .is_err());
 }
 
-#[tokio::test]
-async fn invalid_signature_for_filter_notification() {
+#[test]
+fn invalid_signature_for_filter_notification() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
@@ -127,8 +127,8 @@ def filter_notification(ctx):
         .is_err());
 }
 
-#[tokio::test]
-async fn inject_notification() {
+#[test]
+fn inject_notification() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
@@ -156,4 +156,68 @@ def filter_notification(ctx, peer, notification):
     assert!(filter
         .inject_notification(&ProtocolId::Transaction, rng.gen(), rand::random())
         .is_ok());
+}
+
+#[test]
+fn register_peer() {
+    let filter_code = "
+class Context():
+    def __init__(self):
+        self.peers = {}
+
+def initialize_ctx(ctx):
+    return Context()
+
+def register_peer(ctx, peer):
+    print('register peer %d to filter' % (peer))
+    ctx.peers[peer] = peer
+    "
+    .to_owned();
+
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+
+    assert!(filter
+        .initialize_filter(interface, filter_code, None)
+        .is_ok());
+    assert!(filter.register_peer(rng.gen()).is_ok());
+}
+
+#[test]
+fn unregister_peer() {
+    let filter_code = "
+class Context():
+    def __init__(self):
+        self.peers = {}
+
+def initialize_ctx(ctx):
+    return Context()
+
+def register_peer(ctx, peer):
+    print('register peer %d to filter' % (peer))
+    ctx.peers[peer] = peer
+
+def unregister_peer(ctx, peer):
+    print('unregister peer %d from filter' % (peer))
+    if peer in ctx.peers:
+        del ctx.peers[peer]
+    else:
+        print('peer does not exist')
+    "
+    .to_owned();
+
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let peer = rng.gen();
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+
+    assert!(filter
+        .initialize_filter(interface, filter_code, None)
+        .is_ok());
+    assert!(filter.register_peer(peer).is_ok());
+    assert!(filter.unregister_peer(peer).is_ok());
+    assert!(filter.unregister_peer(peer).is_err());
 }

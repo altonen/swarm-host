@@ -86,13 +86,37 @@ where
     }
 
     /// Register `peer` to filter.
-    fn register_peer(&mut self, peer: T::PeerId) {
-        todo!();
+    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::trace!(target: LOG_TARGET, ?peer, "register peer");
+
+        Python::with_gil(|py| {
+            let fun =
+                PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
+                    .getattr("register_peer")?;
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let _ = fun.call1((ctx, peer_py))?;
+
+            Ok(())
+        })
     }
 
     /// Unregister `peer` from filter.
-    fn unregister_peer(&mut self, peer: T::PeerId) {
-        todo!();
+    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::trace!(target: LOG_TARGET, ?peer, "unregister peer");
+
+        Python::with_gil(|py| {
+            let fun =
+                PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
+                    .getattr("unregister_peer")?;
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let _ = fun.call1((ctx, peer_py))?;
+
+            Ok(())
+        })
     }
 
     /// Install notification filter for `protocol`.
