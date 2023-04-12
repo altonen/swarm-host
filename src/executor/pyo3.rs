@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     backend::NetworkBackend,
     error::Error,
@@ -94,7 +96,17 @@ impl<T: NetworkBackend> Executor<T> for PyO3Executor {
         protocol: T::Protocol,
         code: String,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::trace!(target: LOG_TARGET, ?protocol, "install notification filter");
+
+        // verify that `filter_notification` exists in the code and that it has the correct signature
+        Python::with_gil(|py| {
+            let fun = PyModule::from_code(py, &code, "", format!("module{}", self.key).as_str())?
+                .getattr("filter_notification")?;
+            let _ = fun.call1(((), (), ()))?;
+
+            self.notification_filter = Some(code);
+            Ok(())
+        })
     }
 
     /// Install request filter for `protocol`.

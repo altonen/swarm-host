@@ -53,6 +53,9 @@ pub enum Error {
 
     #[error("Executor error: `{0}`")]
     ExecutorError(String),
+
+    #[error("Executor does not exist")]
+    ExecutorDoesntExist,
 }
 
 #[derive(Error, Debug)]

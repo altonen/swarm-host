@@ -851,9 +851,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     FilterCommand::InstallNotificationFilter {
                         protocol,
                         filter,
-                        context,
+                        context: _,
                     } => {
-                        if let Err(error) = self.install_notification_filter(&protocol, filter, context) {
+                        if let Err(error) = self.install_notification_filter(protocol.clone(), filter) {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -980,12 +980,16 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
     /// Install notification filter.
     fn install_notification_filter(
-        &self,
-        protocol: &T::Protocol,
+        &mut self,
+        protocol: T::Protocol,
         filter: String,
-        context: Option<String>,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::debug!(target: LOG_TARGET, ?protocol, "install notification filter");
+
+        self.executor
+            .as_mut()
+            .ok_or(Error::ExecutorDoesntExist)?
+            .install_notification_filter(protocol, filter)
     }
 
     /// Install request filter.
