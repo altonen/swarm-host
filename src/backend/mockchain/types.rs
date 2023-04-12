@@ -44,6 +44,15 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::PeerId {
     }
 }
 
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Message {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        self.into_py(context)
+    }
+}
+
 /// Transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
 pub struct Transaction {
@@ -228,7 +237,7 @@ impl IntoPy<PyObject> for Message {
             }
             Message::Dispute(dispute) => {
                 let mut dict = PyDict::new(py);
-                dict.set_item("Transaction", dispute.into_py(py)).unwrap();
+                dict.set_item("Dispute", dispute.into_py(py)).unwrap();
                 dict.into()
             }
             Message::PeerExchange(pex) => {
@@ -243,10 +252,6 @@ impl IntoPy<PyObject> for Message {
 impl<'a> FromPyObject<'a> for Message {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         todo!();
-        // let bytes = object.extract::<&[u8]>().unwrap();
-        // PyResult::Ok(PeerId(
-        //     SubstratePeerId::from_bytes(bytes).expect("valid peer id"),
-        // ))
     }
 }
 

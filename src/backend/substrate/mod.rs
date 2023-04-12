@@ -358,6 +358,15 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
     }
 }
 
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Message {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        self.into_py(context)
+    }
+}
+
 impl<'a> FromPyObject<'a> for PeerId {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let bytes = object.extract::<&[u8]>().unwrap();

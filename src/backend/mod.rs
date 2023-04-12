@@ -209,7 +209,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Hash
         + Send
         + Sync
-        // TODO: zzz
+        // TODO: remove pyo3 traits
         + for<'a> FromPyObject<'a>
         + IntoPy<PyObject>
         + IntoExecutorObject;
@@ -224,7 +224,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Hash
         + Send
         + Sync
-        // TODO: zzz
+        // TODO: remove these
         + for<'a> FromPyObject<'a>
         + IntoPy<PyObject>;
 
@@ -244,8 +244,15 @@ pub trait NetworkBackend: Debug + 'static {
 
     /// Type identifying a message understood by the backend.
     // TODO: zzz
-    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoPy<PyObject>;
-    // + AsPyPointer; // TODO: zzz
+    type Message: Serialize
+        + DeserializeOwned
+        + Debug
+        + Clone
+        + Send
+        + Sync
+        // TODO: remove pyo3 trait
+        + IntoPy<PyObject>
+        + IntoExecutorObject;
 
     /// Type identifying a request understood by the backend.
     type Request: Debug + Send + Sync + IdableRequest<Self>

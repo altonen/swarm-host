@@ -13,7 +13,6 @@ use tokio::sync::mpsc;
 
 #[test]
 fn initialize_filter() {
-    // TODO: move somewhere else?
     let filter_code = "
 def initialize_ctx(ctx):
     pass
@@ -32,7 +31,6 @@ def initialize_ctx(ctx):
 
 #[test]
 fn context_initialization_function_missing() {
-    // TODO: move somewhere else?
     let filter_code = "
 def invalid_name_for_context_initialization_function(ctx):
     pass
@@ -138,7 +136,7 @@ def initialize_ctx(ctx):
 def filter_notification(ctx, peer, notification):
     if peer is not None:
         print('peer %d' % (peer))
-    pass
+    print(notification)
     "
     .to_owned();
 

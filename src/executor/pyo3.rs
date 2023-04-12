@@ -25,8 +25,7 @@ struct Context(*mut pyo3::ffi::PyObject);
 unsafe impl Send for Context {}
 unsafe impl Sync for Context {}
 
-// TODO: generate random key for the python executor so that
-// there is appropriate isolation between filters
+/// `PyO3` executor.
 pub struct PyO3Executor {
     /// Initialize context.
     context: Context,
@@ -50,6 +49,8 @@ pub struct PyO3Executor {
 impl<T: NetworkBackend> Executor<T> for PyO3Executor
 where
     for<'a> <T as NetworkBackend>::PeerId:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::Message:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
 {
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
@@ -93,12 +94,16 @@ where
             let fun =
                 PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
                     .getattr("register_peer")?;
+
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
             let ctx: &PyAny =
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
             let peer_py = peer.into_executor_object(py);
-            let _ = fun.call1((ctx, peer_py))?;
 
-            Ok(())
+            fun.call1((ctx, peer_py)).map(|_| ()).map_err(From::from)
         })
     }
 
@@ -110,12 +115,16 @@ where
             let fun =
                 PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
                     .getattr("unregister_peer")?;
+
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
             let ctx: &PyAny =
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
             let peer_py = peer.into_executor_object(py);
-            let _ = fun.call1((ctx, peer_py))?;
 
-            Ok(())
+            fun.call1((ctx, peer_py)).map(|_| ()).map_err(From::from)
         })
     }
 
@@ -179,9 +188,17 @@ where
                 format!("module{}", self.key).as_str(),
             )?
             .getattr("filter_notification")?;
-            let peer_py = peer.into_executor_object(py);
 
-            let _ = fun.call1(((), peer_py, ()))?;
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let notification_py = notification.into_executor_object(py);
+
+            let _ = fun.call1((ctx, peer_py, notification_py))?;
             Ok(())
         })
         .map(|_| NotificationHandlingResult::Reject)
