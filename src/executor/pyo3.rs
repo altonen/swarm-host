@@ -11,6 +11,7 @@ use pyo3::{
     types::{PyDict, PyList},
     FromPyPointer,
 };
+use rand::Rng;
 use tracing::Level;
 
 /// Logging target for the file.
@@ -26,6 +27,9 @@ unsafe impl Sync for Context {}
 pub struct PyO3Executor {
     /// Initialize context.
     context: Context,
+
+    /// Key of the executor for code separation.
+    key: u64,
 
     /// Generic filter code.
     code: String,
@@ -45,18 +49,20 @@ impl<T: NetworkBackend> Executor<T> for PyO3Executor {
     where
         Self: Sized,
     {
+        let key: u64 = rand::thread_rng().gen();
+
         tracing::debug!(
             target: LOG_TARGET,
             ?interface,
             ?code,
             ?context,
+            ?key,
             "initialize new executor"
         );
 
         let context = Python::with_gil(|py| -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
-            let fun =
-                PyModule::from_code(py, &code, "", format!("module{:?}", interface).as_str())?
-                    .getattr("initialize_ctx")?;
+            let fun = PyModule::from_code(py, &code, "", format!("module{key}").as_str())?
+                .getattr("initialize_ctx")?;
             let context = fun.call1((context,))?;
 
             Ok(Into::<Py<PyAny>>::into(context).into_ptr())
@@ -64,6 +70,7 @@ impl<T: NetworkBackend> Executor<T> for PyO3Executor {
 
         Ok(Self {
             context: Context(context),
+            key,
             code,
             notification_filter: None,
             request_filter: None,
