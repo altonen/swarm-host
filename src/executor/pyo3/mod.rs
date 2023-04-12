@@ -17,6 +17,9 @@ use pyo3::{
 use rand::Rng;
 use tracing::Level;
 
+#[cfg(test)]
+mod tests;
+
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "executor::pyo3";
 
