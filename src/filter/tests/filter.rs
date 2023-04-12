@@ -111,7 +111,7 @@ def filter_notification(ctx, peer, notification):
     if peer is not None:
         print('peer %d' % (peer))
     print(notification)
-    return {'Drop': None}
+    return { 'Drop': None }
     "
     .to_owned();
 
@@ -193,4 +193,41 @@ def unregister_peer(ctx, peer):
     assert!(filter.register_peer(peer).is_ok());
     assert!(filter.unregister_peer(peer).is_ok());
     assert!(filter.unregister_peer(peer).is_err());
+}
+
+#[test]
+fn delay_notification() {
+    let context_code = "
+def initialize_ctx(ctx):
+    pass
+    "
+    .to_owned();
+    let notification_filter_code = "
+def filter_notification(ctx, peer, notification):
+    if peer is not None:
+        print('peer %d' % (peer))
+    print(notification)
+    return { 'Delay': 15 }
+    "
+    .to_owned();
+
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+
+    assert!(filter
+        .initialize_filter(interface, context_code, None)
+        .is_ok());
+    assert!(filter
+        .install_notification_filter(ProtocolId::Transaction, notification_filter_code)
+        .is_ok());
+
+    // inject the notification to a filter that delays it
+    // verify that the notification is added to the list of delayed notifications
+    assert!(filter.delayed_notifications.is_empty());
+    assert!(filter
+        .inject_notification(&ProtocolId::Transaction, rng.gen(), rand::random())
+        .is_ok());
+    assert_eq!(filter.delayed_notifications.len(), 1);
 }

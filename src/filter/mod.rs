@@ -8,17 +8,19 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
+use futures::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
 use petgraph::{
     graph::{DiGraph, EdgeIndex, NodeIndex},
     visit::{Dfs, Walker},
 };
 use pyo3::prelude::*;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time};
 use tracing::Level;
 
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     fmt::Debug,
+    time::Duration,
 };
 
 #[cfg(test)]
@@ -790,6 +792,9 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 
     /// Registered peers.
     peers: HashMap<T::PeerId, ()>,
+
+    // Delayed notifications.
+    delayed_notifications: FuturesUnordered<BoxFuture<'static, T::Message>>,
 }
 
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
@@ -806,6 +811,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 event_tx,
                 peers: HashMap::new(),
                 executor: None,
+                delayed_notifications: FuturesUnordered::new(),
             },
             FilterHandle::new(tx),
         )
@@ -938,6 +944,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                             );
                         }
                     }
+                },
+                notification = self.delayed_notifications.select_next_some(), if !self.delayed_notifications.is_empty() => {
+                    todo!();
                 }
             }
         }
@@ -1041,7 +1050,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_notification(protocol, peer, notification)?
+            .inject_notification(protocol, peer, notification.clone())?
         {
             NotificationHandlingResult::Drop => {
                 tracing::event!(target: LOG_TARGET, Level::TRACE, "drop notification");
@@ -1055,7 +1064,12 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     "delay forwarding the notification",
                 );
 
-                // TODO: create futures which is polled by `Filter`
+                // push the notification to list of delayed notifications
+                // when the timer expires, it is handled like any other forwarded notification
+                self.delayed_notifications.push(Box::pin(async move {
+                    time::sleep(Duration::from_secs(delay as u64)).await;
+                    notification
+                }));
 
                 Ok(())
             }
