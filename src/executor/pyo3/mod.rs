@@ -53,15 +53,21 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
 }
 
 /// `PyO3` executor.
-pub struct PyO3Executor {
+pub struct PyO3Executor<T: NetworkBackend> {
     /// Initialize context.
     context: Context,
 
-    /// Key of the executor for code separation.
-    key: u64,
+    /// ID of the interface this [`Executor`] is installed to.
+    interface: T::InterfaceId,
 
     /// Generic filter code.
     code: String,
+
+    /// Installed notification protocol filters.
+    notification_filters: HashMap<T::Protocol, String>,
+
+    /// Installed request-response protocol filters.
+    request_response_filters: HashMap<T::Protocol, String>,
 
     /// Installed notification filter, if any.
     notification_filter: Option<String>,
@@ -73,7 +79,7 @@ pub struct PyO3Executor {
     response_filter: Option<String>,
 }
 
-impl<T: NetworkBackend> Executor<T> for PyO3Executor
+impl<T: NetworkBackend> Executor<T> for PyO3Executor<T>
 where
     for<'a> <T as NetworkBackend>::PeerId:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
@@ -84,18 +90,16 @@ where
     where
         Self: Sized,
     {
-        let key: u64 = rand::thread_rng().gen();
-
         tracing::debug!(
             target: LOG_TARGET,
             ?interface,
-            ?key,
+            ?interface,
             "initialize new executor"
         );
         tracing::trace!(target: LOG_TARGET_MSG, ?code, ?context);
 
         let context = Python::with_gil(|py| -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
-            let fun = PyModule::from_code(py, &code, "", format!("module{key}").as_str())?
+            let fun = PyModule::from_code(py, &code, "", format!("module{interface:?}").as_str())?
                 .getattr("initialize_ctx")?;
             let context = fun.call1((context,))?;
 
@@ -104,8 +108,10 @@ where
 
         Ok(Self {
             context: Context(context),
-            key,
+            interface,
             code,
+            notification_filters: HashMap::new(),
+            request_response_filters: HashMap::new(),
             notification_filter: None,
             request_filter: None,
             response_filter: None,
@@ -117,9 +123,13 @@ where
         tracing::trace!(target: LOG_TARGET, ?peer, "register peer");
 
         Python::with_gil(|py| {
-            let fun =
-                PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
-                    .getattr("register_peer")?;
+            let fun = PyModule::from_code(
+                py,
+                &self.code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("register_peer")?;
 
             // get access to types that `PyO3` understands
             //
@@ -138,9 +148,13 @@ where
         tracing::trace!(target: LOG_TARGET, ?peer, "unregister peer");
 
         Python::with_gil(|py| {
-            let fun =
-                PyModule::from_code(py, &self.code, "", format!("module{}", self.key).as_str())?
-                    .getattr("unregister_peer")?;
+            let fun = PyModule::from_code(
+                py,
+                &self.code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("unregister_peer")?;
 
             // get access to types that `PyO3` understands
             //
@@ -164,10 +178,15 @@ where
 
         // verify that `filter_notification` exists in the code and that it has the correct signature
         Python::with_gil(|py| {
-            let fun = PyModule::from_code(py, &code, "", format!("module{}", self.key).as_str())?
-                .getattr("filter_notification")?;
+            let fun = PyModule::from_code(
+                py,
+                &code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("filter_notification")?;
 
-            self.notification_filter = Some(code);
+            self.notification_filters.insert(protocol, code);
             Ok(())
         })
     }
@@ -193,8 +212,8 @@ where
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<NotificationHandlingResult> {
-        let notification_filter_code = self
-            .notification_filter
+        let notification_filter_code = self.notification_filters.get(protocol);
+        let notification_filter_code = notification_filter_code
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
 
@@ -210,7 +229,7 @@ where
                 py,
                 notification_filter_code,
                 "",
-                format!("module{}", self.key).as_str(),
+                format!("module{:?}", self.interface).as_str(),
             )?
             .getattr("filter_notification")?;
 

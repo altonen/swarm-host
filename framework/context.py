@@ -22,9 +22,12 @@ class Context():
     def __init__(self):
         self.peers = {}
 
+class PeerContext():
+    def __init__(self):
+        self.best_block = None
+
 def initialize_ctx(ctx):
     return Context()
 
 def register_peer(ctx, peer):
-    pass
-    # ctx.peers[peer] = peer
+    ctx.peers[peer] = peer

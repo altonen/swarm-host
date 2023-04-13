@@ -47,7 +47,7 @@ struct Flags {
 }
 
 async fn run_mockchain_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<MockchainBackend, PyO3Executor>::new();
+    let (mut overseer, tx) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
     tokio::spawn(async move { overseer.run().await });
 
     run_server(
@@ -60,7 +60,7 @@ async fn run_mockchain_backend(flags: Flags) {
 }
 
 async fn run_substrate_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<SubstrateBackend, PyO3Executor>::new();
+    let (mut overseer, tx) = Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new();
     tokio::spawn(async move { overseer.run().await });
 
     run_server(

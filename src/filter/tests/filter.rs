@@ -25,7 +25,8 @@ def initialize_ctx(ctx):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
@@ -43,7 +44,8 @@ def invalid_name_for_context_initialization_function(ctx):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
@@ -66,7 +68,8 @@ def filter_notification(ctx, peer, notification):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -92,7 +95,8 @@ def __filter_notification__(ctx):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -121,7 +125,8 @@ def register_peer(ctx, peer):
     let mut rng = rand::thread_rng();
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
     let mock_sink = Box::new(MockPacketSink::new());
 
     assert!(filter
@@ -157,7 +162,8 @@ def unregister_peer(ctx, peer):
     let (tx, rx) = mpsc::channel(64);
     let peer = rng.gen();
     let interface = rng.gen();
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let (mut filter, _) =
+        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
     let mock_sink = Box::new(MockPacketSink::new());
 
     assert!(filter

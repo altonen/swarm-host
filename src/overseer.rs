@@ -671,13 +671,14 @@ mod tests {
     #[tokio::test]
     async fn apply_connection_upgrade() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor>::new();
+        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
         let interface = rng.gen();
         let peer = rng.gen();
-        let (filter, filter_handle) = Filter::<MockchainBackend, PyO3Executor>::new(
-            interface,
-            overseer.filter_event_tx.clone(),
-        );
+        let (filter, filter_handle) =
+            Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+                interface,
+                overseer.filter_event_tx.clone(),
+            );
         let index = overseer.links.add_node(interface);
 
         overseer.interfaces.insert(
@@ -771,7 +772,7 @@ mod tests {
     #[tokio::test]
     async fn link_interfaces() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor>::new();
+        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
         let interfaces = vec![rng.gen(), rng.gen(), rng.gen(), rng.gen()];
         let mut receivers = Vec::new();
 

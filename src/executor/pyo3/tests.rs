@@ -22,22 +22,27 @@ def filter_notification(ctx, peer, notification):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let mut executor =
-        <PyO3Executor as Executor<MockchainBackend>>::new(rng.gen(), context_code, None).unwrap();
+    let mut executor = <PyO3Executor<MockchainBackend> as Executor<MockchainBackend>>::new(
+        rng.gen(),
+        context_code,
+        None,
+    )
+    .unwrap();
 
-    <PyO3Executor as Executor<MockchainBackend>>::install_notification_filter(
+    <PyO3Executor<MockchainBackend> as Executor<MockchainBackend>>::install_notification_filter(
         &mut executor,
         ProtocolId::Transaction,
         notification_filter_code,
     )
     .unwrap();
 
-    let result = <PyO3Executor as Executor<MockchainBackend>>::inject_notification(
-        &mut executor,
-        &ProtocolId::Transaction,
-        rng.gen(),
-        rand::random(),
-    );
+    let result =
+        <PyO3Executor<MockchainBackend> as Executor<MockchainBackend>>::inject_notification(
+            &mut executor,
+            &ProtocolId::Transaction,
+            rng.gen(),
+            rand::random(),
+        );
 
     assert_eq!(result, Ok(NotificationHandlingResult::Drop));
 }

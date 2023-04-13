@@ -552,13 +552,13 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_notification(protocol, peer, notification.clone())?
+            .inject_notification(protocol, peer, notification.clone())
         {
-            NotificationHandlingResult::Drop => {
+            Ok(NotificationHandlingResult::Drop) => {
                 tracing::trace!(target: LOG_TARGET, "drop notification");
                 Ok(())
             }
-            NotificationHandlingResult::Delay { delay } => {
+            Ok(NotificationHandlingResult::Delay { delay }) => {
                 tracing::trace!(target: LOG_TARGET, "delay forwarding the notification");
 
                 // push the notification to list of delayed notifications
@@ -570,7 +570,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
                 Ok(())
             }
-            NotificationHandlingResult::Forward => {
+            Ok(NotificationHandlingResult::Forward) => {
                 tracing::trace!(
                     target: LOG_TARGET,
                     "forward notification to connected peers",
@@ -587,6 +587,25 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
                 Ok(())
             }
+            Err(Error::ExecutorError(ExecutorError::FilterDoesntExist)) => {
+                tracing::info!(
+                    target: LOG_TARGET,
+                    ?protocol,
+                    "filter does not exist, forward to all peers by default",
+                );
+
+                for (peer, sink) in self.peers.iter_mut() {
+                    if let Err(err) = sink
+                        .send_packet(Some(protocol.clone()), &notification)
+                        .await
+                    {
+                        tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                    }
+                }
+
+                Ok(())
+            }
+            Err(err) => return Err(err),
         }
     }
 
