@@ -10,6 +10,7 @@ use crate::{
 };
 
 use pyo3::{
+    exceptions::PyTypeError,
     prelude::*,
     types::{PyDict, PyList},
     FromPyPointer,
@@ -39,8 +40,10 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
             return PyResult::Ok(Self::Delay { delay });
         }
 
-        // TODO: return error instead
-        panic!("invalid value received from python")
+        Err(PyErr::new::<PyTypeError, _>(format!(
+            "Invalid type received: `{}`",
+            dict
+        )))
     }
 }
 
