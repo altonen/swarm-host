@@ -8,7 +8,6 @@ use crate::{
     },
     ensure,
     error::Error,
-    filter::MessageFilter,
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 

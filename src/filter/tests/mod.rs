@@ -3,7 +3,6 @@ use crate::backend::{mockchain::MockchainBackend, NetworkBackend, PacketSink};
 use tokio::sync::mpsc;
 
 mod filter;
-mod interface;
 mod notification;
 
 mockall::mock! {

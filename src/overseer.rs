@@ -8,10 +8,7 @@ use crate::{
     ensure,
     error::Error,
     executor::Executor,
-    filter::{
-        Filter, FilterEvent, FilterHandle, FilterType, LinkType, MessageFilter,
-        RequestHandlingResult, ResponseHandlingResult,
-    },
+    filter::{Filter, FilterEvent, FilterHandle},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -107,9 +104,6 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// TX channel passed to new `Filter`s.
     filter_event_tx: mpsc::Sender<FilterEvent>,
 
-    /// Message filters.
-    filter: MessageFilter<T>,
-
     /// Links between interfaces.
     links: UnGraph<T::InterfaceId, ()>,
 
@@ -132,7 +126,6 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 overseer_rx,
                 event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
-                filter: MessageFilter::new(),
                 links: UnGraph::new_undirected(),
                 edges: HashMap::new(),
                 interfaces: HashMap::new(),
@@ -177,17 +170,15 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                          filter_code,
                          result
                     } => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface_id = ?interface,
-                            ?protocol,
-                            "install notification filter",
-                        );
-
+                        let result =
                         result
                             .send(
-                                self.filter
-                                    .install_notification_filter(interface, protocol, context, filter_code),
+                                self.install_notification_filter(
+                                    interface,
+                                    protocol,
+                                    filter_code,
+                                    context,
+                                ).await,
                             )
                             .expect("channel to stay open");
                     }
@@ -390,6 +381,31 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     Ok(())
                 }
             },
+        }
+    }
+
+    async fn install_notification_filter(
+        &mut self,
+        interface: T::InterfaceId,
+        protocol: T::Protocol,
+        filter_code: String,
+        context: String,
+    ) -> crate::Result<()> {
+        tracing::debug!(
+            target: LOG_TARGET,
+            interface_id = ?interface,
+            ?protocol,
+            "install notification filter",
+        );
+
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter
+                    .install_notification_filter(protocol, filter_code, Some(context))
+                    .await;
+                Ok(())
+            }
         }
     }
 
