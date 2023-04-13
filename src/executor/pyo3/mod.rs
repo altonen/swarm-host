@@ -35,6 +35,8 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
 
         if dict.get_item(&"Drop").is_some() {
             return PyResult::Ok(Self::Drop);
+        } else if dict.get_item("Forward").is_some() {
+            return PyResult::Ok(Self::Forward);
         } else if let Some(delay) = dict.get_item(&"Delay") {
             let delay = delay.extract::<usize>()?;
             return PyResult::Ok(Self::Delay { delay });

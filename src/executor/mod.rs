@@ -13,6 +13,9 @@ pub enum NotificationHandlingResult {
         /// Delay in seconds.
         delay: usize,
     },
+
+    /// Forward notification to all connected nodes.
+    Forward,
 }
 
 /// Request handling result.

@@ -3,111 +3,142 @@ use crate::{
         types::{InterfaceId, Message, PeerId, ProtocolId, Transaction},
         MockchainBackend,
     },
-    filter::{FilterType, LinkType, MessageFilter},
+    executor::pyo3::PyO3Executor,
+    filter::{tests::DummyPacketSink, Filter},
 };
 
-// inject message into filter and sort the resulting (interface, peer) pairs before returning them
-fn inject_and_sort_results(
-    filter: &mut MessageFilter<MockchainBackend>,
-    interface: usize,
-    peer: u64,
-    protocol: &ProtocolId,
-    message: &Message,
-) -> Vec<(InterfaceId, PeerId)> {
-    let mut messages = filter
-        .inject_notification(interface, peer, protocol, message)
-        .expect("valid configuration")
-        .collect::<Vec<_>>();
+use rand::Rng;
+use tokio::sync::mpsc;
 
-    messages.sort_by(|a, b| {
-        if a.0 == b.0 {
-            a.1.cmp(&b.1)
-        } else {
-            a.0.cmp(&b.0)
-        }
-    });
-    messages
+#[tokio::test]
+async fn inject_notification() {
+    let context_code = "
+def initialize_ctx(ctx):
+    pass
+    "
+    .to_owned();
+    let notification_filter_code = "
+def filter_notification(ctx, peer, notification):
+    if peer is not None:
+        print('peer %d' % (peer))
+    print(notification)
+    return { 'Drop': None }
+    "
+    .to_owned();
+
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+
+    assert!(filter
+        .initialize_filter(interface, context_code, None)
+        .is_ok());
+    assert!(filter
+        .install_notification_filter(ProtocolId::Transaction, notification_filter_code)
+        .is_ok());
+    assert!(filter
+        .inject_notification(&ProtocolId::Transaction, rng.gen(), rand::random())
+        .await
+        .is_ok());
 }
 
-// censor transactions from peer `1337`
-#[test]
-fn custom_message_filter() {
+#[tokio::test]
+async fn delay_notification() {
+    let context_code = "
+def initialize_ctx(ctx):
+    pass
+    "
+    .to_owned();
+    let notification_filter_code = "
+def filter_notification(ctx, peer, notification):
+    if peer is not None:
+        print('peer %d' % (peer))
+    print(notification)
+    return { 'Delay': 15 }
+    "
+    .to_owned();
+
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+
+    assert!(filter
+        .initialize_filter(interface, context_code, None)
+        .is_ok());
+    assert!(filter
+        .install_notification_filter(ProtocolId::Transaction, notification_filter_code)
+        .is_ok());
+
+    // inject the notification to a filter that delays it
+    // verify that the notification is added to the list of delayed notifications
+    assert!(filter.delayed_notifications.is_empty());
+    assert!(filter
+        .inject_notification(&ProtocolId::Transaction, rng.gen(), rand::random())
+        .await
+        .is_ok());
+    assert_eq!(filter.delayed_notifications.len(), 1);
+}
+
+#[tokio::test]
+async fn inject_notification_and_forward_it() {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
-    // TODO: move to separate file for better indentation and readability?
-    // TODO: shold take context?
-    let filter_code = "
-def filter_notification(
-    context,
-    src_interface,
-    src_peer,
-    dst_interface,
-    dst_peer,
-    notification
-):
-    if src_peer == 1337:
-        return False
-    return True
-    ";
-    let protocol_name = ProtocolId::Transaction;
+    let context_code = "
+class Context():
+    def __init__(self):
+        self.peers = {}
 
-    let mut filter = MessageFilter::<MockchainBackend>::new();
-    filter
-        .register_interface(0usize, FilterType::FullBypass)
-        .unwrap();
-    filter
-        .register_interface(1usize, FilterType::FullBypass)
-        .unwrap();
+def initialize_ctx(ctx):
+    return Context()
 
-    // link interfaces together so messages can flow between them
-    filter
-        .link_interface(0usize, 1usize, LinkType::Bidrectional)
-        .unwrap();
+def register_peer(ctx, peer):
+    print('register peer %d to filter' % (peer))
+    ctx.peers[peer] = peer
+    "
+    .to_owned();
+    let notification_filter_code = "
+def filter_notification(ctx, peer, notification):
+    if peer is not None:
+        print('peer %d' % (peer))
+    print(notification)
+    return { 'Forward': None }
+    "
+    .to_owned();
 
-    // register `peer0` to `iface0` and `peer1337` and `peer1338` to `iface1`
-    filter
-        .register_peer(0usize, 0u64, FilterType::FullBypass)
-        .unwrap();
-    filter
-        .register_peer(1usize, 1337u64, FilterType::FullBypass)
-        .unwrap();
-    filter
-        .register_peer(1usize, 1338u64, FilterType::FullBypass)
-        .unwrap();
+    let mut rng = rand::thread_rng();
+    let (tx, rx) = mpsc::channel(64);
+    let interface = rng.gen();
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
 
-    // inject message to first interface and verify it's forwarded to the other interface
-    assert_eq!(
-        inject_and_sort_results(&mut filter, 0usize, 0u64, &protocol_name, &rand::random()),
-        vec![(1usize, 1337u64), (1usize, 1338u64)]
-    );
+    assert!(filter
+        .initialize_filter(interface, context_code, None)
+        .is_ok());
+    assert!(filter
+        .install_notification_filter(ProtocolId::Transaction, notification_filter_code)
+        .is_ok());
 
-    filter
-        .install_notification_filter(0usize, protocol_name, String::new(), filter_code.to_owned())
-        .unwrap();
+    // register two peers and create packet sinks for them
+    let peer1 = rng.gen();
+    let peer2 = rng.gen();
+    let (sink1, mut msg_recv1, _, _) = DummyPacketSink::new();
+    let (sink2, mut msg_recv2, _, _) = DummyPacketSink::new();
 
-    // random valid message is forwarded
-    assert_eq!(
-        inject_and_sort_results(
-            &mut filter,
-            1usize,
-            1338u64,
-            &protocol_name,
-            &rand::random()
-        ),
-        vec![(0usize, 0u64), (1usize, 1337u64)],
-    );
+    assert!(filter.register_peer(peer1, Box::new(sink1)).is_ok());
+    assert!(filter.register_peer(peer2, Box::new(sink2)).is_ok());
 
-    // transaction from peer `1337` is not forwarded to `iface0`
-    assert_eq!(
-        inject_and_sort_results(
-            &mut filter,
-            1usize,
-            1337u64,
-            &protocol_name,
-            &rand::random()
-        ),
-        vec![(1usize, 1338u64)],
-    );
+    // inject the notification to a filter that delays it
+    // verify that the notification is added to the list of delayed notifications
+    let message: Message = rand::random();
+    assert!(filter.delayed_notifications.is_empty());
+    assert!(filter
+        .inject_notification(&ProtocolId::Transaction, rng.gen(), message.clone())
+        .await
+        .is_ok());
+
+    assert_eq!(msg_recv1.try_recv(), Ok(message.clone()));
+    assert_eq!(msg_recv2.try_recv(), Ok(message));
 }

@@ -906,7 +906,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         protocol,
                         notification,
                     } => {
-                        if let Err(error) = self.inject_notification(&protocol, peer, notification) {
+                        if let Err(error) = self.inject_notification(&protocol, peer, notification).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -1039,19 +1039,13 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
     /// Inject notification to filter.
     // TODO: should this take source where source `Enum { Peer(PeerId), Interface(InterfaceId, PeerId) }`
-    fn inject_notification(
+    async fn inject_notification(
         &mut self,
         protocol: &T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<()> {
-        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_notification()").entered();
-        tracing::event!(
-            target: LOG_TARGET,
-            Level::TRACE,
-            ?protocol,
-            "inject notification"
-        );
+        tracing::trace!(target: LOG_TARGET, ?protocol, "inject notification");
 
         match self
             .executor
@@ -1060,16 +1054,11 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .inject_notification(protocol, peer, notification.clone())?
         {
             NotificationHandlingResult::Drop => {
-                tracing::event!(target: LOG_TARGET, Level::TRACE, "drop notification");
+                tracing::trace!(target: LOG_TARGET, "drop notification");
                 Ok(())
             }
             NotificationHandlingResult::Delay { delay } => {
-                tracing::event!(
-                    target: LOG_TARGET,
-                    Level::TRACE,
-                    ?delay,
-                    "delay forwarding the notification",
-                );
+                tracing::trace!(target: LOG_TARGET, "delay forwarding the notification");
 
                 // push the notification to list of delayed notifications
                 // when the timer expires, it is handled like any other forwarded notification
@@ -1077,6 +1066,23 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     time::sleep(Duration::from_secs(delay as u64)).await;
                     notification
                 }));
+
+                Ok(())
+            }
+            NotificationHandlingResult::Forward => {
+                tracing::trace!(
+                    target: LOG_TARGET,
+                    "forward notification to connected peers",
+                );
+
+                for (peer, sink) in self.peers.iter_mut() {
+                    if let Err(err) = sink
+                        .send_packet(Some(protocol.clone()), &notification)
+                        .await
+                    {
+                        tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                    }
+                }
 
                 Ok(())
             }
