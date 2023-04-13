@@ -1,7 +1,7 @@
 //! Message filtering implementation.
 
 use crate::{
-    backend::{InterfaceType, NetworkBackend},
+    backend::{InterfaceType, NetworkBackend, PacketSink},
     ensure,
     error::{Error, ExecutorError, FilterError},
     executor::{Executor, NotificationHandlingResult},
@@ -547,6 +547,9 @@ pub enum FilterCommand<T: NetworkBackend> {
     RegisterPeer {
         /// Peer ID.
         peer: T::PeerId,
+
+        /// Packet sink.
+        sink: Box<dyn PacketSink<T>>,
     },
 
     /// Unregister peer from [`Filter`].
@@ -649,9 +652,9 @@ impl<T: NetworkBackend> FilterHandle<T> {
     }
 
     /// Register peer to [`Filter`].
-    pub async fn register_peer(&self, peer: T::PeerId) {
+    pub async fn register_peer(&self, peer: T::PeerId, sink: Box<dyn PacketSink<T>>) {
         self.tx
-            .send(FilterCommand::RegisterPeer { peer })
+            .send(FilterCommand::RegisterPeer { peer, sink })
             .await
             .expect("channel to stay open");
     }
@@ -791,7 +794,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     event_tx: mpsc::Sender<FilterEvent>,
 
     /// Registered peers.
-    peers: HashMap<T::PeerId, ()>,
+    peers: HashMap<T::PeerId, Box<dyn PacketSink<T>>>,
 
     // Delayed notifications.
     delayed_notifications: FuturesUnordered<BoxFuture<'static, T::Message>>,
@@ -821,8 +824,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         loop {
             tokio::select! {
                 command = self.command_rx.recv() => match command.expect("channel to stay open ") {
-                    FilterCommand::RegisterPeer { peer } => {
-                        if let Err(error) = self.register_peer(peer) {
+                    FilterCommand::RegisterPeer { peer, sink } => {
+                        if let Err(error) = self.register_peer(peer, sink) {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?peer,
@@ -953,7 +956,11 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Register peer to [`Filter`].
-    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+    fn register_peer(
+        &mut self,
+        peer: T::PeerId,
+        sink: Box<dyn PacketSink<T>>,
+    ) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "register peer");
 
         match self.peers.entry(peer) {
@@ -962,7 +969,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     .as_mut()
                     .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
                     .register_peer(peer)?;
-                entry.insert(());
+                entry.insert(sink);
                 Ok(())
             }
             Entry::Occupied(_) => Err(Error::PeerAlreadyExists),

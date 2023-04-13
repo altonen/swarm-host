@@ -1,7 +1,10 @@
 use crate::{
-    backend::mockchain::{
-        types::{PeerId, ProtocolId},
-        MockchainBackend,
+    backend::{
+        mockchain::{
+            types::{PeerId, ProtocolId},
+            MockchainBackend,
+        },
+        NetworkBackend, PacketSink,
     },
     error::Error,
     executor::pyo3::PyO3Executor,
@@ -10,6 +13,31 @@ use crate::{
 
 use rand::Rng;
 use tokio::sync::mpsc;
+
+// TODO: move somewhere else maybe
+mockall::mock! {
+    #[derive(Debug)]
+    pub PacketSink<T: NetworkBackend> {}
+
+    #[async_trait::async_trait]
+    impl<T: NetworkBackend + Send> PacketSink<T> for PacketSink<T> {
+        async fn send_packet(
+            &mut self,
+            protocol: Option<<T as NetworkBackend>::Protocol>,
+            message: &<T as NetworkBackend>::Message,
+        ) -> crate::Result<()>;
+        async fn send_request(
+            &mut self,
+            protocol: <T as NetworkBackend>::Protocol,
+            response: <T as NetworkBackend>::Request,
+        ) -> crate::Result<<T as NetworkBackend>::RequestId>;
+        async fn send_response(
+            &mut self,
+            request_id: <T as NetworkBackend>::RequestId,
+            response: <T as NetworkBackend>::Response,
+        ) -> crate::Result<()>;
+    }
+}
 
 #[test]
 fn initialize_filter() {
@@ -151,11 +179,12 @@ def register_peer(ctx, peer):
     let (tx, rx) = mpsc::channel(64);
     let interface = rng.gen();
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let mock_sink = Box::new(MockPacketSink::new());
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
         .is_ok());
-    assert!(filter.register_peer(rng.gen()).is_ok());
+    assert!(filter.register_peer(rng.gen(), mock_sink).is_ok());
 }
 
 #[test]
@@ -186,11 +215,12 @@ def unregister_peer(ctx, peer):
     let peer = rng.gen();
     let interface = rng.gen();
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor>::new(interface, tx);
+    let mock_sink = Box::new(MockPacketSink::new());
 
     assert!(filter
         .initialize_filter(interface, filter_code, None)
         .is_ok());
-    assert!(filter.register_peer(peer).is_ok());
+    assert!(filter.register_peer(peer, mock_sink).is_ok());
     assert!(filter.unregister_peer(peer).is_ok());
     assert!(filter.unregister_peer(peer).is_err());
 }

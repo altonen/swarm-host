@@ -41,7 +41,7 @@ pub enum InterfaceType {
 
 /// Abstraction which allows `swarm-host` to send packets to peer.
 #[async_trait::async_trait]
-pub trait PacketSink<T: NetworkBackend>: Debug {
+pub trait PacketSink<T: NetworkBackend>: Debug + Send {
     /// Send packet to peer over `protocol`.
     async fn send_packet(
         &mut self,

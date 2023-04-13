@@ -55,9 +55,6 @@ const LOG_TARGET_MSG: &'static str = "overseer::msg";
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
     protocols: HashSet<T::Protocol>,
-
-    /// Sink for sending messages to peer.
-    sink: Box<dyn PacketSink<T> + Send>,
 }
 
 /// Interface information.
@@ -367,12 +364,11 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     peer,
                     PeerInfo {
                         protocols: HashSet::from_iter(protocols.into_iter()),
-                        sink,
                     },
                 );
 
                 // TODO: pass protocols?
-                info.filter.register_peer(peer).await;
+                info.filter.register_peer(peer, sink).await;
                 Ok(())
             }
         }
@@ -672,7 +668,6 @@ mod tests {
                 peer,
                 PeerInfo {
                     protocols: HashSet::from([ProtocolId::Transaction, ProtocolId::Block]),
-                    sink: Box::new(sink),
                 },
             );
 
