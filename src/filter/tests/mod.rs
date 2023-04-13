@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 
 mod filter;
 mod notification;
+mod request_response;
 
 mockall::mock! {
     #[derive(Debug)]

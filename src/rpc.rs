@@ -186,12 +186,12 @@ where
             let protocol: T::Protocol = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Protocol missing")))?;
-            let context: String = params
-                .next()
-                .map_err(|_| Error::Custom(String::from("Context missing")))?;
             let filter_code: String = params
                 .next()
                 .map_err(|_| Error::Custom(String::from("Filter code missing")))?;
+            let context: String = params
+                .next()
+                .map_err(|_| Error::Custom(String::from("Context missing")))?;
 
             tracing::debug!(
                 target: LOG_TARGET,
@@ -221,6 +221,55 @@ where
                 }
             }
         })
+        .unwrap();
+
+    module
+        .register_async_method(
+            "install_request_response_filter",
+            |params, ctx| async move {
+                let mut params = params.sequence();
+                let interface: T::InterfaceId = params
+                    .next()
+                    .map_err(|_| Error::Custom(String::from("Interface ID missing")))?;
+                let protocol: T::Protocol = params
+                    .next()
+                    .map_err(|_| Error::Custom(String::from("Protocol missing")))?;
+                let filter_code: String = params
+                    .next()
+                    .map_err(|_| Error::Custom(String::from("Filter code missing")))?;
+                let context: String = params
+                    .next()
+                    .map_err(|_| Error::Custom(String::from("Context missing")))?;
+
+                tracing::debug!(
+                    target: LOG_TARGET,
+                    interface_id = ?interface,
+                    ?protocol,
+                    "install request-response filter"
+                );
+
+                let (tx, rx) = oneshot::channel();
+                match ctx
+                    .send(OverseerEvent::InstallRequestResponseFilter {
+                        interface,
+                        protocol,
+                        context,
+                        filter_code,
+                        result: tx,
+                    })
+                    .await
+                {
+                    Ok(_) => rx
+                        .await
+                        .map_err(|_| Error::Custom(String::from("Essential task closed")))?
+                        .map(|id| id)
+                        .map_err(|err| Error::Custom(err.to_string())),
+                    Err(_) => Result::<_, Error>::Err(Error::Custom(String::from(
+                        "Essential task closed",
+                    ))),
+                }
+            },
+        )
         .unwrap();
 
     server.start(module).unwrap().stopped().await;

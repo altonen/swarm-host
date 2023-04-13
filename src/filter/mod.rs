@@ -86,19 +86,7 @@ pub enum FilterCommand<T: NetworkBackend> {
     },
 
     /// Install request filter.
-    InstallRequestFilter {
-        /// Protocol.
-        protocol: T::Protocol,
-
-        /// Filter code.
-        filter: String,
-
-        /// Optional filter context.
-        context: Option<String>,
-    },
-
-    /// Install response filter.
-    InstallResponseFilter {
+    InstallRequestResponseFilter {
         /// Protocol.
         protocol: T::Protocol,
 
@@ -201,31 +189,14 @@ impl<T: NetworkBackend> FilterHandle<T> {
     }
 
     /// Install request filter.
-    pub async fn install_request_filter(
+    pub async fn install_request_response_filter(
         &self,
         protocol: T::Protocol,
         filter: String,
         context: Option<String>,
     ) {
         self.tx
-            .send(FilterCommand::InstallRequestFilter {
-                protocol,
-                filter,
-                context,
-            })
-            .await
-            .expect("channel to stay open");
-    }
-
-    /// Install response filter.
-    pub async fn install_response_filter(
-        &self,
-        protocol: T::Protocol,
-        filter: String,
-        context: Option<String>,
-    ) {
-        self.tx
-            .send(FilterCommand::InstallResponseFilter {
+            .send(FilterCommand::InstallRequestResponseFilter {
                 protocol,
                 filter,
                 context,
@@ -376,33 +347,19 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                             );
                         }
                     }
-                    FilterCommand::InstallRequestFilter {
+                    FilterCommand::InstallRequestResponseFilter {
                         protocol,
                         filter,
-                        context,
+                        context: _,
                     } => {
-                        if let Err(error) = self.install_request_filter(&protocol, filter, context) {
+                        if let Err(error) = self.install_request_response_filter(protocol.clone(), filter) {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
                                 ?error,
-                                "failed to install request filter",
+                                "failed to install request-response filter",
                             );
                         }
-                    }
-                    FilterCommand::InstallResponseFilter {
-                        protocol,
-                        filter,
-                        context,
-                    } => {
-                        if let Err(error) = self.install_response_filter(&protocol, filter, context) {
-                            tracing::error!(
-                                target: LOG_TARGET,
-                                ?protocol,
-                                "failed to install response filter",
-                            );
-                        }
-                        todo!();
                     }
                     FilterCommand::InjectNotification {
                         peer,
@@ -518,24 +475,22 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .install_notification_filter(protocol, filter)
     }
 
-    /// Install request filter.
-    fn install_request_filter(
-        &self,
-        protocol: &T::Protocol,
+    /// Install request-response filter.
+    fn install_request_response_filter(
+        &mut self,
+        protocol: T::Protocol,
         filter: String,
-        context: Option<String>,
     ) -> crate::Result<()> {
-        todo!();
-    }
+        tracing::debug!(
+            target: LOG_TARGET,
+            ?protocol,
+            "install request-response filter"
+        );
 
-    /// Install response filter.
-    fn install_response_filter(
-        &self,
-        protocol: &T::Protocol,
-        filter: String,
-        context: Option<String>,
-    ) -> crate::Result<()> {
-        todo!();
+        self.executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .install_request_response_filter(protocol, filter)
     }
 
     /// Inject notification to filter.

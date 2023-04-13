@@ -167,16 +167,36 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     OverseerEvent::InitializeFilter { interface, code, context, result } => {
                         result.send(self.initialize_filter(interface, code, context).await);
                     }
-                    OverseerEvent::InstallNotificationFilter { interface,
-                         protocol,
-                         context,
-                         filter_code,
-                         result
+                    OverseerEvent::InstallNotificationFilter {
+                        interface,
+                        protocol,
+                        filter_code,
+                        context,
+                        result
                     } => {
                         let result =
                         result
                             .send(
                                 self.install_notification_filter(
+                                    interface,
+                                    protocol,
+                                    filter_code,
+                                    context,
+                                ).await,
+                            )
+                            .expect("channel to stay open");
+                    }
+                    OverseerEvent::InstallRequestResponseFilter {
+                        interface,
+                        protocol,
+                        filter_code,
+                        context,
+                        result
+                    } => {
+                        let result =
+                        result
+                            .send(
+                                self.install_request_response_filter(
                                     interface,
                                     protocol,
                                     filter_code,
@@ -425,6 +445,31 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             Some(info) => {
                 info.filter
                     .install_notification_filter(protocol, filter_code, Some(context))
+                    .await;
+                Ok(())
+            }
+        }
+    }
+
+    async fn install_request_response_filter(
+        &mut self,
+        interface: T::InterfaceId,
+        protocol: T::Protocol,
+        filter_code: String,
+        context: String,
+    ) -> crate::Result<()> {
+        tracing::debug!(
+            target: LOG_TARGET,
+            ?interface,
+            ?protocol,
+            "install request-response filter",
+        );
+
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter
+                    .install_request_response_filter(protocol, filter_code, Some(context))
                     .await;
                 Ok(())
             }

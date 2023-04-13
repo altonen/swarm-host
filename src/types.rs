@@ -70,11 +70,7 @@ pub enum OverseerEvent<T: NetworkBackend> {
         result: oneshot::Sender<crate::Result<()>>,
     },
 
-    /// Add custom notification filter to [`crate::filter::MessageFilter`].
-    ///
-    /// Filter is identified by their and the actual function is queried
-    /// from the intalled backend. This means that the filter must be have
-    /// been compiled as part of the network backend when `swarm-host` was built.
+    /// Add custom notification filter to [`crate::filter::Filter`].
     InstallNotificationFilter {
         /// Interface ID.
         interface: T::InterfaceId,
@@ -82,11 +78,29 @@ pub enum OverseerEvent<T: NetworkBackend> {
         /// Protocol.
         protocol: T::Protocol,
 
+        /// Filter code.
+        filter_code: String,
+
         // User-specified context that is passed on to the filter.
         context: String,
 
+        /// Result of the unlink operation.
+        result: oneshot::Sender<crate::Result<()>>,
+    },
+
+    /// Add custom request-response filter to [`crate::filter::Filter`].
+    InstallRequestResponseFilter {
+        /// Interface ID.
+        interface: T::InterfaceId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+
         /// Filter code.
         filter_code: String,
+
+        // User-specified context that is passed on to the filter.
+        context: String,
 
         /// Result of the unlink operation.
         result: oneshot::Sender<crate::Result<()>>,

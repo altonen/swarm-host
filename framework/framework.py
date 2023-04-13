@@ -47,7 +47,7 @@ response = requests.post(
     "http://localhost:%d/" % (8884),
     json = request(
         "install_notification_filter",
-        params = [0, "/sup/block-announces/1", "", filter],
+        params = [0, "/sup/block-announces/1", filter, ""],
     )
 )
 # host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)

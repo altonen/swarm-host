@@ -68,15 +68,6 @@ pub struct PyO3Executor<T: NetworkBackend> {
 
     /// Installed request-response protocol filters.
     request_response_filters: HashMap<T::Protocol, String>,
-
-    /// Installed notification filter, if any.
-    notification_filter: Option<String>,
-
-    /// Installed request filter, if any.
-    request_filter: Option<String>,
-
-    /// Installed response filter, if any.
-    response_filter: Option<String>,
 }
 
 impl<T: NetworkBackend> Executor<T> for PyO3Executor<T>
@@ -112,9 +103,6 @@ where
             code,
             notification_filters: HashMap::new(),
             request_response_filters: HashMap::new(),
-            notification_filter: None,
-            request_filter: None,
-            response_filter: None,
         })
     }
 
@@ -176,7 +164,7 @@ where
     ) -> crate::Result<()> {
         tracing::trace!(target: LOG_TARGET, ?protocol, "install notification filter");
 
-        // verify that `filter_notification` exists in the code and that it has the correct signature
+        // verify that `filter_notification()` exists in the code
         Python::with_gil(|py| {
             let fun = PyModule::from_code(
                 py,
@@ -191,18 +179,32 @@ where
         })
     }
 
-    /// Install request filter for `protocol`.
-    fn install_request_filter(&mut self, protocol: T::Protocol, code: String) -> crate::Result<()> {
-        todo!();
-    }
-
-    /// Install response filter for `protocol`.
-    fn install_response_filter(
+    /// Install request-response filter for `protocol`.
+    fn install_request_response_filter(
         &mut self,
         protocol: T::Protocol,
         code: String,
     ) -> crate::Result<()> {
-        todo!();
+        tracing::trace!(
+            target: LOG_TARGET,
+            ?protocol,
+            "install request-response filter"
+        );
+
+        // verify that `inject_request()` and `inject_response()` exist in the code
+        Python::with_gil(|py| {
+            let module = PyModule::from_code(
+                py,
+                &code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?;
+            let _ = module.getattr("filter_request")?;
+            let _ = module.getattr("filter_response")?;
+
+            self.request_response_filters.insert(protocol, code);
+            Ok(())
+        })
     }
 
     /// Inject `notification` from `peer` to filter.

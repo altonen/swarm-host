@@ -52,12 +52,12 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
         code: String,
     ) -> crate::Result<()>;
 
-    /// Install request filter for `protocol`.
-    fn install_request_filter(&mut self, protocol: T::Protocol, code: String) -> crate::Result<()>;
-
-    /// Install response filter for `protocol`.
-    fn install_response_filter(&mut self, protocol: T::Protocol, code: String)
-        -> crate::Result<()>;
+    /// Install request-response filter for `protocol`.
+    fn install_request_response_filter(
+        &mut self,
+        protocol: T::Protocol,
+        code: String,
+    ) -> crate::Result<()>;
 
     /// Inject `notification` from `peer` to filter.
     fn inject_notification(
