@@ -202,17 +202,7 @@ pub trait Interface<T: NetworkBackend> {
 #[async_trait::async_trait]
 pub trait NetworkBackend: Debug + 'static {
     /// Unique ID identifying a peer.
-    type PeerId: Debug
-        + Copy
-        + Clone
-        + Eq
-        + Hash
-        + Send
-        + Sync
-        // TODO: remove pyo3 traits
-        + for<'a> FromPyObject<'a>
-        + IntoPy<PyObject>
-        + IntoExecutorObject;
+    type PeerId: Debug + Copy + Clone + Eq + Hash + Send + Sync + IntoExecutorObject;
 
     /// Unique ID identifying the interface.
     type InterfaceId: Serialize
@@ -224,10 +214,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Hash
         + Ord
         + Send
-        + Sync
-        // TODO: remove these
-        + for<'a> FromPyObject<'a>
-        + IntoPy<PyObject>;
+        + Sync;
 
     /// Unique ID identifying a request.
     type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync;
@@ -244,16 +231,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Sync;
 
     /// Type identifying a message understood by the backend.
-    // TODO: zzz
-    type Message: Serialize
-        + DeserializeOwned
-        + Debug
-        + Clone
-        + Send
-        + Sync
-        // TODO: remove pyo3 trait
-        + IntoPy<PyObject>
-        + IntoExecutorObject;
+    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoExecutorObject;
 
     /// Type identifying a request understood by the backend.
     type Request: Debug + Send + Sync + IdableRequest<Self>

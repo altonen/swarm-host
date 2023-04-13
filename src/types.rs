@@ -55,6 +55,21 @@ pub enum OverseerEvent<T: NetworkBackend> {
         result: oneshot::Sender<crate::Result<()>>,
     },
 
+    /// Initialize filter.
+    InitializeFilter {
+        /// First interface.
+        interface: T::InterfaceId,
+
+        /// Filter code.
+        code: String,
+
+        /// Filter context
+        context: String,
+
+        /// Result of the unlink operation.
+        result: oneshot::Sender<crate::Result<()>>,
+    },
+
     /// Add custom notification filter to [`crate::filter::MessageFilter`].
     ///
     /// Filter is identified by their and the actual function is queried

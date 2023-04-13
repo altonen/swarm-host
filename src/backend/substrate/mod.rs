@@ -354,7 +354,7 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
     type Context<'a> = pyo3::marker::Python<'a>;
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
-        todo!();
+        self.0.to_bytes().into_py(context)
     }
 }
 
@@ -363,7 +363,7 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Message {
     type Context<'a> = pyo3::marker::Python<'a>;
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
-        self.into_py(context)
+        self.0.into_py(context)
     }
 }
 

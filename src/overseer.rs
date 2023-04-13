@@ -164,6 +164,9 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     OverseerEvent::UnlinkInterface { first, second, result } => {
                         result.send(self.unlink_interfaces(first, second));
                     }
+                    OverseerEvent::InitializeFilter { interface, code, context, result } => {
+                        result.send(self.initialize_filter(interface, code, context).await);
+                    }
                     OverseerEvent::InstallNotificationFilter { interface,
                          protocol,
                          context,
@@ -384,6 +387,25 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         }
     }
 
+    async fn initialize_filter(
+        &mut self,
+        interface: T::InterfaceId,
+        filter_code: String,
+        context: String,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?interface, "initialize filter");
+
+        match self.interfaces.get_mut(&interface) {
+            None => Err(Error::InterfaceDoesntExist),
+            Some(info) => {
+                info.filter
+                    .initialize_filter(filter_code, Some(context))
+                    .await;
+                Ok(())
+            }
+        }
+    }
+
     async fn install_notification_filter(
         &mut self,
         interface: T::InterfaceId,
@@ -393,7 +415,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     ) -> crate::Result<()> {
         tracing::debug!(
             target: LOG_TARGET,
-            interface_id = ?interface,
+            ?interface,
             ?protocol,
             "install notification filter",
         );

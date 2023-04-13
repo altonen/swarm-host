@@ -24,6 +24,9 @@ mod tests;
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "executor::pyo3";
 
+/// Logging target for noisy messages.
+const LOG_TARGET_MSG: &'static str = "executor::pyo3::msg";
+
 struct Context(*mut pyo3::ffi::PyObject);
 
 unsafe impl Send for Context {}
@@ -86,11 +89,10 @@ where
         tracing::debug!(
             target: LOG_TARGET,
             ?interface,
-            ?code,
-            ?context,
             ?key,
             "initialize new executor"
         );
+        tracing::trace!(target: LOG_TARGET_MSG, ?code, ?context);
 
         let context = Python::with_gil(|py| -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
             let fun = PyModule::from_code(py, &code, "", format!("module{key}").as_str())?

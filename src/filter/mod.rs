@@ -361,7 +361,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 "failed to install filter",
                             );
                         }
-                        todo!();
                     }
                     FilterCommand::InstallNotificationFilter {
                         protocol,
@@ -376,7 +375,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 "failed to install notification filter",
                             );
                         }
-                        todo!();
                     }
                     FilterCommand::InstallRequestFilter {
                         protocol,
@@ -391,7 +389,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 "failed to install request filter",
                             );
                         }
-                        todo!();
                     }
                     FilterCommand::InstallResponseFilter {
                         protocol,
@@ -421,7 +418,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 "failed to inject notification",
                             );
                         }
-                        todo!();
                     }
                     FilterCommand::InjectRequest {
                         peer,
@@ -437,7 +433,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 "failed to inject request",
                             );
                         }
-                        todo!();
                     }
                     FilterCommand::InjectResponse {
                         protocol,

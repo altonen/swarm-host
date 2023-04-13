@@ -26,6 +26,16 @@ response = requests.post(
     )
 )
 
+filter = open("context.py").read()
+
+response = requests.post(
+    "http://localhost:%d/" % (8884),
+    json = request(
+        "initialize_filter",
+        params = [0, filter, ""],
+    )
+)
+
 # iface1_id = host.create_interface(iface1_addr)
 # print("interface id '%d'" % iface1_id)
 
