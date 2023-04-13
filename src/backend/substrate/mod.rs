@@ -8,7 +8,12 @@ use crate::{
 };
 
 use futures::{channel, FutureExt, StreamExt};
-use pyo3::{conversion::AsPyPointer, prelude::*, types::PyBytes, FromPyObject, IntoPy};
+use pyo3::{
+    conversion::AsPyPointer,
+    prelude::*,
+    types::{PyBytes, PyDict},
+    FromPyObject, IntoPy,
+};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -90,9 +95,45 @@ pub struct SubstrateRequest {
     payload: Vec<u8>,
 }
 
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Request {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        let fields = PyDict::new(context);
+        fields.set_item("id", self.id.into_py(context));
+        fields.set_item("payload", self.payload.into_py(context));
+
+        let mut request = PyDict::new(context);
+        request.set_item("Request", fields).unwrap();
+        request.into()
+    }
+}
+
 impl IdableRequest<SubstrateBackend> for SubstrateRequest {
     fn id(&self) -> &<SubstrateBackend as NetworkBackend>::RequestId {
         &self.id
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SubstrateResponse {
+    id: usize,
+    payload: Vec<u8>,
+}
+
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Response {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        let fields = PyDict::new(context);
+        fields.set_item("id", self.id.into_py(context));
+        fields.set_item("payload", self.payload.into_py(context));
+
+        let mut request = PyDict::new(context);
+        request.set_item("Response", fields).unwrap();
+        request.into()
     }
 }
 
@@ -157,7 +198,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
             .send(Command::SendResponse {
                 peer: self.peer.0,
                 request_id,
-                response,
+                response: response.payload,
             })
             .await
             .expect("channel to stay open");
@@ -267,7 +308,10 @@ impl InterfaceHandle {
                                 interface: interface_id,
                                 protocol: ProtocolName(protocol),
                                 request_id,
-                                response,
+                                response: SubstrateResponse {
+                                    id: request_id,
+                                    payload: response,
+                                }
                             })
                             .await
                             .expect("channel to stay open");
@@ -394,7 +438,7 @@ impl NetworkBackend for SubstrateBackend {
     type Protocol = ProtocolName;
     type Message = Message;
     type Request = SubstrateRequest;
-    type Response = Vec<u8>;
+    type Response = SubstrateResponse;
     type InterfaceHandle = InterfaceHandle;
 
     /// Create new [`SubstrateBackend`].

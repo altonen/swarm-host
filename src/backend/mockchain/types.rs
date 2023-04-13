@@ -349,6 +349,21 @@ pub struct Request {
     payload: Vec<u8>,
 }
 
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Request {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        let fields = PyDict::new(context);
+        fields.set_item("id", self.id.into_py(context));
+        fields.set_item("payload", self.payload.into_py(context));
+
+        let mut request = PyDict::new(context);
+        request.set_item("Request", fields).unwrap();
+        request.into()
+    }
+}
+
 impl Request {
     pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
@@ -381,5 +396,20 @@ impl Response {
 
     pub fn payload(&self) -> &Vec<u8> {
         &self.payload
+    }
+}
+
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Response {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        let fields = PyDict::new(context);
+        fields.set_item("id", self.id.into_py(context));
+        fields.set_item("payload", self.payload.into_py(context));
+
+        let mut request = PyDict::new(context);
+        request.set_item("Response", fields).unwrap();
+        request.into()
     }
 }

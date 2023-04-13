@@ -234,12 +234,12 @@ pub trait NetworkBackend: Debug + 'static {
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoExecutorObject;
 
     /// Type identifying a request understood by the backend.
-    type Request: Debug + Send + Sync + IdableRequest<Self>
+    type Request: Debug + Send + Sync + IntoExecutorObject + IdableRequest<Self>
     where
         Self: Sized;
 
     /// Type identifying a response understood by the backend.
-    type Response: Debug + Clone + Send + Sync;
+    type Response: Debug + Clone + Send + Sync + IntoExecutorObject;
 
     /// Handle which allows communication with a spawned interface.
     type InterfaceHandle: Interface<Self>
