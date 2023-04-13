@@ -222,6 +222,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Clone
         + Eq
         + Hash
+        + Ord
         + Send
         + Sync
         // TODO: remove these

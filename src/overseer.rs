@@ -16,6 +16,10 @@ use crate::{
 };
 
 use futures::{stream::SelectAll, FutureExt, Stream, StreamExt};
+use petgraph::{
+    graph::{EdgeIndex, NodeIndex, UnGraph},
+    visit::{Dfs, Walker},
+};
 use tokio::{
     io::{AsyncWrite, AsyncWriteExt},
     sync::mpsc::{self, Receiver, Sender},
@@ -66,12 +70,16 @@ struct InterfaceInfo<T: NetworkBackend> {
 
     /// Filter for the interface.
     filter: FilterHandle<T>,
+
+    /// Index to the link graph.
+    index: NodeIndex,
 }
 
 impl<T: NetworkBackend> InterfaceInfo<T> {
     /// Create new [`InterfaceInfo`] from `T::InterfaceHandle`.
-    pub fn new(handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
+    pub fn new(index: NodeIndex, handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
         Self {
+            index,
             handle,
             filter,
             peers: HashMap::new(),
@@ -105,6 +113,12 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Message filters.
     filter: MessageFilter<T>,
 
+    /// Links between interfaces.
+    links: UnGraph<T::InterfaceId, ()>,
+
+    /// Edges between interfaces.
+    edges: HashMap<(T::InterfaceId, T::InterfaceId), EdgeIndex>,
+
     /// Executor
     _marker: std::marker::PhantomData<E>,
 }
@@ -122,6 +136,8 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 event_streams: SelectAll::new(),
                 overseer_tx: overseer_tx.clone(),
                 filter: MessageFilter::new(),
+                links: UnGraph::new_undirected(),
+                edges: HashMap::new(),
                 interfaces: HashMap::new(),
                 filter_events,
                 filter_event_tx,
@@ -153,24 +169,10 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                         }
                     }
                     OverseerEvent::LinkInterface { first, second, result } => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface = ?first,
-                            interface = ?second,
-                            "link interfaces",
-                        );
-
-                        result.send(self.filter.link_interface(first, second, LinkType::Bidrectional));
+                        result.send(self.link_interfaces(first, second)).expect("channel to stay open");
                     }
                     OverseerEvent::UnlinkInterface { first, second, result } => {
-                        tracing::debug!(
-                            target: LOG_TARGET,
-                            interface = ?first,
-                            interface = ?second,
-                            "unlink interfaces",
-                        );
-
-                        result.send(self.filter.unlink_interface(first, second));
+                        result.send(self.unlink_interfaces(first, second));
                     }
                     OverseerEvent::InstallNotificationFilter { interface,
                          protocol,
@@ -284,13 +286,14 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                 Entry::Vacant(entry) => {
                     let interface_id = *handle.id();
+                    let node_index = self.links.add_node(interface_id);
                     let (filter, filter_handle) =
                         Filter::<T, E>::new(interface_id, self.filter_event_tx.clone());
 
-                    tracing::trace!(target: LOG_TARGET, interface = ?interface_id, "interface created");
+                    tracing::trace!(target: LOG_TARGET, interface = ?interface_id, ?node_index, "interface created");
 
                     self.event_streams.push(event_stream);
-                    entry.insert(InterfaceInfo::new(handle, filter_handle));
+                    entry.insert(InterfaceInfo::new(node_index, handle, filter_handle));
                     tokio::spawn(filter.run());
 
                     Ok(interface_id)
@@ -298,6 +301,47 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 Entry::Occupied(_) => Err(Error::InterfaceAlreadyExists),
             },
             Err(err) => Err(err),
+        }
+    }
+
+    /// Link interfaces together.
+    fn link_interfaces(
+        &mut self,
+        first: T::InterfaceId,
+        second: T::InterfaceId,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?first, ?second, "link interfaces");
+
+        match (self.interfaces.get(&first), self.interfaces.get(&second)) {
+            (Some(first_info), Some(second_info)) => {
+                let edge = self.links.add_edge(first_info.index, second_info.index, ());
+                self.edges.insert((first, second), edge);
+                Ok(())
+            }
+            _ => Err(Error::InterfaceDoesntExist),
+        }
+    }
+
+    /// Unlink interfaces.
+    fn unlink_interfaces(
+        &mut self,
+        first: T::InterfaceId,
+        second: T::InterfaceId,
+    ) -> crate::Result<()> {
+        tracing::debug!(
+            target: LOG_TARGET,
+            interface = ?first,
+            interface = ?second,
+            "unlink interfaces",
+        );
+
+        match self.edges.remove(&(first, second)) {
+            None => Err(Error::LinkDoesntExist),
+            Some(edge) => self
+                .links
+                .remove_edge(edge)
+                .ok_or(Error::LinkDoesntExist)
+                .map(|_| ()),
         }
     }
 
@@ -366,10 +410,20 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         match self.interfaces.get_mut(&interface) {
             None => Err(Error::InterfaceDoesntExist),
             Some(info) => {
-                // TODO: inject the notification to all linked interfaces
-                info.filter
-                    .inject_notification(protocol, peer, notification)
-                    .await;
+                let linked_interfaces = Dfs::new(&self.links, info.index)
+                    .iter(&self.links)
+                    .map(|nx| self.links.node_weight(nx).expect("entry to exist"))
+                    .collect::<Vec<_>>();
+
+                for interface in linked_interfaces {
+                    self.interfaces
+                        .get_mut(interface)
+                        .expect("entry to exist")
+                        .filter
+                        .inject_notification(protocol.clone(), peer, notification.clone())
+                        .await;
+                }
+
                 Ok(())
             }
         }
@@ -470,12 +524,14 @@ mod tests {
     use super::*;
     use crate::{
         backend::mockchain::{
+            self,
             types::{ProtocolId, Request, Response},
             MockchainBackend, MockchainHandle,
         },
         executor::pyo3::PyO3Executor,
     };
     use rand::Rng;
+    use tokio::sync::mpsc::error::TryRecvError;
 
     // TODO: use `mockall`
     #[derive(Debug)]
@@ -588,10 +644,12 @@ mod tests {
             interface,
             overseer.filter_event_tx.clone(),
         );
+        let index = overseer.links.add_node(interface);
 
         overseer.interfaces.insert(
             interface,
             InterfaceInfo::<MockchainBackend>::new(
+                index,
                 MockchainHandle::new(
                     interface,
                     "[::1]:8888".parse().unwrap(),
@@ -675,5 +733,96 @@ mod tests {
                 .protocols,
             HashSet::from([ProtocolId::Block, ProtocolId::Generic]),
         );
+    }
+
+    #[tokio::test]
+    async fn link_interfaces() {
+        let mut rng = rand::thread_rng();
+        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor>::new();
+        let interfaces = vec![rng.gen(), rng.gen(), rng.gen(), rng.gen()];
+        let mut receivers = Vec::new();
+
+        for interface in &interfaces {
+            let (tx, rx) = mpsc::channel(64);
+            let filter_handle = FilterHandle::new(tx);
+            let index = overseer.links.add_node(*interface);
+
+            receivers.push(rx);
+            overseer.interfaces.insert(
+                *interface,
+                InterfaceInfo::<MockchainBackend>::new(
+                    index,
+                    MockchainHandle::new(
+                        *interface,
+                        "[::1]:0".parse().unwrap(),
+                        InterfaceType::Masquerade,
+                    )
+                    .await
+                    .unwrap()
+                    .0,
+                    filter_handle,
+                ),
+            );
+        }
+
+        // link interfaces and verify the graph is updated accordingly
+        assert_eq!(overseer.links.edge_count(), 0);
+        assert_eq!(overseer.links.node_count(), 4);
+
+        assert_eq!(
+            overseer.link_interfaces(interfaces[0], interfaces[1]),
+            Ok(())
+        );
+        assert_eq!(overseer.links.edge_count(), 1);
+        assert_eq!(overseer.links.node_count(), 4);
+
+        assert_eq!(
+            overseer.link_interfaces(interfaces[1], interfaces[3]),
+            Ok(())
+        );
+        assert_eq!(overseer.links.edge_count(), 2);
+        assert_eq!(overseer.links.node_count(), 4);
+
+        // inject notification to `interface[0]` and verify it's also forwarded to `interface[1]`
+        // and `interface[3]` (through link to `interface[1]`) but not to `interface[2]` as its not
+        // linked to any other interface
+        let peer = rng.gen();
+        overseer
+            .inject_notification(interfaces[0], peer, ProtocolId::Transaction, rand::random())
+            .await
+            .unwrap();
+
+        assert!(std::matches!(receivers[0].try_recv(), Ok(_)));
+        assert!(std::matches!(receivers[1].try_recv(), Ok(_)));
+        assert!(std::matches!(receivers[3].try_recv(), Ok(_)));
+        assert!(std::matches!(
+            receivers[2].try_recv(),
+            Err(TryRecvError::Empty)
+        ));
+
+        // remove `interface[1]` and verify that the link table is updated accordingly and that `interface[3]`
+        // no longer gets the injected notification as it's not linked to `interface[0]`
+        assert_eq!(
+            overseer.unlink_interfaces(interfaces[0], interfaces[1]),
+            Ok(())
+        );
+        overseer
+            .inject_notification(interfaces[0], peer, ProtocolId::Transaction, rand::random())
+            .await
+            .unwrap();
+
+        assert!(std::matches!(receivers[0].try_recv(), Ok(_)));
+        assert!(std::matches!(
+            receivers[1].try_recv(),
+            Err(TryRecvError::Empty)
+        ));
+        assert!(std::matches!(
+            receivers[3].try_recv(),
+            Err(TryRecvError::Empty)
+        ));
+        assert!(std::matches!(
+            receivers[2].try_recv(),
+            Err(TryRecvError::Empty)
+        ));
     }
 }
