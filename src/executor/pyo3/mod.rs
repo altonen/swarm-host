@@ -32,6 +32,7 @@ struct Context(*mut pyo3::ffi::PyObject);
 unsafe impl Send for Context {}
 unsafe impl Sync for Context {}
 
+/// Type conversion from Python dictionary to `NotificationHandlingResult`
 impl<'a> FromPyObject<'a> for NotificationHandlingResult {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
@@ -43,6 +44,38 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
         } else if let Some(delay) = dict.get_item(&"Delay") {
             let delay = delay.extract::<usize>()?;
             return PyResult::Ok(Self::Delay { delay });
+        }
+
+        Err(PyErr::new::<PyTypeError, _>(format!(
+            "Invalid type received: `{}`",
+            dict
+        )))
+    }
+}
+
+/// Type conversion from Python dictionary to `RequestHandlingResult`
+impl<'a> FromPyObject<'a> for RequestHandlingResult {
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        let dict = object.downcast::<PyDict>()?;
+
+        if dict.get_item(&"DoNothing").is_some() {
+            return PyResult::Ok(Self::DoNothing);
+        }
+
+        Err(PyErr::new::<PyTypeError, _>(format!(
+            "Invalid type received: `{}`",
+            dict
+        )))
+    }
+}
+
+/// Type conversion from Python dictionary to `ResponseHandlingResult`
+impl<'a> FromPyObject<'a> for ResponseHandlingResult {
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        let dict = object.downcast::<PyDict>()?;
+
+        if dict.get_item(&"DoNothing").is_some() {
+            return PyResult::Ok(Self::DoNothing);
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(
@@ -75,6 +108,10 @@ where
     for<'a> <T as NetworkBackend>::PeerId:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::Message:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::Request:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::Response:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
 {
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
@@ -249,22 +286,77 @@ where
         .map_err(From::from)
     }
 
-    /// Inject `notification` from `peer` to filter.
+    /// Inject `request` from `peer` to filter.
     fn inject_request(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<RequestHandlingResult> {
-        todo!();
+        let request_response_code = self.request_response_filters.get(protocol);
+        let request_response_code = request_response_code
+            .as_ref()
+            .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
+
+        tracing::trace!(target: LOG_TARGET, ?protocol, "inject request");
+
+        Python::with_gil(|py| -> pyo3::PyResult<RequestHandlingResult> {
+            let fun = PyModule::from_code(
+                py,
+                request_response_code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("filter_request")?;
+
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let request_py = request.into_executor_object(py);
+
+            Ok(fun.call1((ctx, peer_py, request_py))?.extract()?)
+        })
+        .map_err(From::from)
     }
 
     /// Inject `response` to filter.
     fn inject_response(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
-        request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<ResponseHandlingResult> {
-        todo!();
+        let request_response_code = self.request_response_filters.get(protocol);
+        let request_response_code = request_response_code
+            .as_ref()
+            .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
+
+        tracing::trace!(target: LOG_TARGET, ?protocol, "inject response");
+
+        Python::with_gil(|py| -> pyo3::PyResult<ResponseHandlingResult> {
+            let fun = PyModule::from_code(
+                py,
+                request_response_code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("filter_response")?;
+
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let response_py = response.into_executor_object(py);
+
+            Ok(fun.call1((ctx, peer_py, response_py))?.extract()?)
+        })
+        .map_err(From::from)
     }
 }

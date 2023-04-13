@@ -19,10 +19,16 @@ pub enum NotificationHandlingResult {
 }
 
 /// Request handling result.
-pub enum RequestHandlingResult {}
+pub enum RequestHandlingResult {
+    /// Response does not require any action from the filter.
+    DoNothing,
+}
 
 /// Response handling result.
-pub enum ResponseHandlingResult {}
+pub enum ResponseHandlingResult {
+    /// Response does not require any action from the filter.
+    DoNothing,
+}
 
 /// Trait which allows converting types defined by the `NetworkBackend` into types that `Executor` understands.
 pub trait IntoExecutorObject {
@@ -67,9 +73,10 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
         notification: T::Message,
     ) -> crate::Result<NotificationHandlingResult>;
 
-    /// Inject `notification` from `peer` to filter.
+    /// Inject request to filter.
     fn inject_request(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<RequestHandlingResult>;
@@ -77,8 +84,8 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Inject `response` to filter.
     fn inject_response(
         &mut self,
+        protocol: &T::Protocol,
         peer: T::PeerId,
-        request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<ResponseHandlingResult>;
 }

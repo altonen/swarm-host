@@ -31,17 +31,6 @@ use std::{
     pin::Pin,
 };
 
-// TODO: remove `InterfaceId` creation from backend and assign id for it in the overseer
-// TODO: get filter type from rpc
-// TODO: use spans when function calls `tracing::` multiple times
-// TODO: all links should not ben bidrectional
-// TODO: split code into functions
-// TODO: move tests to separate direcotry
-// TODO: add more tetsts
-// TODO: print messages and `Vec<u8>` separate and for separate target but in same span
-// TODO: convert `overseer` into a module
-// TODO: move all request-response handling under some other object that `overseer` owns
-
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "overseer";
 
@@ -554,9 +543,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         match self.interfaces.get_mut(&interface) {
             None => Err(Error::InterfaceDoesntExist),
             Some(info) => {
-                info.filter
-                    .inject_response(protocol, request_id, response)
-                    .await;
+                info.filter.inject_response(protocol, peer, response).await;
                 Ok(())
             }
         }
@@ -652,7 +639,6 @@ mod tests {
         }
     }
 
-    // TODO: use `mockall`
     #[derive(Debug)]
     struct DummySink<T: NetworkBackend> {
         msg_tx: mpsc::Sender<T::Message>,
@@ -732,7 +718,7 @@ mod tests {
                 index,
                 MockchainHandle::new(
                     interface,
-                    "[::1]:8888".parse().unwrap(),
+                    "[::1]:0".parse().unwrap(),
                     InterfaceType::Masquerade,
                 )
                 .await

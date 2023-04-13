@@ -1,10 +1,10 @@
-//! Message filtering implementation.
-
 use crate::{
     backend::{InterfaceType, NetworkBackend, PacketSink},
     ensure,
     error::{Error, ExecutorError, FilterError},
-    executor::{Executor, NotificationHandlingResult},
+    executor::{
+        Executor, NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
+    },
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -31,16 +31,6 @@ const LOG_TARGET: &'static str = "filter";
 
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "filter::msg";
-
-// TODO: move interface linking to overseer
-// TODO: move all `pyo3`-related code behind an interface
-// TODO: create separate filter task for each new interface
-// TODO: message -> notification
-// TODO: implement `freeze()` which hard-codes the paths -> no expensive calculations on each message
-// TODO: start using `mockall`
-// TODO: documentation
-// TODO: fuzzing
-// TODO: benches
 
 /// Events produced by [`Filter`].
 #[derive(Debug)]
@@ -125,8 +115,8 @@ pub enum FilterCommand<T: NetworkBackend> {
         /// Protocol.
         protocol: T::Protocol,
 
-        /// Request ID.
-        request_id: T::RequestId,
+        /// Peer ID.
+        peer: T::PeerId,
 
         /// Response.
         response: T::Response,
@@ -243,13 +233,13 @@ impl<T: NetworkBackend> FilterHandle<T> {
     pub async fn inject_response(
         &self,
         protocol: T::Protocol,
-        request_id: T::RequestId,
+        peer: T::PeerId,
         response: T::Response,
     ) {
         self.tx
             .send(FilterCommand::InjectResponse {
                 protocol,
-                request_id,
+                peer,
                 response,
             })
             .await
@@ -381,7 +371,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         protocol,
                         request,
                     } => {
-                        if let Err(error) = self.inject_request(&protocol, peer, request) {
+                        if let Err(error) = self.inject_request(&protocol, peer, request).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -393,10 +383,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     }
                     FilterCommand::InjectResponse {
                         protocol,
-                        request_id,
+                        peer,
                         response,
                     } => {
-                        if let Err(error) = self.inject_response(&protocol, request_id, response) {
+                        if let Err(error) = self.inject_response(&protocol, peer, response).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -494,7 +484,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Inject notification to filter.
-    // TODO: should this take source where source `Enum { Peer(PeerId), Interface(InterfaceId, PeerId) }`
     async fn inject_notification(
         &mut self,
         protocol: &T::Protocol,
@@ -565,41 +554,42 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Inject request to filter.
-    fn inject_request(
-        &self,
+    async fn inject_request(
+        &mut self,
         protocol: &T::Protocol,
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<()> {
-        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_request()").entered();
-        tracing::event!(
-            target: LOG_TARGET,
-            Level::TRACE,
-            ?protocol,
-            "inject request"
-        );
-        tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?request);
+        tracing::trace!(target: LOG_TARGET, ?peer, ?protocol, "inject request");
+        tracing::trace!(target: LOG_TARGET_MSG, ?request);
 
-        Ok(())
+        match self
+            .executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .inject_request(protocol, peer, request)?
+        {
+            RequestHandlingResult::DoNothing => Ok(()),
+        }
     }
 
     /// Inject response to filter.
-    fn inject_response(
-        &self,
+    async fn inject_response(
+        &mut self,
         protocol: &T::Protocol,
-        request_id: T::RequestId,
+        peer: T::PeerId,
         response: T::Response,
     ) -> crate::Result<()> {
-        tracing::span!(target: LOG_TARGET, Level::TRACE, "inject_response()").entered();
-        tracing::event!(
-            target: LOG_TARGET,
-            Level::TRACE,
-            ?protocol,
-            ?request_id,
-            "inject response",
-        );
+        tracing::trace!(target: LOG_TARGET, ?protocol, ?peer, "inject response");
         tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?response);
 
-        Ok(())
+        match self
+            .executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .inject_response(protocol, peer, response)?
+        {
+            ResponseHandlingResult::DoNothing => Ok(()),
+        }
     }
 }
