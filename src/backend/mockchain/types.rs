@@ -1,8 +1,9 @@
 use crate::{
-    backend::{mockchain::MockchainBackend, IdableRequest, NetworkBackend},
-    executor::IntoExecutorObject,
+    backend::{mockchain::MockchainBackend, Idable, NetworkBackend},
+    executor::{FromExecutorObject, IntoExecutorObject},
 };
 
+use parity_scale_codec::{Decode, Encode};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyString, PyTuple},
@@ -32,7 +33,14 @@ pub type BlockId = u64;
 pub type MessageId = u64;
 
 /// Unique request ID.
-pub type RequestId = u64;
+#[derive(Debug, Copy, Clone, FromPyObject, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RequestId(pub u64);
+
+impl IntoPy<PyObject> for RequestId {
+    fn into_py(self, py: Python) -> PyObject {
+        self.0.into_py(py)
+    }
+}
 
 // TODO: type conversions should be kept in one place
 impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::PeerId {
@@ -41,6 +49,39 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::PeerId {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         self.into_py(context)
+    }
+}
+
+impl FromExecutorObject for <MockchainBackend as NetworkBackend>::PeerId {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        executor_type.extract().unwrap()
+    }
+}
+
+impl FromExecutorObject for <MockchainBackend as NetworkBackend>::RequestId {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        executor_type.extract().unwrap()
+    }
+}
+
+impl FromExecutorObject for <MockchainBackend as NetworkBackend>::Request {
+    type ExecutorType<'a> = &'a PyAny;
+
+    // TODO: this is bad, use `extract()` instead
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        let dict = executor_type.downcast::<pyo3::types::PyDict>().unwrap();
+        let id = dict.get_item("id").unwrap().extract::<RequestId>().unwrap();
+        let payload = dict
+            .get_item("payload")
+            .unwrap()
+            .extract::<Vec<u8>>()
+            .unwrap();
+
+        Self { id, payload }
     }
 }
 
@@ -54,7 +95,7 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Message {
 }
 
 /// Transaction.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject, Encode, Decode)]
 pub struct Transaction {
     sender: AccountId,
     receiver: AccountId,
@@ -96,8 +137,19 @@ impl Transaction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
+impl Distribution<Transaction> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Transaction {
+        Transaction::new(
+            rng.gen::<AccountId>(),
+            rng.gen::<AccountId>(),
+            rng.gen::<u64>(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromPyObject, Encode, Decode)]
 pub struct Block {
+    number: u128,
     time: u64,
     transactions: Vec<Transaction>,
 }
@@ -121,13 +173,14 @@ impl IntoPy<PyObject> for Block {
 
 impl Block {
     /// Create new empty block.
-    pub fn new() -> Self {
-        Self::from_transactions(Vec::new())
+    pub fn new(number: u128) -> Self {
+        Self::from_transactions(number, Vec::new())
     }
 
     /// Create new block from transactions.
-    pub fn from_transactions(transactions: impl Into<Vec<Transaction>>) -> Self {
+    pub fn from_transactions(number: u128, transactions: impl Into<Vec<Transaction>>) -> Self {
         Self {
+            number,
             transactions: transactions.into(),
             // TODO: unix timestamp
             time: 1337u64,
@@ -264,6 +317,7 @@ impl Distribution<Message> for Standard {
                 rng.gen::<u64>(),
             )),
             1 => Message::Block(Block::from_transactions(
+                rng.gen(),
                 (0..rng.gen_range(1..=5))
                     .map(|_| {
                         Transaction::new(
@@ -336,11 +390,11 @@ pub enum ConnectionType {
     Inbound,
 
     /// Local node initiated the connection and must send a handshake
-    /// message to remote node before doing anything else.
+    /// message to remote node before doing anything elsE.
     Outbound,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
 pub struct Request {
     /// Unique ID of the request.
     id: RequestId,
@@ -370,9 +424,39 @@ impl Request {
     }
 }
 
-impl IdableRequest<MockchainBackend> for Request {
+impl Idable<MockchainBackend> for Request {
     fn id(&self) -> &<MockchainBackend as NetworkBackend>::RequestId {
         &self.id
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
+pub struct BlockRequest {
+    /// Start from this block.
+    start_from: u128,
+
+    /// Number of blocks to request.
+    num_blocks: u8,
+}
+
+impl BlockRequest {
+    pub fn new(start_from: u128, num_blocks: u8) -> Self {
+        Self {
+            start_from,
+            num_blocks,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
+pub struct BlockResponse {
+    /// Blocks
+    blocks: Vec<Block>,
+}
+
+impl BlockResponse {
+    pub fn new(blocks: Vec<Block>) -> Self {
+        Self { blocks }
     }
 }
 
@@ -411,5 +495,11 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Response {
         let mut request = PyDict::new(context);
         request.set_item("Response", fields).unwrap();
         request.into()
+    }
+}
+
+impl Idable<MockchainBackend> for Response {
+    fn id(&self) -> &<MockchainBackend as NetworkBackend>::RequestId {
+        &self.id
     }
 }

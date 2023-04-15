@@ -1,5 +1,8 @@
 #![allow(unused)]
-use crate::{executor::IntoExecutorObject, types::OverseerEvent};
+use crate::{
+    executor::{FromExecutorObject, IntoExecutorObject},
+    types::OverseerEvent,
+};
 
 use futures::stream::Stream;
 use pyo3::{prelude::*, AsPyPointer, FromPyObject, IntoPy};
@@ -53,19 +56,19 @@ pub trait PacketSink<T: NetworkBackend>: Debug + Send {
     async fn send_request(
         &mut self,
         protocol: T::Protocol,
-        response: T::Request,
+        payload: Vec<u8>,
     ) -> crate::Result<T::RequestId>;
 
     /// Send response to peer.
     async fn send_response(
         &mut self,
         request_id: T::RequestId,
-        response: T::Response,
+        payload: Vec<u8>,
     ) -> crate::Result<()>;
 }
 
-/// Trait allowing to query the request ID from opaque request.
-pub trait IdableRequest<T: NetworkBackend> {
+/// Trait allowing to query the request ID from opaque request/response.
+pub trait Idable<T: NetworkBackend> {
     fn id(&self) -> &T::RequestId;
 }
 
@@ -202,7 +205,15 @@ pub trait Interface<T: NetworkBackend> {
 #[async_trait::async_trait]
 pub trait NetworkBackend: Debug + 'static {
     /// Unique ID identifying a peer.
-    type PeerId: Debug + Copy + Clone + Eq + Hash + Send + Sync + IntoExecutorObject;
+    type PeerId: Debug
+        + Copy
+        + Clone
+        + Eq
+        + Hash
+        + Send
+        + Sync
+        + IntoExecutorObject
+        + FromExecutorObject;
 
     /// Unique ID identifying the interface.
     type InterfaceId: Serialize
@@ -217,7 +228,7 @@ pub trait NetworkBackend: Debug + 'static {
         + Sync;
 
     /// Unique ID identifying a request.
-    type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync;
+    type RequestId: Debug + Copy + Clone + PartialEq + Eq + Hash + Send + Sync + FromExecutorObject;
 
     /// Unique ID identifying a protocol.
     type Protocol: Serialize
@@ -234,12 +245,14 @@ pub trait NetworkBackend: Debug + 'static {
     type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoExecutorObject;
 
     /// Type identifying a request understood by the backend.
-    type Request: Debug + Send + Sync + IntoExecutorObject + IdableRequest<Self>
+    type Request: Debug + Send + Sync + IntoExecutorObject + FromExecutorObject + Idable<Self>
     where
         Self: Sized;
 
     /// Type identifying a response understood by the backend.
-    type Response: Debug + Clone + Send + Sync + IntoExecutorObject;
+    type Response: Debug + Clone + Send + Sync + IntoExecutorObject + Idable<Self>
+    where
+        Self: Sized;
 
     /// Handle which allows communication with a spawned interface.
     type InterfaceHandle: Interface<Self>

@@ -1,4 +1,7 @@
-use crate::backend::{mockchain::MockchainBackend, NetworkBackend, PacketSink};
+use crate::backend::{
+    mockchain::{types::RequestId, MockchainBackend},
+    NetworkBackend, PacketSink,
+};
 
 use tokio::sync::mpsc;
 
@@ -20,12 +23,12 @@ mockall::mock! {
         async fn send_request(
             &mut self,
             protocol: <T as NetworkBackend>::Protocol,
-            response: <T as NetworkBackend>::Request,
+            payload: Vec<u8>,
         ) -> crate::Result<<T as NetworkBackend>::RequestId>;
         async fn send_response(
             &mut self,
             request_id: <T as NetworkBackend>::RequestId,
-            response: <T as NetworkBackend>::Response,
+            payload: Vec<u8>,
         ) -> crate::Result<()>;
     }
 }
@@ -34,16 +37,16 @@ mockall::mock! {
 #[derive(Debug)]
 struct DummyPacketSink<T: NetworkBackend> {
     msg_tx: mpsc::Sender<T::Message>,
-    req_tx: mpsc::Sender<T::Request>,
-    resp_tx: mpsc::Sender<T::Response>,
+    req_tx: mpsc::Sender<Vec<u8>>,
+    resp_tx: mpsc::Sender<Vec<u8>>,
 }
 
 impl DummyPacketSink<MockchainBackend> {
     pub fn new() -> (
         Self,
         mpsc::Receiver<<MockchainBackend as NetworkBackend>::Message>,
-        mpsc::Receiver<<MockchainBackend as NetworkBackend>::Request>,
-        mpsc::Receiver<<MockchainBackend as NetworkBackend>::Response>,
+        mpsc::Receiver<Vec<u8>>,
+        mpsc::Receiver<Vec<u8>>,
     ) {
         let (msg_tx, msg_rx) = mpsc::channel(64);
         let (req_tx, req_rx) = mpsc::channel(64);
@@ -76,18 +79,18 @@ impl PacketSink<MockchainBackend> for DummyPacketSink<MockchainBackend> {
     async fn send_request(
         &mut self,
         protocol: <MockchainBackend as NetworkBackend>::Protocol,
-        request: <MockchainBackend as NetworkBackend>::Request,
+        payload: Vec<u8>,
     ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
-        self.req_tx.send(request).await.unwrap();
-        Ok(0u64)
+        self.req_tx.send(payload).await.unwrap();
+        Ok(RequestId(0u64))
     }
 
     async fn send_response(
         &mut self,
         request_id: <MockchainBackend as NetworkBackend>::RequestId,
-        response: <MockchainBackend as NetworkBackend>::Response,
+        payload: Vec<u8>,
     ) -> crate::Result<()> {
-        self.resp_tx.send(response).await.unwrap();
+        self.resp_tx.send(payload).await.unwrap();
         Ok(())
     }
 }

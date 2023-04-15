@@ -1,9 +1,9 @@
 use crate::{
     backend::{
-        ConnectionUpgrade, IdableRequest, Interface, InterfaceEvent, InterfaceEventStream,
-        InterfaceType, NetworkBackend, PacketSink,
+        ConnectionUpgrade, Idable, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
+        NetworkBackend, PacketSink,
     },
-    executor::IntoExecutorObject,
+    executor::{FromExecutorObject, IntoExecutorObject},
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -110,7 +110,7 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Request {
     }
 }
 
-impl IdableRequest<SubstrateBackend> for SubstrateRequest {
+impl Idable<SubstrateBackend> for SubstrateRequest {
     fn id(&self) -> &<SubstrateBackend as NetworkBackend>::RequestId {
         &self.id
     }
@@ -134,6 +134,12 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Response {
         let mut request = PyDict::new(context);
         request.set_item("Response", fields).unwrap();
         request.into()
+    }
+}
+
+impl Idable<SubstrateBackend> for SubstrateResponse {
+    fn id(&self) -> &<SubstrateBackend as NetworkBackend>::RequestId {
+        &self.id
     }
 }
 
@@ -172,7 +178,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     async fn send_request(
         &mut self,
         protocol: <SubstrateBackend as NetworkBackend>::Protocol,
-        request: <SubstrateBackend as NetworkBackend>::Request,
+        payload: Vec<u8>,
     ) -> crate::Result<<SubstrateBackend as NetworkBackend>::RequestId> {
         let (tx, rx) = oneshot::channel();
 
@@ -180,7 +186,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
             .send(Command::SendRequest {
                 peer: self.peer.0,
                 protocol: protocol.0,
-                request: request.payload,
+                request: payload,
                 tx,
             })
             .await
@@ -192,13 +198,13 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
     async fn send_response(
         &mut self,
         request_id: <SubstrateBackend as NetworkBackend>::RequestId,
-        response: <SubstrateBackend as NetworkBackend>::Response,
+        payload: Vec<u8>,
     ) -> crate::Result<()> {
         self.tx
             .send(Command::SendResponse {
                 peer: self.peer.0,
                 request_id,
-                response: response.payload,
+                response: payload,
             })
             .await
             .expect("channel to stay open");
@@ -402,12 +408,36 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
     }
 }
 
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object<'a>(executor_type: &'a Self::ExecutorType<'a>) -> Self {
+        todo!();
+    }
+}
+
 impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Message {
     type NativeType = pyo3::PyObject;
     type Context<'a> = pyo3::marker::Python<'a>;
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         self.0.into_py(context)
+    }
+}
+
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::RequestId {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        todo!();
+    }
+}
+
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::Request {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        todo!();
     }
 }
 

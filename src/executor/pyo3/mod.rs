@@ -4,8 +4,8 @@ use crate::{
     backend::NetworkBackend,
     error::{Error, ExecutorError},
     executor::{
-        Executor, IntoExecutorObject, NotificationHandlingResult, RequestHandlingResult,
-        ResponseHandlingResult,
+        Executor, FromExecutorObject, IntoExecutorObject, NotificationHandlingResult,
+        RequestHandlingResult, ResponseHandlingResult,
     },
 };
 
@@ -54,12 +54,45 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
 }
 
 /// Type conversion from Python dictionary to `RequestHandlingResult`
-impl<'a> FromPyObject<'a> for RequestHandlingResult {
+impl<'a, T: NetworkBackend> FromPyObject<'a> for RequestHandlingResult<T>
+where
+    <T as NetworkBackend>::PeerId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::RequestId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+{
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
 
         if dict.get_item(&"DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
+        } else if let Some(request) = dict.get_item("Request") {
+            let dict = request.downcast::<PyDict>()?;
+            let peer = dict
+                .get_item("peer")
+                .ok_or(PyErr::new::<PyTypeError, _>("Peer ID missing"))?;
+            let payload = dict
+                .get_item("payload")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                .extract::<Vec<u8>>()?;
+
+            return PyResult::Ok(Self::Request {
+                peer: T::PeerId::from_executor_object(&peer),
+                payload,
+            });
+        } else if let Some(response) = dict.get_item("Response") {
+            let dict = response.downcast::<PyDict>()?;
+            let request_id = dict
+                .get_item("request_id")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+            let payload = dict
+                .get_item("payload")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                .extract::<Vec<u8>>()?;
+
+            return PyResult::Ok(Self::Response {
+                request_id: T::RequestId::from_executor_object(&request_id),
+                payload,
+            });
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(
@@ -70,12 +103,30 @@ impl<'a> FromPyObject<'a> for RequestHandlingResult {
 }
 
 /// Type conversion from Python dictionary to `ResponseHandlingResult`
-impl<'a> FromPyObject<'a> for ResponseHandlingResult {
+impl<'a, T: NetworkBackend> FromPyObject<'a> for ResponseHandlingResult<T>
+where
+    <T as NetworkBackend>::RequestId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+{
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
 
         if dict.get_item(&"DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
+        } else if let Some(response) = dict.get_item("Response") {
+            let dict = response.downcast::<PyDict>()?;
+            let request_id = dict
+                .get_item("request_id")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+            let payload = dict
+                .get_item("payload")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                .extract::<Vec<u8>>()?;
+
+            return PyResult::Ok(Self::Response {
+                request_id: T::RequestId::from_executor_object(&request_id),
+                payload,
+            });
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(
@@ -113,6 +164,8 @@ where
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::Response:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> RequestHandlingResult<T>: pyo3::FromPyObject<'a>,
+    for<'a> ResponseHandlingResult<T>: pyo3::FromPyObject<'a>,
 {
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
@@ -292,7 +345,7 @@ where
         protocol: &T::Protocol,
         peer: T::PeerId,
         request: T::Request,
-    ) -> crate::Result<RequestHandlingResult> {
+    ) -> crate::Result<RequestHandlingResult<T>> {
         let request_response_code = self.request_response_filters.get(protocol);
         let request_response_code = request_response_code
             .as_ref()
@@ -300,7 +353,7 @@ where
 
         tracing::trace!(target: LOG_TARGET, ?protocol, "inject request");
 
-        Python::with_gil(|py| -> pyo3::PyResult<RequestHandlingResult> {
+        Python::with_gil(|py| -> pyo3::PyResult<RequestHandlingResult<T>> {
             let fun = PyModule::from_code(
                 py,
                 request_response_code,
@@ -329,7 +382,7 @@ where
         protocol: &T::Protocol,
         peer: T::PeerId,
         response: T::Response,
-    ) -> crate::Result<ResponseHandlingResult> {
+    ) -> crate::Result<ResponseHandlingResult<T>> {
         let request_response_code = self.request_response_filters.get(protocol);
         let request_response_code = request_response_code
             .as_ref()
@@ -337,7 +390,7 @@ where
 
         tracing::trace!(target: LOG_TARGET, ?protocol, "inject response");
 
-        Python::with_gil(|py| -> pyo3::PyResult<ResponseHandlingResult> {
+        Python::with_gil(|py| -> pyo3::PyResult<ResponseHandlingResult<T>> {
             let fun = PyModule::from_code(
                 py,
                 request_response_code,

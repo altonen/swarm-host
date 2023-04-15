@@ -19,15 +19,44 @@ pub enum NotificationHandlingResult {
 }
 
 /// Request handling result.
-pub enum RequestHandlingResult {
+#[derive(Debug, PartialEq, Eq)]
+pub enum RequestHandlingResult<T: NetworkBackend> {
     /// Response does not require any action from the filter.
     DoNothing,
+
+    /// Send request to peer.
+    Request {
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Payload.
+        payload: Vec<u8>,
+    },
+
+    /// Respond to received request.
+    Response {
+        /// Request ID.
+        request_id: T::RequestId,
+
+        /// Response.
+        payload: Vec<u8>,
+    },
 }
 
 /// Response handling result.
-pub enum ResponseHandlingResult {
+#[derive(Debug, PartialEq, Eq)]
+pub enum ResponseHandlingResult<T: NetworkBackend> {
     /// Response does not require any action from the filter.
     DoNothing,
+
+    /// Respond to received request.
+    Response {
+        /// Request ID.
+        request_id: T::RequestId,
+
+        /// Response.
+        payload: Vec<u8>,
+    },
 }
 
 /// Trait which allows converting types defined by the `NetworkBackend` into types that `Executor` understands.
@@ -37,6 +66,14 @@ pub trait IntoExecutorObject {
 
     /// Convert `NetworkBackend` type into something executor understands.
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType;
+}
+
+/// Trait which allows converting types defined returned by the `Executor` that b`NetworkBackend` understands.
+pub trait FromExecutorObject {
+    type ExecutorType<'a>;
+
+    /// Convert type received from the `Executor` into something `NetworkBackend` understands.
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self;
 }
 
 pub trait Executor<T: NetworkBackend>: Send + 'static {
@@ -79,7 +116,7 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
         protocol: &T::Protocol,
         peer: T::PeerId,
         request: T::Request,
-    ) -> crate::Result<RequestHandlingResult>;
+    ) -> crate::Result<RequestHandlingResult<T>>;
 
     /// Inject `response` to filter.
     fn inject_response(
@@ -87,5 +124,5 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
         protocol: &T::Protocol,
         peer: T::PeerId,
         response: T::Response,
-    ) -> crate::Result<ResponseHandlingResult>;
+    ) -> crate::Result<ResponseHandlingResult<T>>;
 }
