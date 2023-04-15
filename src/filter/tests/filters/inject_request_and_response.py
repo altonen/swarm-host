@@ -91,12 +91,18 @@ def filter_request(ctx, peer, request):
             byte_list = [b for b in byte_string]
 
             return {
-                'Response': {
-                    'request_id': request_id,
-                    'payload': byte_list,
-                }
+                'Response': [
+                    {
+                        'request_id': request_id,
+                        'payload': byte_list,
+                    }
+                ]
             }
         else:
+            if start_from in ctx.pending_requests:
+                ctx.pending_requests[start_from].append((peer, request_id))
+                return { 'DoNothing': None }
+
             for current_peer in ctx.peers:
                 peer_best = ctx.peers[current_peer].best_block 
                 if peer_best is not None and peer_best >= start_from and current_peer != peer:
@@ -114,8 +120,7 @@ def filter_request(ctx, peer, request):
                     })
                     byte_string = bytes.fromhex(encoded.to_hex()[2:])
                     byte_list = [b for b in byte_string]
-                    # TODO: this is not correct, there can be multiple peers waiting for responses
-                    ctx.pending_requests[start_from] = (peer, request_id)
+                    ctx.pending_requests[start_from] = [(peer, request_id)]
 
                     return {
                         'Request': {
@@ -177,6 +182,10 @@ def filter_response(ctx, peer, response):
         }
     })
 
+    # mark peer as not busy
+    if peer in ctx.peers:
+        ctx.peers[peer].pending_request = False
+
     try:
         response = RuntimeConfiguration().create_scale_object(
             'BlockResponse',
@@ -189,9 +198,6 @@ def filter_response(ctx, peer, response):
             ctx.database.set(("block_%d" % (block['number'].value_object)), str(block))
 
             if block['number'].value_object in ctx.pending_requests:
-                peer, request_id = ctx.pending_requests[block['number'].value_object]
-                ctx.pending_requests[block['number'].value_object] = None
-
                 response = RuntimeConfiguration().create_scale_object(
                     type_string = "BlockResponse"
                 )
@@ -199,15 +205,17 @@ def filter_response(ctx, peer, response):
                     "blocks": [block],
                 })
 
-                byte_string = bytes.fromhex(encoded.to_hex()[2:])
                 # TODO: what is this extra byte?
-                byte_string = byte_string[1:]
-                return {
-                    'Response': {
+                byte_string = bytes.fromhex(encoded.to_hex()[2:])[1:]
+
+                responses = []
+                for (peer, request_id) in ctx.pending_requests[block['number'].value_object]:
+                    responses.append({
                         'request_id': request_id,
                         'payload': byte_string,
-                    }
-                }
+                    })
+                ctx.pending_requests[block['number'].value_object] = None
+                return { 'Response': responses }
         return { 'DoNothing' : None }
     except Exception as e:
         print("failed to decode block response:", e)

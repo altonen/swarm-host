@@ -70,6 +70,7 @@ def filter_response(ctx, peer, response):
         .is_err());
 }
 
+// TODO: split this into multiple tests
 #[tokio::test]
 async fn inject_request_for_blocks_that_dont_exist() {
     tracing_subscriber::fmt()
@@ -97,6 +98,8 @@ def initialize_ctx(ctx):
 
 def register_peer(ctx, peer):
     ctx.peers[peer] = PeerContext()
+    if peer == 1337:
+        ctx.peers[peer].best_block = 555
     "
     .to_owned();
 
@@ -113,24 +116,42 @@ def register_peer(ctx, peer):
     assert!(filter
         .initialize_filter(interface, context_code, None)
         .is_ok());
+    // println!(
+    //     "{:?}",
+    //     filter.install_request_response_filter(
+    //         ProtocolId::BlockRequest,
+    //         request_response_filter_code
+    //     )
+    // );
     assert!(filter
         .install_request_response_filter(ProtocolId::BlockRequest, request_response_filter_code)
         .is_ok());
 
     // register two peers and create packet sinks for them
     let peer1 = rng.gen();
-    let peer2 = rng.gen();
+    let peer2 = 1337;
+    let peer3 = rng.gen();
     let (sink1, mut msg_recv1, mut req_recv1, mut resp_recv1) = DummyPacketSink::new();
     let (sink2, mut msg_recv2, mut req_recv2, mut resp_recv2) = DummyPacketSink::new();
+    let (sink3, mut msg_recv3, mut req_recv3, mut resp_recv3) = DummyPacketSink::new();
 
     assert!(filter.register_peer(peer1, Box::new(sink1)).is_ok());
     assert!(filter.register_peer(peer2, Box::new(sink2)).is_ok());
+    assert!(filter.register_peer(peer3, Box::new(sink3)).is_ok());
 
     assert!(filter
         .inject_request(
             &ProtocolId::BlockRequest,
             peer1,
-            Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
+            Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode())
+        )
+        .await
+        .is_ok());
+    assert!(filter
+        .inject_request(
+            &ProtocolId::BlockRequest,
+            peer3,
+            Request::new(RequestId(1338), BlockRequest::new(123u128, 16u8).encode())
         )
         .await
         .is_ok());
@@ -151,9 +172,17 @@ def register_peer(ctx, peer):
         .await
         .is_ok());
 
-    let mut response = resp_recv1.try_recv().unwrap();
-    let response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
-    assert_eq!(response, sent_response);
+    let mut response1 = resp_recv1.try_recv().unwrap();
+    let mut response3 = resp_recv3.try_recv().unwrap();
+
+    assert_eq!(
+        sent_response,
+        BlockResponse::decode(&mut &response1[..]).unwrap()
+    );
+    assert_eq!(
+        sent_response,
+        BlockResponse::decode(&mut &response3[..]).unwrap()
+    );
 
     assert!(filter
         .inject_request(

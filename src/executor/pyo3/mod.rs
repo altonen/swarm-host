@@ -79,20 +79,24 @@ where
                 peer: T::PeerId::from_executor_object(&peer),
                 payload,
             });
-        } else if let Some(response) = dict.get_item("Response") {
-            let dict = response.downcast::<PyDict>()?;
-            let request_id = dict
-                .get_item("request_id")
-                .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
-            let payload = dict
-                .get_item("payload")
-                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
-                .extract::<Vec<u8>>()?;
+        } else if let Some(result) = dict.get_item("Response") {
+            let results = result.downcast::<PyList>()?;
+            let mut responses = Vec::new();
 
-            return PyResult::Ok(Self::Response {
-                request_id: T::RequestId::from_executor_object(&request_id),
-                payload,
-            });
+            for dict in results {
+                let dict = dict.downcast::<PyDict>()?;
+                let request_id = dict
+                    .get_item("request_id")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+                let payload = dict
+                    .get_item("payload")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                    .extract::<Vec<u8>>()?;
+
+                responses.push((T::RequestId::from_executor_object(&request_id), payload));
+            }
+
+            return PyResult::Ok(Self::Response { responses });
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(
@@ -113,20 +117,24 @@ where
 
         if dict.get_item(&"DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
-        } else if let Some(response) = dict.get_item("Response") {
-            let dict = response.downcast::<PyDict>()?;
-            let request_id = dict
-                .get_item("request_id")
-                .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
-            let payload = dict
-                .get_item("payload")
-                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
-                .extract::<Vec<u8>>()?;
+        } else if let Some(result) = dict.get_item("Response") {
+            let results = result.downcast::<PyList>()?;
+            let mut responses = Vec::new();
 
-            return PyResult::Ok(Self::Response {
-                request_id: T::RequestId::from_executor_object(&request_id),
-                payload,
-            });
+            for dict in results {
+                let dict = dict.downcast::<PyDict>()?;
+                let request_id = dict
+                    .get_item("request_id")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+                let payload = dict
+                    .get_item("payload")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                    .extract::<Vec<u8>>()?;
+
+                responses.push((T::RequestId::from_executor_object(&request_id), payload));
+            }
+
+            return PyResult::Ok(Self::Response { responses });
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(

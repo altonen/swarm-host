@@ -598,32 +598,41 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     .await
                     .map(|_| ())
             }
-            RequestHandlingResult::Response {
-                request_id,
-                payload,
-            } => {
-                tracing::trace!(target: LOG_TARGET, ?peer, ?request_id, "send response");
-                tracing::trace!(target: LOG_TARGET_MSG, ?payload);
+            RequestHandlingResult::Response { responses } => {
+                tracing::trace!(target: LOG_TARGET, number_of_responses = ?responses.len(), "send responses");
 
-                match self.pending_inbound.remove(&request_id) {
-                    Some(request_sender) => {
-                        tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
+                for (request_id, payload) in responses {
+                    match self.pending_inbound.remove(&request_id) {
+                        Some(request_sender) => {
+                            tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
 
-                        self.peers
-                            .get_mut(&request_sender)
-                            .ok_or(Error::PeerDoesntExist)?
-                            .send_response(request_id, payload)
-                            .await
-                    }
-                    None => {
-                        tracing::warn!(
-                            target: LOG_TARGET,
-                            ?request_id,
-                            "tried to respond to request that doesn't exist"
-                        );
-                        Ok(())
+                            if let Err(error) = self
+                                .peers
+                                .get_mut(&request_sender)
+                                .ok_or(Error::PeerDoesntExist)?
+                                .send_response(request_id, payload)
+                                .await
+                            {
+                                tracing::warn!(
+                                    target: LOG_TARGET,
+                                    ?request_id,
+                                    peer = ?request_sender,
+                                    ?error,
+                                    "failed to send response"
+                                );
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                target: LOG_TARGET,
+                                ?request_id,
+                                "tried to respond to request that doesn't exist"
+                            );
+                        }
                     }
                 }
+
+                Ok(())
             }
         }
     }
@@ -645,28 +654,42 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .inject_response(protocol, peer, response)?
         {
             ResponseHandlingResult::DoNothing => Ok(()),
-            ResponseHandlingResult::Response {
-                request_id,
-                payload,
-            } => match self.pending_inbound.remove(&request_id) {
-                Some(request_sender) => {
-                    tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
+            ResponseHandlingResult::Response { responses } => {
+                tracing::trace!(target: LOG_TARGET, number_of_response = ?responses.len(), "send responses");
 
-                    self.peers
-                        .get_mut(&request_sender)
-                        .ok_or(Error::PeerDoesntExist)?
-                        .send_response(request_id, payload)
-                        .await
+                for (request_id, payload) in responses {
+                    match self.pending_inbound.remove(&request_id) {
+                        Some(request_sender) => {
+                            tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
+
+                            if let Err(error) = self
+                                .peers
+                                .get_mut(&request_sender)
+                                .ok_or(Error::PeerDoesntExist)?
+                                .send_response(request_id, payload)
+                                .await
+                            {
+                                tracing::warn!(
+                                    target: LOG_TARGET,
+                                    ?request_id,
+                                    peer = ?request_sender,
+                                    ?error,
+                                    "failed to send response"
+                                );
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                target: LOG_TARGET,
+                                ?request_id,
+                                "tried to respond to request that doesn't exist"
+                            );
+                        }
+                    }
                 }
-                None => {
-                    tracing::warn!(
-                        target: LOG_TARGET,
-                        ?request_id,
-                        "tried to respond to request that doesn't exist"
-                    );
-                    Ok(())
-                }
-            },
+
+                Ok(())
+            }
         }
     }
 }

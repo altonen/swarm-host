@@ -19,6 +19,7 @@ pub enum NotificationHandlingResult {
 }
 
 /// Request handling result.
+// TODO: why is this using `Vec<u8>` and not `T::Response`/`T::Request`?
 #[derive(Debug, PartialEq, Eq)]
 pub enum RequestHandlingResult<T: NetworkBackend> {
     /// Response does not require any action from the filter.
@@ -33,13 +34,10 @@ pub enum RequestHandlingResult<T: NetworkBackend> {
         payload: Vec<u8>,
     },
 
-    /// Respond to received request.
+    /// Respond to one or more received requests.
     Response {
-        /// Request ID.
-        request_id: T::RequestId,
-
-        /// Response.
-        payload: Vec<u8>,
+        /// Responses.
+        responses: Vec<(T::RequestId, Vec<u8>)>,
     },
 }
 
@@ -49,13 +47,10 @@ pub enum ResponseHandlingResult<T: NetworkBackend> {
     /// Response does not require any action from the filter.
     DoNothing,
 
-    /// Respond to received request.
+    /// Respond to one or more received requests.
     Response {
-        /// Request ID.
-        request_id: T::RequestId,
-
-        /// Response.
-        payload: Vec<u8>,
+        /// Responses.
+        responses: Vec<(T::RequestId, Vec<u8>)>,
     },
 }
 
