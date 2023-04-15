@@ -1,5 +1,8 @@
 from scalecodec.base import RuntimeConfiguration, ScaleBytes
+from scalecodec.types import U128
+
 import random
+import json
 
 def filter_request(ctx, peer, request):
     RuntimeConfiguration().update_type_registry({
@@ -29,6 +32,10 @@ def filter_request(ctx, peer, request):
             "Block": {
                 "type": "struct",
                 "type_mapping": [
+                    [
+                        "number",
+                        "u128",
+                    ],
                     [
                         "time",
                         "u64",
@@ -72,7 +79,23 @@ def filter_request(ctx, peer, request):
         block =  ctx.database.get("block_%d" % (start_from))
 
         if block is not None:
-            pass
+            block = block.replace("'", "\"")
+            block = json.loads(block)
+            response = RuntimeConfiguration().create_scale_object(
+                type_string = "BlockResponse"
+            )
+            encoded = response.encode({
+                "blocks": [block],
+            })
+            byte_string = bytes.fromhex(encoded.to_hex()[2:])
+            byte_list = [b for b in byte_string]
+
+            return {
+                'Response': {
+                    'request_id': request_id,
+                    'payload': byte_list,
+                }
+            }
         else:
             for current_peer in ctx.peers:
                 peer_best = ctx.peers[current_peer].best_block 
@@ -163,7 +186,7 @@ def filter_response(ctx, peer, response):
 
         responses = []
         for block in response['blocks']:
-            ctx.database.set(block['number'].value_object, str(block))
+            ctx.database.set(("block_%d" % (block['number'].value_object)), str(block))
 
             if block['number'].value_object in ctx.pending_requests:
                 peer, request_id = ctx.pending_requests[block['number'].value_object]

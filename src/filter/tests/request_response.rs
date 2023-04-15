@@ -113,13 +113,6 @@ def register_peer(ctx, peer):
     assert!(filter
         .initialize_filter(interface, context_code, None)
         .is_ok());
-    // println!(
-    //     "{:?}",
-    //     filter.install_request_response_filter(
-    //         ProtocolId::BlockRequest,
-    //         request_response_filter_code
-    //     )
-    // );
     assert!(filter
         .install_request_response_filter(ProtocolId::BlockRequest, request_response_filter_code)
         .is_ok());
@@ -133,15 +126,6 @@ def register_peer(ctx, peer):
     assert!(filter.register_peer(peer1, Box::new(sink1)).is_ok());
     assert!(filter.register_peer(peer2, Box::new(sink2)).is_ok());
 
-    // let result = filter
-    //     .inject_request(
-    //         &ProtocolId::BlockRequest,
-    //         peer1,
-    //         Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
-    //     )
-    //     .await;
-    // println!("{:?}", result);
-    // assert!(result.is_ok());
     assert!(filter
         .inject_request(
             &ProtocolId::BlockRequest,
@@ -170,4 +154,15 @@ def register_peer(ctx, peer):
     let mut response = resp_recv1.try_recv().unwrap();
     let response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
     assert_eq!(response, sent_response);
+
+    assert!(filter
+        .inject_request(
+            &ProtocolId::BlockRequest,
+            peer1,
+            Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
+        )
+        .await
+        .is_ok());
+    let mut response = resp_recv1.try_recv().unwrap();
+    let response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
 }
