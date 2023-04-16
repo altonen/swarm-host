@@ -54,7 +54,8 @@ def filter_notification(
             data = ScaleBytes(bytes(notification)),
         )
         obj.decode()
+        ctx.peers[peer].known_blocks.add(str(obj['header']))
         return { 'Forward': None }
-    except:
-        print("failed to decode block announce")
+    except Exception as e:
+        print("failed to handle block announce:", e)
         return { 'Reject': None }
