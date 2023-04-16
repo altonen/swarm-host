@@ -1,26 +1,12 @@
-# class Filter():
-#     def __init__(self, interface):
-#         self.interface = interface
-#         pass
+import redis
 
-#     def filter_request(self, src_interface, src_peer, request):
-#         pass
-
-#     def filter_response(self, src_interface, src_peer, request):
-#         pass
-
-# class MyCustomFilter(Filter):
-#     def __init__(self, interface):
-#         super.__init__(interface)
-    
-# # Initialize context for the filter.
-# #
-# # Get the interface ID as parameter which the context can store 
-# def initialize_filter(interface):
-#     return Filter(interface)
 class Context():
     def __init__(self):
         self.peers = {}
+        self.pending_requests = {}
+        self.database = redis.Redis(host = 'localhost', port = 6379, decode_responses = True)
+        self.database.ping()
+        self.database.flushall()
 
 class PeerContext():
     def __init__(self):
