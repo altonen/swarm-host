@@ -24,10 +24,11 @@ class Context():
 
 class PeerContext():
     def __init__(self):
-        self.best_block = None
+        self.known_blocks = set()
+        self.pending_request = False
 
 def initialize_ctx(ctx):
     return Context()
 
 def register_peer(ctx, peer):
-    ctx.peers[peer] = peer
+    ctx.peers[peer] = PeerContext()
