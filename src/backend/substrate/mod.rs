@@ -441,7 +441,7 @@ impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::RequestId {
     type ExecutorType<'a> = &'a PyAny;
 
     fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
-        todo!();
+        executor_type.extract::<usize>().unwrap()
     }
 }
 

@@ -247,6 +247,7 @@ impl<T: NetworkBackend> FilterHandle<T> {
     }
 }
 
+/// Message filter.
 pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     /// Executor.
     executor: Option<E>,
@@ -525,6 +526,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             Ok(NotificationHandlingResult::Forward) => {
                 tracing::trace!(
                     target: LOG_TARGET,
+                    ?protocol,
+                    ?peer,
                     "forward notification to connected peers",
                 );
 
@@ -540,7 +543,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 Ok(())
             }
             Err(Error::ExecutorError(ExecutorError::FilterDoesntExist)) => {
-                tracing::info!(
+                tracing::trace!(
                     target: LOG_TARGET,
                     ?protocol,
                     "filter does not exist, forward to all peers by default",

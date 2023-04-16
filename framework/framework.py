@@ -50,6 +50,15 @@ response = requests.post(
         params = [0, "/sup/block-announces/1", filter, ""],
     )
 )
+
+filter = open("sup-sync-2.py").read()
+response = requests.post(
+    "http://localhost:%d/" % (8884),
+    json = request(
+        "install_request_response_filter",
+        params = [0, "/sup/sync/2", filter, ""],
+    )
+)
 # host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)
 
 print("filter installed")
@@ -70,6 +79,7 @@ nodes.append(NodeTemplate()\
     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
     .build()
 )
+
 nodes.append(NodeTemplate()\
     .with_p2p_port(1 + 7000)\
     .with_rpc_port(1 + 8000)\
@@ -78,6 +88,7 @@ nodes.append(NodeTemplate()\
     .with_base_path(tmp = True)\
     .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
+    .with_reserved_only()
     .build()
 )
 

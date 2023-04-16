@@ -63,7 +63,7 @@ def filter_notification(
         byte_string = bytes.fromhex(encoded.to_hex()[2:])[:-2]
         hash_object = hashlib.blake2b(digest_size=32)
         hash_object.update(byte_string)
-        ctx.peers[peer].known_blocks.add(str(hash_object.digest().hex()))
+        ctx.peers[peer].known_blocks.add('0x' + str(hash_object.digest().hex()))
         return { 'Forward': None }
     except Exception as e:
         print("failed to handle block announce:", e)

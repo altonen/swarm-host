@@ -146,6 +146,10 @@ class Node():
         self.exec_arguments.append(peer_address)
         return self
 
+    def with_reserved_only(self):
+        self.exec_arguments.append("--reserved-only")
+        return self
+
     def build(self):
         logging.info("launch node: path {}, arguments {}".format(self.path, self.exec_arguments))
 
@@ -162,7 +166,7 @@ class Node():
             args,
             stdout=self.logfile,
             stderr=subprocess.STDOUT,
-            env={"RUST_LOG": "sub-libp2p,sync=debug,info,tx=debug"}
+            env={"RUST_LOG": "info,sync=debug,tx=debug"}
         )
 
         # TODO: zzz
