@@ -5,6 +5,7 @@ from scalecodec.type_registry import load_type_registry_preset
 from scalecodec.base import RuntimeConfiguration, ScaleBytes
 
 import base64
+import hashlib
 
 def filter_notification(
     ctx,
@@ -54,7 +55,15 @@ def filter_notification(
             data = ScaleBytes(bytes(notification)),
         )
         obj.decode()
-        ctx.peers[peer].known_blocks.add(str(obj['header']))
+        test = RuntimeConfiguration().create_scale_object(
+            'Header',
+        )
+        encoded = test.encode(obj['header'])
+        # TODO: what are these two extra bytes at the end?
+        byte_string = bytes.fromhex(encoded.to_hex()[2:])[:-2]
+        hash_object = hashlib.blake2b(digest_size=32)
+        hash_object.update(byte_string)
+        ctx.peers[peer].known_blocks.add(str(hash_object.digest().hex()))
         return { 'Forward': None }
     except Exception as e:
         print("failed to handle block announce:", e)
