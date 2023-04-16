@@ -20,7 +20,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{instrument::WithSubscriber, Subscriber};
 
 use sc_network::{
-    config::NetworkConfiguration, Command, NodeType, PeerId as SubstratePeerId,
+    config::NetworkConfiguration, Command, Multiaddr, NodeType, PeerId as SubstratePeerId,
     ProtocolName as SubstrateProtocolName, SubstrateNetwork, SubstrateNetworkEvent,
 };
 use sc_network_common::{
@@ -412,7 +412,19 @@ impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::PeerId {
     type ExecutorType<'a> = &'a PyAny;
 
     fn from_executor_object<'a>(executor_type: &'a Self::ExecutorType<'a>) -> Self {
-        todo!();
+        let multiaddr = format!(
+            "/p2p/{}",
+            executor_type
+                .extract::<String>()
+                .expect("to succeed in extarcting string")
+        )
+        .parse::<Multiaddr>()
+        .expect("valid multiaddress");
+
+        PeerId(
+            SubstratePeerId::try_from_multiaddr(&multiaddr)
+                .expect("conversion to peer id from string to succeed"),
+        )
     }
 }
 
