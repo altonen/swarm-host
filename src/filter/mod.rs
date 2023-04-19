@@ -5,6 +5,7 @@ use crate::{
     executor::{
         Executor, NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
     },
+    heuristics::HeuristicsHandle,
     types::DEFAULT_CHANNEL_SIZE,
 };
 
@@ -270,6 +271,9 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     // Pending outbound requests.
     pending_outbound: HashMap<T::RequestId, T::RequestId>,
 
+    /// Heuristics handle.
+    heuristics_handle: HeuristicsHandle<T>,
+
     // Delayed notifications.
     delayed_notifications: FuturesUnordered<BoxFuture<'static, T::Message>>,
 }
@@ -278,6 +282,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
         event_tx: mpsc::Sender<FilterEvent>,
+        heuristics_handle: HeuristicsHandle<T>,
     ) -> (Filter<T, E>, FilterHandle<T>) {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
@@ -286,8 +291,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 interface,
                 command_rx: rx,
                 event_tx,
-                peers: HashMap::new(),
                 executor: None,
+                heuristics_handle,
+                peers: HashMap::new(),
                 pending_inbound: HashMap::new(),
                 pending_outbound: HashMap::new(),
                 delayed_notifications: FuturesUnordered::new(),
@@ -501,6 +507,14 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     ) -> crate::Result<()> {
         tracing::trace!(target: LOG_TARGET, ?protocol, "inject notification");
 
+        // register the received notification to heuristics backend
+        self.heuristics_handle.register_notification_received(
+            self.interface,
+            protocol.to_owned(),
+            peer,
+            &notification,
+        );
+
         match self
             .executor
             .as_mut()
@@ -532,11 +546,21 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 );
 
                 for (peer, sink) in self.peers.iter_mut() {
-                    if let Err(err) = sink
+                    match sink
                         .send_packet(Some(protocol.clone()), &notification)
                         .await
                     {
-                        tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                        Ok(_) => {
+                            self.heuristics_handle.register_notification_sent(
+                                self.interface,
+                                protocol.clone(),
+                                vec![*peer],
+                                &notification,
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                        }
                     }
                 }
 
@@ -550,11 +574,21 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 );
 
                 for (peer, sink) in self.peers.iter_mut() {
-                    if let Err(err) = sink
+                    match sink
                         .send_packet(Some(protocol.clone()), &notification)
                         .await
                     {
-                        tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                        Ok(_) => {
+                            self.heuristics_handle.register_notification_sent(
+                                self.interface,
+                                protocol.clone(),
+                                vec![*peer],
+                                &notification,
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                        }
                     }
                 }
 
@@ -577,8 +611,14 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         // save the id of the received request so later on the response received from the executor
         // can be associated with the correct request.
         //
-        // TODO: probably not needed?
+        // also register the received request to heuristics backend.
         self.pending_inbound.insert(*request.id(), peer);
+        self.heuristics_handle.register_request_received(
+            self.interface,
+            protocol.to_owned(),
+            peer,
+            &request,
+        );
 
         match self
             .executor
@@ -609,20 +649,31 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         Some(request_sender) => {
                             tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
 
-                            if let Err(error) = self
+                            match self
                                 .peers
                                 .get_mut(&request_sender)
                                 .ok_or(Error::PeerDoesntExist)?
                                 .send_response(request_id, payload)
                                 .await
                             {
-                                tracing::warn!(
-                                    target: LOG_TARGET,
-                                    ?request_id,
-                                    peer = ?request_sender,
-                                    ?error,
-                                    "failed to send response"
-                                );
+                                Ok(_) => {
+                                    // TODO: register the new request
+                                    // self.heuristics_handle.register_request_sent(
+                                    //     self.interface,
+                                    //     protocol.to_owned(),
+                                    //     peer,
+                                    //     &response,
+                                    // );
+                                }
+                                Err(error) => {
+                                    tracing::warn!(
+                                        target: LOG_TARGET,
+                                        ?request_id,
+                                        peer = ?request_sender,
+                                        ?error,
+                                        "failed to send response"
+                                    );
+                                }
                             }
                         }
                         None => {
@@ -650,6 +701,14 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         tracing::trace!(target: LOG_TARGET, ?protocol, ?peer, "inject response");
         tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?response);
 
+        // register the received response to heuristics backend
+        self.heuristics_handle.register_response_received(
+            self.interface,
+            protocol.to_owned(),
+            peer,
+            &response,
+        );
+
         match self
             .executor
             .as_mut()
@@ -665,20 +724,31 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         Some(request_sender) => {
                             tracing::trace!(target: LOG_TARGET, peer = ?request_sender, ?request_id, "send response");
 
-                            if let Err(error) = self
+                            match self
                                 .peers
                                 .get_mut(&request_sender)
                                 .ok_or(Error::PeerDoesntExist)?
                                 .send_response(request_id, payload)
                                 .await
                             {
-                                tracing::warn!(
-                                    target: LOG_TARGET,
-                                    ?request_id,
-                                    peer = ?request_sender,
-                                    ?error,
-                                    "failed to send response"
-                                );
+                                Ok(_) => {
+                                    // TODO: register the new response
+                                    // self.heuristics_handle.register_response_sent(
+                                    //     self.interface,
+                                    //     protocol.to_owned(),
+                                    //     peer,
+                                    //     &response,
+                                    // );
+                                }
+                                Err(error) => {
+                                    tracing::warn!(
+                                        target: LOG_TARGET,
+                                        ?request_id,
+                                        peer = ?request_sender,
+                                        ?error,
+                                        "failed to send response"
+                                    );
+                                }
                             }
                         }
                         None => {

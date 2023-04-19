@@ -9,7 +9,7 @@ use crate::{
     error::Error,
     executor::Executor,
     filter::{Filter, FilterEvent, FilterHandle},
-    heuristics::HeuristicsBackend,
+    heuristics::{HeuristicsBackend, HeuristicsHandle},
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -100,6 +100,9 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Edges between interfaces.
     edges: HashMap<(T::InterfaceId, T::InterfaceId), EdgeIndex>,
 
+    /// Handle to heuristics backend.
+    heuristics_handle: HeuristicsHandle<T>,
+
     // Executor
     _marker: std::marker::PhantomData<E>,
 }
@@ -109,6 +112,10 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     pub fn new() -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (filter_event_tx, filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (backend, heuristics_handle) = HeuristicsBackend::new();
+
+        // start running the heuristics backend in the background
+        tokio::spawn(backend.run());
 
         (
             Self {
@@ -121,6 +128,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 interfaces: HashMap::new(),
                 filter_events,
                 filter_event_tx,
+                heuristics_handle,
                 _marker: Default::default(),
             },
             overseer_tx,
@@ -288,8 +296,11 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 Entry::Vacant(entry) => {
                     let interface_id = *handle.id();
                     let node_index = self.links.add_node(interface_id);
-                    let (filter, filter_handle) =
-                        Filter::<T, E>::new(interface_id, self.filter_event_tx.clone());
+                    let (filter, filter_handle) = Filter::<T, E>::new(
+                        interface_id,
+                        self.filter_event_tx.clone(),
+                        self.heuristics_handle.clone(),
+                    );
 
                     tracing::trace!(target: LOG_TARGET, interface = ?interface_id, ?node_index, "interface created");
 
@@ -317,6 +328,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             (Some(first_info), Some(second_info)) => {
                 let edge = self.links.add_edge(first_info.index, second_info.index, ());
                 self.edges.insert((first, second), edge);
+                self.heuristics_handle.link_interfaces(first, second);
                 Ok(())
             }
             _ => Err(Error::InterfaceDoesntExist),
@@ -338,11 +350,13 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
 
         match self.edges.remove(&(first, second)) {
             None => Err(Error::LinkDoesntExist),
-            Some(edge) => self
-                .links
-                .remove_edge(edge)
-                .ok_or(Error::LinkDoesntExist)
-                .map(|_| ()),
+            Some(edge) => {
+                self.heuristics_handle.link_interfaces(first, second);
+                self.links
+                    .remove_edge(edge)
+                    .ok_or(Error::LinkDoesntExist)
+                    .map(|_| ())
+            }
         }
     }
 
@@ -373,6 +387,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
 
                 // TODO: pass protocols?
                 info.filter.register_peer(peer, sink).await;
+                self.heuristics_handle.register_peer(interface, peer);
                 Ok(())
             }
         }
@@ -391,6 +406,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 None => Err(Error::PeerDoesntExist),
                 Some(_) => {
                     info.filter.unregister_peer(peer).await;
+                    self.heuristics_handle.unregister_peer(interface, peer);
                     Ok(())
                 }
             },

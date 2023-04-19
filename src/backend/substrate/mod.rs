@@ -399,7 +399,7 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubstrateBackend {
     next_iface_id: usize,
 }

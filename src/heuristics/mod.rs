@@ -38,7 +38,7 @@ impl<T: NetworkBackend> InterfaceHeuristics<T> {
 }
 
 /// Events sent by the [`HeuristicsHandle`] to [`HeuristicsBackend`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum HeuristicsEvent<T: NetworkBackend> {
     /// Register interface.
     RegisterInterface {
@@ -302,7 +302,7 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
     }
 
     /// Run the event loop of [`HeuristicsBackend`].
-    async fn run(mut self) {
+    pub async fn run(mut self) {
         while let Some(event) = self.rx.recv().await {
             match event {
                 HeuristicsEvent::RegisterInterface { interface } => {

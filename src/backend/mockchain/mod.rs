@@ -135,7 +135,7 @@ impl Interface<MockchainBackend> for MockchainHandle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MockchainBackend {
     next_iface_id: usize,
     interfaces: HashMap<SocketAddr, InterfaceId>,
