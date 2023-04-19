@@ -1,7 +1,7 @@
 use crate::{
     backend::{
         ConnectionUpgrade, Idable, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
-        NetworkBackend, PacketSink,
+        NetworkBackend, PacketSink, WithMessageInfo,
     },
     executor::{FromExecutorObject, IntoExecutorObject},
     types::DEFAULT_CHANNEL_SIZE,
@@ -32,7 +32,13 @@ use sc_network_common::{
     sync::message::BlockAnnouncesHandshake,
 };
 
-use std::{collections::HashSet, iter, net::SocketAddr, time::Duration};
+use std::{
+    collections::{hash_map::DefaultHasher, HashSet},
+    hash::Hasher,
+    iter,
+    net::SocketAddr,
+    time::Duration,
+};
 
 // TODO: this code needs some heavy refactoring
 // TODO: convert `sc-network` into a module and integrate more tightly with this code
@@ -116,6 +122,18 @@ impl Idable<SubstrateBackend> for SubstrateRequest {
     }
 }
 
+impl WithMessageInfo for SubstrateRequest {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.payload);
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.payload.len()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SubstrateResponse {
     id: usize,
@@ -140,6 +158,18 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Response {
 impl Idable<SubstrateBackend> for SubstrateResponse {
     fn id(&self) -> &<SubstrateBackend as NetworkBackend>::RequestId {
         &self.id
+    }
+}
+
+impl WithMessageInfo for SubstrateResponse {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.payload);
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.payload.len()
     }
 }
 
@@ -469,6 +499,18 @@ pub struct Message(Vec<u8>);
 impl IntoPy<PyObject> for Message {
     fn into_py(self, py: Python<'_>) -> PyObject {
         self.0.into_py(py)
+    }
+}
+
+impl WithMessageInfo for Message {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.0);
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.0.len()
     }
 }
 

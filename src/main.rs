@@ -27,6 +27,7 @@ mod backend;
 mod error;
 mod executor;
 mod filter;
+mod heuristics;
 mod overseer;
 mod rpc;
 mod types;

@@ -1,5 +1,5 @@
 use crate::{
-    backend::{mockchain::MockchainBackend, Idable, NetworkBackend},
+    backend::{mockchain::MockchainBackend, Idable, NetworkBackend, WithMessageInfo},
     executor::{FromExecutorObject, IntoExecutorObject},
 };
 
@@ -15,7 +15,7 @@ use rand::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 
-use std::net::IpAddr;
+use std::{collections::hash_map::DefaultHasher, hash::Hasher, net::IpAddr};
 
 /// Unique ID identifying the interface.
 pub type InterfaceId = usize;
@@ -188,7 +188,9 @@ impl Block {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject, Encode, Decode,
+)]
 pub struct Vote {
     block: BlockId,
     peer: PeerId,
@@ -211,7 +213,9 @@ impl IntoPy<PyObject> for Vote {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, FromPyObject, Encode, Decode,
+)]
 pub struct Dispute {
     block: BlockId,
     peer: PeerId,
@@ -232,7 +236,7 @@ impl IntoPy<PyObject> for Dispute {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, FromPyObject)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, FromPyObject, Encode, Decode)]
 pub struct Pex {
     peers: Vec<(String, u16)>,
 }
@@ -260,7 +264,7 @@ impl IntoPy<PyObject> for Pex {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Encode, Decode)]
 pub enum Message {
     Transaction(Transaction),
     Block(Block),
@@ -355,6 +359,18 @@ impl Distribution<Message> for Standard {
     }
 }
 
+impl WithMessageInfo for Message {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.encode());
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.encode().len()
+    }
+}
+
 /// Supported protocols.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProtocolId {
@@ -403,6 +419,12 @@ pub struct Request {
     payload: Vec<u8>,
 }
 
+impl Request {
+    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
+        Self { id, payload }
+    }
+}
+
 impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Request {
     type NativeType = pyo3::PyObject;
     type Context<'a> = pyo3::marker::Python<'a>;
@@ -418,15 +440,21 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Request {
     }
 }
 
-impl Request {
-    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
-        Self { id, payload }
-    }
-}
-
 impl Idable<MockchainBackend> for Request {
     fn id(&self) -> &<MockchainBackend as NetworkBackend>::RequestId {
         &self.id
+    }
+}
+
+impl WithMessageInfo for Request {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.payload);
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.payload.len()
     }
 }
 
@@ -501,5 +529,17 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Response {
 impl Idable<MockchainBackend> for Response {
     fn id(&self) -> &<MockchainBackend as NetworkBackend>::RequestId {
         &self.id
+    }
+}
+
+impl WithMessageInfo for Response {
+    fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write(&self.payload);
+        hasher.finish()
+    }
+
+    fn size(&self) -> usize {
+        self.payload.len()
     }
 }

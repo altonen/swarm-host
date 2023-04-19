@@ -72,6 +72,15 @@ pub trait Idable<T: NetworkBackend> {
     fn id(&self) -> &T::RequestId;
 }
 
+/// Trait allowing the heuristics backend to gather information about the message.
+pub trait WithMessageInfo {
+    /// Calculate hash of the message.
+    fn hash(&self) -> u64;
+
+    /// Get message total size, in bytes.
+    fn size(&self) -> usize;
+}
+
 /// Connection received an upgrade.
 #[derive(Debug)]
 pub enum ConnectionUpgrade<T: NetworkBackend> {
@@ -242,15 +251,28 @@ pub trait NetworkBackend: Debug + 'static {
         + Sync;
 
     /// Type identifying a message understood by the backend.
-    type Message: Serialize + DeserializeOwned + Debug + Clone + Send + Sync + IntoExecutorObject;
+    type Message: Serialize
+        + DeserializeOwned
+        + Debug
+        + Clone
+        + Send
+        + Sync
+        + IntoExecutorObject
+        + WithMessageInfo;
 
     /// Type identifying a request understood by the backend.
-    type Request: Debug + Send + Sync + IntoExecutorObject + FromExecutorObject + Idable<Self>
+    type Request: Debug
+        + Send
+        + Sync
+        + IntoExecutorObject
+        + FromExecutorObject
+        + WithMessageInfo
+        + Idable<Self>
     where
         Self: Sized;
 
     /// Type identifying a response understood by the backend.
-    type Response: Debug + Clone + Send + Sync + IntoExecutorObject + Idable<Self>
+    type Response: Debug + Clone + Send + Sync + IntoExecutorObject + WithMessageInfo + Idable<Self>
     where
         Self: Sized;
 

@@ -9,6 +9,7 @@ use crate::{
     error::Error,
     executor::Executor,
     filter::{Filter, FilterEvent, FilterHandle},
+    heuristics::HeuristicsBackend,
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
@@ -99,7 +100,7 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Edges between interfaces.
     edges: HashMap<(T::InterfaceId, T::InterfaceId), EdgeIndex>,
 
-    /// Executor
+    // Executor
     _marker: std::marker::PhantomData<E>,
 }
 
@@ -505,7 +506,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         protocol: T::Protocol,
         request: T::Request,
     ) -> crate::Result<()> {
-        tracing::warn!(
+        tracing::trace!(
             target: LOG_TARGET,
             ?interface,
             ?peer,
@@ -532,7 +533,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<()> {
-        tracing::warn!(
+        tracing::trace!(
             target: LOG_TARGET,
             ?interface,
             ?peer,
