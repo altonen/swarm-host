@@ -244,7 +244,8 @@ impl SubstrateNetwork {
                 let mut config = DiscoveryConfig::new(local_public.clone());
                 config.with_permanent_addresses(known_addresses);
                 config.discovery_limit(u64::from(network_config.default_peers_set.out_peers) + 15);
-                // TODO: add kademlia support for both node types
+                config.with_kademlia(&ProtocolId::from("sup"));
+                // // TODO: add kademlia support for both node types
                 // if let Some(genesis_hash) = genesis_hash {
                 // 	config.with_kademlia(genesis_hash, fork_id.as_deref(), &protocol_id);
                 // }
@@ -674,18 +675,17 @@ impl SubstrateNetwork {
                         ..
                     },
             } => {
+                // TODO: inform `Overseer` maybe
                 for addr in listen_addrs {
                     self.swarm
                         .behaviour_mut()
                         .add_self_reported_address_to_dht(&peer_id, &protocols, addr);
                 }
             }
-            BehaviourOut::Discovered(_peer_id) => {
-                println!("implement maybe, peer id {_peer_id}");
+            BehaviourOut::Discovered(peer_id) => {
+                // TODO: inform `Overseer`
             }
-            BehaviourOut::RandomKademliaStarted => {
-                // println!("metrics")
-            }
+            BehaviourOut::RandomKademliaStarted => {}
             BehaviourOut::NotificationStreamOpened {
                 remote,
                 protocol,

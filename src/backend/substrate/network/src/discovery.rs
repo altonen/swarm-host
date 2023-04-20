@@ -166,15 +166,16 @@ impl DiscoveryConfig {
     ///
     /// Currently accepts `protocol_id`. This should be removed once all the nodes
     /// are upgraded to genesis hash- and fork ID-based Kademlia protocol name.
-    pub fn with_kademlia<Hash: AsRef<[u8]>>(
+    // pub fn with_kademlia<Hash: AsRef<[u8]>>(
+    pub fn with_kademlia(
         &mut self,
-        genesis_hash: Hash,
-        fork_id: Option<&str>,
+        // genesis_hash: Hash,
+        // fork_id: Option<&str>,
         protocol_id: &ProtocolId,
     ) -> &mut Self {
         self.kademlia_protocols = Vec::new();
-        self.kademlia_protocols
-            .push(kademlia_protocol_name(genesis_hash, fork_id));
+        // self.kademlia_protocols
+        //     .push(kademlia_protocol_name(genesis_hash, fork_id));
         self.kademlia_protocols
             .push(legacy_kademlia_protocol_name(protocol_id));
         self
