@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Heuristics</title>
+  </head>
+  <body>
+    <h1>Heuristics</h1>
+    <p>Received data:</p>
+    <ul id="messages"></ul>
+
+    <script>
+      const socket = new WebSocket('ws://localhost:8885');
+
+      socket.addEventListener('open', (event) => {
+        console.log('connection opened');
+      });
+
+      socket.addEventListener('message', (event) => {
+        const li = document.createElement('li');
+        li.textContent = event.data;
+        document.getElementById('messages').appendChild(li);
+      });
+
+      socket.addEventListener('close', (event) => {
+        console.log('connection closed');
+      });
+    </script>
+  </body>
+</html>
