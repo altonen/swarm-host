@@ -423,6 +423,15 @@ impl SubstrateBackend {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct PeerId(SubstratePeerId);
 
+impl serde::Serialize for PeerId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_base58())
+    }
+}
+
 impl IntoPy<PyObject> for PeerId {
     fn into_py(self, py: Python<'_>) -> PyObject {
         self.0.to_bytes().into_py(py)

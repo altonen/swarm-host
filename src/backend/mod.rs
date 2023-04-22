@@ -221,6 +221,7 @@ pub trait NetworkBackend: Clone + Debug + 'static {
         + Hash
         + Send
         + Sync
+        + Serialize
         + IntoExecutorObject
         + FromExecutorObject;
 

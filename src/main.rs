@@ -42,13 +42,24 @@ struct Flags {
     #[clap(long)]
     rpc_port: u16,
 
+    /// WebSocket port.
+    #[clap(long)]
+    ws_port: Option<u16>,
+
     /// Network backend type.
     #[clap(long)]
     backend: NetworkBackendType,
 }
 
 async fn run_mockchain_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
+    let ws_address = flags.ws_port.map(|port| {
+        format!("127.0.0.1:{}", port)
+            .parse::<SocketAddr>()
+            .expect("valid address")
+    });
+
+    let (mut overseer, tx) =
+        Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(ws_address);
     tokio::spawn(async move { overseer.run().await });
 
     run_server(
@@ -61,7 +72,14 @@ async fn run_mockchain_backend(flags: Flags) {
 }
 
 async fn run_substrate_backend(flags: Flags) {
-    let (mut overseer, tx) = Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new();
+    let ws_address = flags.ws_port.map(|port| {
+        format!("127.0.0.1:{}", port)
+            .parse::<SocketAddr>()
+            .expect("valid address")
+    });
+
+    let (mut overseer, tx) =
+        Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(ws_address);
     tokio::spawn(async move { overseer.run().await });
 
     run_server(

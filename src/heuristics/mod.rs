@@ -1,14 +1,27 @@
-use crate::backend::{NetworkBackend, WithMessageInfo};
+use crate::{
+    backend::{NetworkBackend, WithMessageInfo},
+    error::Error,
+};
 
-use tokio::sync::mpsc;
+use futures::{SinkExt, StreamExt};
+use serde::Serialize;
+use tokio::{net::TcpListener, sync::mpsc};
+use tokio_tungstenite::tungstenite::Message;
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    net::SocketAddr,
+    time::Instant,
+};
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "heuristics";
 
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "heuristics::msg";
+
+/// Update heuristics front-end every 5 seconds.
+const UPDATE_INTERVAL: u64 = 5u64;
 
 /// Events sent by the [`HeuristicsHandle`] to [`HeuristicsBackend`].
 #[derive(Debug, Clone)]
@@ -251,7 +264,7 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct MessageHeuristics {
     total_bytes_sent: usize,
     total_messages_sent: usize,
@@ -278,7 +291,7 @@ impl Default for MessageHeuristics {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct PeerHeuristics<T: NetworkBackend> {
     /// Interfaces connected to this peer.
     interfaces: HashSet<T::InterfaceId>,
@@ -326,79 +339,121 @@ pub struct HeuristicsBackend<T: NetworkBackend> {
     /// RX channel for receiving events from [`HeuristicsHandle`].
     rx: mpsc::UnboundedReceiver<HeuristicsEvent<T>>,
 
+    /// TX channel for sending heuristics updates to the WebSocket server.
+    ws_tx: mpsc::UnboundedSender<String>,
+
     /// Connected peers.
     peers: HashMap<T::PeerId, PeerHeuristics<T>>,
 }
 
 impl<T: NetworkBackend> HeuristicsBackend<T> {
     /// Create new [`HeuristicsBackend`].
-    pub fn new() -> (Self, HeuristicsHandle<T>) {
+    pub fn new(address: Option<SocketAddr>) -> (Self, HeuristicsHandle<T>) {
         let (tx, rx) = mpsc::unbounded_channel();
+        let (ws_tx, ws_rx) = mpsc::unbounded_channel();
+
+        // start event loop for a WebSocket server if user provided an address for it
+        if let Some(address) = address {
+            tokio::spawn(heuristics_server(ws_rx, address));
+        }
 
         (
             Self {
                 rx,
+                ws_tx,
                 peers: HashMap::new(),
             },
             HeuristicsHandle { tx },
         )
     }
 
-    /// Run the event loop of [`HeuristicsBackend`].
-    pub async fn run(mut self) {
-        let mut timer = std::time::Instant::now();
-
-        while let Some(event) = self.rx.recv().await {
-            if timer.elapsed().as_secs() >= 5u64 {
-                tracing::debug!(target: LOG_TARGET, "heuristics: {:#?}", self.peers);
-                timer = std::time::Instant::now();
+    fn handle_event(&mut self, event: HeuristicsEvent<T>) {
+        match event {
+            HeuristicsEvent::RegisterInterface { interface } => {
+                // TODO: implement
             }
-
-            match event {
-                HeuristicsEvent::RegisterInterface { interface } => {
-                    // TODO: implement
+            HeuristicsEvent::LinkInterfaces { first, second } => {
+                // TODO: implement
+            }
+            HeuristicsEvent::UnlinkInterfaces { first, second } => {
+                // TODO: implement
+            }
+            HeuristicsEvent::RegisterPeer { interface, peer } => {
+                self.peers
+                    .entry(peer)
+                    .or_default()
+                    .interfaces
+                    .insert(interface);
+            }
+            HeuristicsEvent::UnregisterPeer { interface, peer } => {
+                self.peers.remove(&peer);
+            }
+            HeuristicsEvent::MessageReceived {
+                interface,
+                protocol,
+                peer,
+                hash,
+                size,
+            } => {
+                if let Some(info) = self.peers.get_mut(&peer) {
+                    info.register_message_received(&protocol, hash, size)
                 }
-                HeuristicsEvent::LinkInterfaces { first, second } => {
-                    // TODO: implement
-                }
-                HeuristicsEvent::UnlinkInterfaces { first, second } => {
-                    // TODO: implement
-                }
-                HeuristicsEvent::RegisterPeer { interface, peer } => {
-                    self.peers
-                        .entry(peer)
-                        .or_default()
-                        .interfaces
-                        .insert(interface);
-                }
-                HeuristicsEvent::UnregisterPeer { interface, peer } => {
-                    self.peers.remove(&peer);
-                }
-                HeuristicsEvent::MessageReceived {
-                    interface,
-                    protocol,
-                    peer,
-                    hash,
-                    size,
-                } => {
+            }
+            HeuristicsEvent::MessageSent {
+                interface,
+                protocol,
+                peers,
+                hash,
+                size,
+            } => {
+                for peer in peers {
                     if let Some(info) = self.peers.get_mut(&peer) {
-                        info.register_message_received(&protocol, hash, size)
-                    }
-                }
-                HeuristicsEvent::MessageSent {
-                    interface,
-                    protocol,
-                    peers,
-                    hash,
-                    size,
-                } => {
-                    for peer in peers {
-                        if let Some(info) = self.peers.get_mut(&peer) {
-                            info.register_message_sent(&protocol, hash, size)
-                        }
+                        info.register_message_sent(&protocol, hash, size)
                     }
                 }
             }
         }
     }
+
+    /// Run the event loop of [`HeuristicsBackend`].
+    pub async fn run(mut self) {
+        let mut timer = Instant::now();
+
+        loop {
+            tokio::select! {
+                event = self.rx.recv() => {
+                    self.handle_event(event.expect("channel to stay open"));
+                }
+            }
+
+            // update the heuristics front-end every 5 seconds
+            if timer.elapsed().as_secs() >= UPDATE_INTERVAL && !self.ws_tx.is_closed() {
+                let json =
+                    serde_json::to_string(&self.peers).expect("`PeerHeuristics` to serialize");
+                let _ = self.ws_tx.send(json);
+                timer = Instant::now();
+            }
+        }
+    }
+}
+
+/// WebSocket server for sending heuristics information to the WebSocket client.
+async fn heuristics_server(
+    mut rx: mpsc::UnboundedReceiver<String>,
+    address: SocketAddr,
+) -> crate::Result<()> {
+    let server = TcpListener::bind(address).await?;
+    let (socket, addr) = server.accept().await.unwrap();
+
+    tracing::debug!(target: LOG_TARGET, "client connected to heuristics backend");
+
+    let mut ws_stream = tokio_tungstenite::accept_async(socket)
+        .await
+        .map_err(|err| Error::Custom(err.to_string()))?;
+
+    while let Some(json) = rx.recv().await {
+        ws_stream.send(Message::Text(json)).await.unwrap();
+    }
+
+    Ok(())
 }
