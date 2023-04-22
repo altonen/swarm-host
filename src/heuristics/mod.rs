@@ -1,41 +1,14 @@
-use crate::{
-    backend::{NetworkBackend, WithMessageInfo},
-    heuristics::peer::PeerHeuristics,
-};
+use crate::backend::{NetworkBackend, WithMessageInfo};
 
 use tokio::sync::mpsc;
 
 use std::collections::{HashMap, HashSet};
-
-mod peer;
-
-// TODO: have protocol-level heuristics (from all peers)
-// TODO: have peer-level heuristics (for every protocol)
 
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "heuristics";
 
 /// Logging target for binary messages.
 const LOG_TARGET_MSG: &'static str = "heuristics::msg";
-
-/// Interface heuristics.
-struct InterfaceHeuristics<T: NetworkBackend> {
-    /// Heuristics for each peer connected to the interface.
-    peers: HashMap<T::PeerId, PeerHeuristics<T>>,
-
-    /// Interfaces the interface is connected to.
-    links: HashSet<T::InterfaceId>,
-}
-
-impl<T: NetworkBackend> InterfaceHeuristics<T> {
-    /// Create new [`InterfaceHeuristics`].
-    fn new() -> Self {
-        Self {
-            peers: Default::default(),
-            links: Default::default(),
-        }
-    }
-}
 
 /// Events sent by the [`HeuristicsHandle`] to [`HeuristicsBackend`].
 #[derive(Debug, Clone)]
@@ -278,13 +251,83 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 }
 
+#[derive(Debug)]
+struct MessageHeuristics {
+    total_bytes_sent: usize,
+    total_messages_sent: usize,
+    total_bytes_received: usize,
+    total_messages_received: usize,
+    redundant_bytes_sent: usize,
+    redundant_bytes_received: usize,
+    unique_messages_sent: HashSet<u64>,
+    unique_messages_received: HashSet<u64>,
+}
+
+impl Default for MessageHeuristics {
+    fn default() -> Self {
+        Self {
+            total_bytes_sent: 0usize,
+            total_messages_sent: 0usize,
+            total_bytes_received: 0usize,
+            total_messages_received: 0usize,
+            redundant_bytes_sent: 0usize,
+            redundant_bytes_received: 0usize,
+            unique_messages_sent: Default::default(),
+            unique_messages_received: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PeerHeuristics<T: NetworkBackend> {
+    /// Interfaces connected to this peer.
+    interfaces: HashSet<T::InterfaceId>,
+
+    /// Message heuristics.
+    protocols: HashMap<T::Protocol, MessageHeuristics>,
+}
+
+impl<T: NetworkBackend> Default for PeerHeuristics<T> {
+    fn default() -> Self {
+        Self {
+            interfaces: Default::default(),
+            protocols: Default::default(),
+        }
+    }
+}
+
+impl<T: NetworkBackend> PeerHeuristics<T> {
+    pub fn register_message_received(&mut self, protocol: &T::Protocol, hash: u64, size: usize) {
+        let mut entry = self.protocols.entry(protocol.to_owned()).or_default();
+
+        entry.total_bytes_received += size;
+        entry.total_messages_received += 1;
+
+        if !entry.unique_messages_received.insert(hash) {
+            entry.redundant_bytes_received += size;
+        }
+    }
+
+    /// Register that a message was sent to `peer`.
+    pub fn register_message_sent(&mut self, protocol: &T::Protocol, hash: u64, size: usize) {
+        let mut entry = self.protocols.entry(protocol.to_owned()).or_default();
+
+        entry.total_bytes_sent += size;
+        entry.total_messages_sent += 1;
+
+        if !entry.unique_messages_sent.insert(hash) {
+            entry.redundant_bytes_sent += size;
+        }
+    }
+}
+
 /// Heuristic backend.
 pub struct HeuristicsBackend<T: NetworkBackend> {
     /// RX channel for receiving events from [`HeuristicsHandle`].
     rx: mpsc::UnboundedReceiver<HeuristicsEvent<T>>,
 
-    /// Active interfaces.
-    interfaces: HashMap<T::InterfaceId, InterfaceHeuristics<T>>,
+    /// Connected peers.
+    peers: HashMap<T::PeerId, PeerHeuristics<T>>,
 }
 
 impl<T: NetworkBackend> HeuristicsBackend<T> {
@@ -295,7 +338,7 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
         (
             Self {
                 rx,
-                interfaces: Default::default(),
+                peers: HashMap::new(),
             },
             HeuristicsHandle { tx },
         )
@@ -303,61 +346,33 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
 
     /// Run the event loop of [`HeuristicsBackend`].
     pub async fn run(mut self) {
+        let mut timer = std::time::Instant::now();
+
         while let Some(event) = self.rx.recv().await {
+            if timer.elapsed().as_secs() >= 5u64 {
+                tracing::debug!(target: LOG_TARGET, "heuristics: {:#?}", self.peers);
+                timer = std::time::Instant::now();
+            }
+
             match event {
                 HeuristicsEvent::RegisterInterface { interface } => {
-                    self.interfaces
-                        .insert(interface, InterfaceHeuristics::new());
+                    // TODO: implement
                 }
                 HeuristicsEvent::LinkInterfaces { first, second } => {
-                    if !self.interfaces.contains_key(&first)
-                        || !self.interfaces.contains_key(&second)
-                    {
-                        continue;
-                    }
-
-                    self.interfaces
-                        .get_mut(&first)
-                        .expect("interface to exist")
-                        .links
-                        .insert(second);
-                    self.interfaces
-                        .get_mut(&second)
-                        .expect("interface to exist")
-                        .links
-                        .insert(first);
+                    // TODO: implement
                 }
                 HeuristicsEvent::UnlinkInterfaces { first, second } => {
-                    if !self.interfaces.contains_key(&first)
-                        || !self.interfaces.contains_key(&second)
-                    {
-                        continue;
-                    }
-
-                    self.interfaces
-                        .get_mut(&first)
-                        .expect("interface to exist")
-                        .links
-                        .remove(&second);
-                    self.interfaces
-                        .get_mut(&second)
-                        .expect("interface to exist")
-                        .links
-                        .remove(&first);
+                    // TODO: implement
                 }
                 HeuristicsEvent::RegisterPeer { interface, peer } => {
-                    let Some(interface) = self.interfaces.get_mut(&interface) else {
-                        continue;
-                    };
-
-                    interface.peers.insert(peer, PeerHeuristics::new());
+                    self.peers
+                        .entry(peer)
+                        .or_default()
+                        .interfaces
+                        .insert(interface);
                 }
                 HeuristicsEvent::UnregisterPeer { interface, peer } => {
-                    let Some(interface) = self.interfaces.get_mut(&interface) else {
-                        continue;
-                    };
-
-                    interface.peers.remove(&peer);
+                    self.peers.remove(&peer);
                 }
                 HeuristicsEvent::MessageReceived {
                     interface,
@@ -366,12 +381,8 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                     hash,
                     size,
                 } => {
-                    let Some(interface) = self.interfaces.get_mut(&interface) else {
-                        continue;
-                    };
-
-                    if let Some(peer) = interface.peers.get_mut(&peer) {
-                        peer.register_message_received(&protocol, hash, size)
+                    if let Some(info) = self.peers.get_mut(&peer) {
+                        info.register_message_received(&protocol, hash, size)
                     }
                 }
                 HeuristicsEvent::MessageSent {
@@ -381,13 +392,9 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                     hash,
                     size,
                 } => {
-                    let Some(interface) = self.interfaces.get_mut(&interface) else {
-                        continue;
-                    };
-
                     for peer in peers {
-                        if let Some(peer) = interface.peers.get_mut(&peer) {
-                            peer.register_message_sent(&protocol, hash, size)
+                        if let Some(info) = self.peers.get_mut(&peer) {
+                            info.register_message_sent(&protocol, hash, size)
                         }
                     }
                 }
