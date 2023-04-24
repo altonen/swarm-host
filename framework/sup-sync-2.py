@@ -137,9 +137,6 @@ def filter_response(ctx, peer, response):
     # mark peer as not busy
     ctx.peers[peer].pending_request = False
 
-    # print("received response from", peer)
-    # print(response)
-
     decoded = proto.BlockResponse()
     decoded.ParseFromString(bytes(response['Response']['payload']))
     print(decoded)
@@ -154,7 +151,7 @@ def filter_response(ctx, peer, response):
 
         key = "%s" % str(obj)
 
-        if needed_block is not None:
+        if needed_block is None:
             needed_block = key
 
         repr = {
@@ -164,11 +161,11 @@ def filter_response(ctx, peer, response):
         }
         ctx.database.set(key, str(repr))
 
-    if key in ctx.pending_requests:
-        (peer, request_id) = ctx.pending_requests[key][0]
-        print("pending request exists for %s, peer %s" % ((str(key), str(peer))))
+    if needed_block in ctx.pending_requests:
+        (peer, request_id) = ctx.pending_requests[needed_block][0]
+        print("pending request exists for %s, peer %s" % ((str(needed_block), str(peer))))
         
-        ctx.pending_requests[key] = {}
+        ctx.pending_requests[needed_block] = {}
 
         print("send response for", request_id)
         print(type(response))
@@ -181,4 +178,5 @@ def filter_response(ctx, peer, response):
             }]
         }
     else:
+        print("do nothing", ctx.pending_requests, key, needed_block)
         return { 'DoNothing' : None }
