@@ -11,8 +11,6 @@ macro_rules! ensure {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn ensure_works() {
         #[derive(Debug, PartialEq, Eq)]

@@ -604,7 +604,6 @@ mod tests {
     use rand::Rng;
     use tokio::sync::mpsc::error::TryRecvError;
 
-    // TODO: use `mockall`
     #[derive(Debug)]
     struct DummyHandle;
 
@@ -616,7 +615,7 @@ mod tests {
 
         fn filter(
             &self,
-            filter_name: &String,
+            _filter_name: &String,
         ) -> Option<
             Box<
                 dyn Fn(
@@ -632,13 +631,13 @@ mod tests {
             todo!()
         }
 
-        fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
+        fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
             todo!();
         }
 
         fn disconnect(
             &mut self,
-            peer: <MockchainBackend as NetworkBackend>::PeerId,
+            _peer: <MockchainBackend as NetworkBackend>::PeerId,
         ) -> crate::Result<()> {
             todo!();
         }
@@ -646,7 +645,7 @@ mod tests {
 
     #[derive(Debug)]
     struct DummySink<T: NetworkBackend> {
-        msg_tx: mpsc::Sender<T::Message>,
+        _msg_tx: mpsc::Sender<T::Message>,
         req_tx: mpsc::Sender<Vec<u8>>,
         resp_tx: mpsc::Sender<Vec<u8>>,
     }
@@ -658,13 +657,13 @@ mod tests {
             mpsc::Receiver<Vec<u8>>,
             mpsc::Receiver<Vec<u8>>,
         ) {
-            let (msg_tx, msg_rx) = mpsc::channel(64);
+            let (_msg_tx, msg_rx) = mpsc::channel(64);
             let (req_tx, req_rx) = mpsc::channel(64);
             let (resp_tx, resp_rx) = mpsc::channel(64);
 
             (
                 Self {
-                    msg_tx,
+                    _msg_tx,
                     req_tx,
                     resp_tx,
                 },
@@ -679,15 +678,15 @@ mod tests {
     impl PacketSink<MockchainBackend> for DummySink<MockchainBackend> {
         async fn send_packet(
             &mut self,
-            protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
-            message: &<MockchainBackend as NetworkBackend>::Message,
+            _protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
+            _message: &<MockchainBackend as NetworkBackend>::Message,
         ) -> crate::Result<()> {
             todo!();
         }
 
         async fn send_request(
             &mut self,
-            protocol: <MockchainBackend as NetworkBackend>::Protocol,
+            _protocol: <MockchainBackend as NetworkBackend>::Protocol,
             payload: Vec<u8>,
         ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
             self.req_tx.send(payload).await.unwrap();
@@ -696,7 +695,7 @@ mod tests {
 
         async fn send_response(
             &mut self,
-            request_id: <MockchainBackend as NetworkBackend>::RequestId,
+            _request_id: <MockchainBackend as NetworkBackend>::RequestId,
             payload: Vec<u8>,
         ) -> crate::Result<()> {
             self.resp_tx.send(payload).await.unwrap();
@@ -707,13 +706,16 @@ mod tests {
     #[tokio::test]
     async fn apply_connection_upgrade() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
+        let (mut overseer, _) =
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None);
+        let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
         let interface = rng.gen();
         let peer = rng.gen();
-        let (filter, filter_handle) =
+        let (_filter, filter_handle) =
             Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
                 interface,
                 overseer.filter_event_tx.clone(),
+                heuristics_handle,
             );
         let index = overseer.links.add_node(interface);
 
@@ -733,7 +735,7 @@ mod tests {
             ),
         );
 
-        let (sink, _, _, _) = DummySink::new();
+        let (_sink, _, _, _) = DummySink::new();
         overseer
             .interfaces
             .get_mut(&interface)
@@ -759,13 +761,15 @@ mod tests {
         );
 
         // add new protocol and verify peer protocols are updated
-        overseer.apply_connection_upgrade(
-            interface,
-            peer,
-            ConnectionUpgrade::ProtocolOpened {
-                protocols: HashSet::from([ProtocolId::Generic]),
-            },
-        );
+        overseer
+            .apply_connection_upgrade(
+                interface,
+                peer,
+                ConnectionUpgrade::ProtocolOpened {
+                    protocols: HashSet::from([ProtocolId::Generic]),
+                },
+            )
+            .unwrap();
 
         assert_eq!(
             overseer
@@ -784,13 +788,15 @@ mod tests {
         );
 
         // close two protocols: one that's supported and one that's not and verify state again
-        overseer.apply_connection_upgrade(
-            interface,
-            peer,
-            ConnectionUpgrade::ProtocolClosed {
-                protocols: HashSet::from([ProtocolId::PeerExchange, ProtocolId::Transaction]),
-            },
-        );
+        overseer
+            .apply_connection_upgrade(
+                interface,
+                peer,
+                ConnectionUpgrade::ProtocolClosed {
+                    protocols: HashSet::from([ProtocolId::PeerExchange, ProtocolId::Transaction]),
+                },
+            )
+            .unwrap();
 
         assert_eq!(
             overseer
@@ -808,7 +814,8 @@ mod tests {
     #[tokio::test]
     async fn link_interfaces() {
         let mut rng = rand::thread_rng();
-        let (mut overseer, _) = Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new();
+        let (mut overseer, _) =
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None);
         let interfaces = vec![rng.gen(), rng.gen(), rng.gen(), rng.gen()];
         let mut receivers = Vec::new();
 

@@ -69,7 +69,7 @@ impl DummyPacketSink<MockchainBackend> {
 impl PacketSink<MockchainBackend> for DummyPacketSink<MockchainBackend> {
     async fn send_packet(
         &mut self,
-        protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
+        _protocol: Option<<MockchainBackend as NetworkBackend>::Protocol>,
         message: &<MockchainBackend as NetworkBackend>::Message,
     ) -> crate::Result<()> {
         self.msg_tx.send(message.clone()).await.unwrap();
@@ -78,7 +78,7 @@ impl PacketSink<MockchainBackend> for DummyPacketSink<MockchainBackend> {
 
     async fn send_request(
         &mut self,
-        protocol: <MockchainBackend as NetworkBackend>::Protocol,
+        _protocol: <MockchainBackend as NetworkBackend>::Protocol,
         payload: Vec<u8>,
     ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
         self.req_tx.send(payload).await.unwrap();
@@ -87,7 +87,7 @@ impl PacketSink<MockchainBackend> for DummyPacketSink<MockchainBackend> {
 
     async fn send_response(
         &mut self,
-        request_id: <MockchainBackend as NetworkBackend>::RequestId,
+        _request_id: <MockchainBackend as NetworkBackend>::RequestId,
         payload: Vec<u8>,
     ) -> crate::Result<()> {
         self.resp_tx.send(payload).await.unwrap();

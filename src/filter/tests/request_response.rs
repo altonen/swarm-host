@@ -1,13 +1,11 @@
 use crate::{
     backend::mockchain::{
-        types::{
-            Block, BlockRequest, BlockResponse, InterfaceId, Message, PeerId, ProtocolId, Request,
-            RequestId, Response, Transaction,
-        },
+        types::{Block, BlockRequest, BlockResponse, ProtocolId, Request, RequestId, Response},
         MockchainBackend,
     },
     executor::pyo3::PyO3Executor,
     filter::{tests::DummyPacketSink, Filter},
+    heuristics::HeuristicsBackend,
 };
 
 use parity_scale_codec::{Decode, Encode};
@@ -30,10 +28,14 @@ def filter_request(ctx, peer, request):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -57,10 +59,14 @@ def filter_response(ctx, peer, response):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -73,7 +79,7 @@ def filter_response(ctx, peer, response):
 // TODO: split this into multiple tests
 #[tokio::test]
 async fn inject_request_for_blocks_that_dont_exist() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
@@ -108,10 +114,14 @@ def register_peer(ctx, peer):
     let request_response_filter_code = fs::read_to_string(file_path).unwrap();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -131,9 +141,9 @@ def register_peer(ctx, peer):
     let peer1 = rng.gen();
     let peer2 = 1337;
     let peer3 = rng.gen();
-    let (sink1, mut msg_recv1, mut req_recv1, mut resp_recv1) = DummyPacketSink::new();
-    let (sink2, mut msg_recv2, mut req_recv2, mut resp_recv2) = DummyPacketSink::new();
-    let (sink3, mut msg_recv3, mut req_recv3, mut resp_recv3) = DummyPacketSink::new();
+    let (sink1, _, _, mut resp_recv1) = DummyPacketSink::new();
+    let (sink2, _, mut req_recv2, _) = DummyPacketSink::new();
+    let (sink3, _, _, mut resp_recv3) = DummyPacketSink::new();
 
     assert!(filter.register_peer(peer1, Box::new(sink1)).is_ok());
     assert!(filter.register_peer(peer2, Box::new(sink2)).is_ok());
@@ -172,8 +182,8 @@ def register_peer(ctx, peer):
         .await
         .is_ok());
 
-    let mut response1 = resp_recv1.try_recv().unwrap();
-    let mut response3 = resp_recv3.try_recv().unwrap();
+    let response1 = resp_recv1.try_recv().unwrap();
+    let response3 = resp_recv3.try_recv().unwrap();
 
     assert_eq!(
         sent_response,
@@ -192,6 +202,6 @@ def register_peer(ctx, peer):
         )
         .await
         .is_ok());
-    let mut response = resp_recv1.try_recv().unwrap();
-    let response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
+    let response = resp_recv1.try_recv().unwrap();
+    let _response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
 }

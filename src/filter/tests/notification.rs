@@ -1,10 +1,11 @@
 use crate::{
     backend::mockchain::{
-        types::{InterfaceId, Message, PeerId, ProtocolId, Transaction},
+        types::{Message, ProtocolId},
         MockchainBackend,
     },
     executor::pyo3::PyO3Executor,
     filter::{tests::DummyPacketSink, Filter},
+    heuristics::HeuristicsBackend,
 };
 
 use rand::Rng;
@@ -27,10 +28,14 @@ def filter_notification(ctx, peer, notification):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -61,10 +66,14 @@ def filter_notification(ctx, peer, notification):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
@@ -85,7 +94,7 @@ def filter_notification(ctx, peer, notification):
 
 #[tokio::test]
 async fn inject_notification_and_forward_it() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
@@ -112,10 +121,14 @@ def filter_notification(ctx, peer, notification):
     .to_owned();
 
     let mut rng = rand::thread_rng();
-    let (tx, rx) = mpsc::channel(64);
+    let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (mut filter, _) =
-        Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(interface, tx);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+        interface,
+        tx,
+        heuristics_handle,
+    );
 
     assert!(filter
         .initialize_filter(interface, context_code, None)
