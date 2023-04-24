@@ -86,9 +86,9 @@ nodes.append(NodeTemplate()\
     .with_ws_port(1 + 9944)\
     .with_chain_spec(dev = True)\
     .with_base_path(tmp = True)\
-    .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
+    # .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
-    .with_reserved_only()
+    # .with_reserved_only()
     .build()
 )
 

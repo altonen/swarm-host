@@ -226,6 +226,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 }
 
 pub struct InterfaceHandle {
+    command_tx: mpsc::Sender<Command>,
     interface_id: usize,
 }
 
@@ -252,6 +253,7 @@ impl InterfaceHandle {
         tokio::spawn(network.run());
 
         // TODO: remove this and handle all messages on `substrate` side
+        let cmd_tx = command_tx.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
@@ -261,7 +263,7 @@ impl InterfaceHandle {
                                 peer: PeerId(peer),
                                 interface: interface_id,
                                 protocols: Vec::new(),
-                                sink: Box::new(SubstratePacketSink::new(PeerId(peer), command_tx.clone())),
+                                sink: Box::new(SubstratePacketSink::new(PeerId(peer), cmd_tx.clone())),
                             })
                             .await
                             .expect("channel to stay open");
@@ -338,26 +340,45 @@ impl InterfaceHandle {
             }
         });
 
-        Ok((Self { interface_id }, Box::pin(ReceiverStream::new(rx))))
+        Ok((
+            Self {
+                interface_id,
+                command_tx,
+            },
+            Box::pin(ReceiverStream::new(rx)),
+        ))
     }
 }
 
+#[async_trait::async_trait]
 impl Interface<SubstrateBackend> for InterfaceHandle {
     fn id(&self) -> &<SubstrateBackend as NetworkBackend>::InterfaceId {
         &self.interface_id
     }
 
     /// Attempt to establish connection with a remote peer.
-    fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
-        todo!();
+    async fn connect(
+        &mut self,
+        peer: <SubstrateBackend as NetworkBackend>::PeerId,
+    ) -> crate::Result<()> {
+        self.command_tx
+            .send(Command::Connect { peer: peer.0 })
+            .await
+            .expect("channel to stay open");
+
+        Ok(())
     }
 
     /// Attempt to disconnect peer from the interface.
-    fn disconnect(
+    async fn disconnect(
         &mut self,
-        _peer: <SubstrateBackend as NetworkBackend>::PeerId,
+        peer: <SubstrateBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
-        todo!();
+        self.command_tx
+            .send(Command::Disconnect { peer: peer.0 })
+            .await
+            .expect("channel to stay open");
+        Ok(())
     }
 }
 

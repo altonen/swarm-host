@@ -28,13 +28,13 @@ use libp2p::{
     },
     Multiaddr, PeerId,
 };
-use log::warn;
 use notifications::{Notifications, NotificationsOut};
 use sc_network_common::{
     config::NonReservedPeerMode,
     error,
     protocol::{role::Roles, ProtocolName},
 };
+
 use std::{
     collections::{HashSet, VecDeque},
     iter,
@@ -56,7 +56,7 @@ pub(crate) const BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE: u64 = 16 * 1024 * 
 const NUM_HARDCODED_PEERSETS: usize = 1;
 
 /// Harcoded peerset id for syncing.
-const _HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
+pub(crate) const HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
 
 // Lock must always be taken in order declared here.
 pub struct Protocol {
@@ -176,23 +176,20 @@ impl Protocol {
     }
 
     /// Disconnects the given peer if we are connected to it.
-    #[allow(unused)]
-    pub fn disconnect_peer(&mut self, peer_id: &PeerId, protocol_name: ProtocolName) {
-        if let Some(position) = self
-            .notification_protocols
-            .iter()
-            .position(|p| *p == protocol_name)
-        {
-            self.behaviour
-                .disconnect_peer(peer_id, sc_peerset::SetId::from(position));
-        } else {
-            warn!(target: "sub-libp2p", "disconnect_peer() with invalid protocol name")
-        }
+    pub fn disconnect_peer(&mut self, peer_id: &PeerId, set: sc_peerset::SetId) {
+        self.behaviour
+            .disconnect_peer(peer_id, sc_peerset::SetId::from(set.into()));
     }
 
     /// Adjusts the reputation of a node.
     pub fn report_peer(&self, who: PeerId, reputation: sc_peerset::ReputationChange) {
         self.peerset_handle.report_peer(who, reputation)
+    }
+
+    /// Connect to peer.
+    pub fn connect(&mut self, peer: PeerId) {
+        self.peerset_handle
+            .add_reserved_peer(HARDCODED_PEERSETS_SYNC, peer);
     }
 }
 

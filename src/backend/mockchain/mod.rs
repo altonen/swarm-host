@@ -83,6 +83,7 @@ impl MockchainHandle {
     }
 }
 
+#[async_trait::async_trait]
 impl Interface<MockchainBackend> for MockchainHandle {
     /// Get ID of the interface.
     fn id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
@@ -90,12 +91,15 @@ impl Interface<MockchainBackend> for MockchainHandle {
     }
 
     /// Connect to peer.
-    fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
+    async fn connect(
+        &mut self,
+        peer: <MockchainBackend as NetworkBackend>::PeerId,
+    ) -> crate::Result<()> {
         todo!();
     }
 
     /// Disconnect peer.
-    fn disconnect(
+    async fn disconnect(
         &mut self,
         peer: <MockchainBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {

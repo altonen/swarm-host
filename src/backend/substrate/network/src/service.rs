@@ -31,7 +31,7 @@ use crate::{
     behaviour::{self, Behaviour, BehaviourOut},
     config::{self, NetworkConfiguration, NodeKeyConfig, Secret},
     discovery::DiscoveryConfig,
-    protocol::{self, NotificationsSink, Protocol},
+    protocol::{self, NotificationsSink, Protocol, HARDCODED_PEERSETS_SYNC},
     transport,
 };
 
@@ -143,6 +143,12 @@ pub enum Command {
         peer: PeerId,
         request_id: usize,
         response: Vec<u8>,
+    },
+    Connect {
+        peer: PeerId,
+    },
+    Disconnect {
+        peer: PeerId,
     },
 }
 
@@ -635,6 +641,15 @@ impl SubstrateNetwork {
                     }
                 }
             }
+            Command::Connect { peer } => {
+                self.swarm.behaviour_mut().user_protocol_mut().connect(peer);
+            }
+            Command::Disconnect { peer } => {
+                self.swarm
+                    .behaviour_mut()
+                    .user_protocol_mut()
+                    .disconnect_peer(&peer, HARDCODED_PEERSETS_SYNC);
+            }
         }
     }
 
@@ -682,8 +697,9 @@ impl SubstrateNetwork {
                         .add_self_reported_address_to_dht(&peer_id, &protocols, addr);
                 }
             }
-            BehaviourOut::Discovered(peer_id) => {
-                // TODO: inform `Overseer`
+            BehaviourOut::Discovered(peer) => {
+                log::info!(target: "sub-libp2p", "attempt to connect to {peer}");
+                self.swarm.behaviour_mut().user_protocol_mut().connect(peer);
             }
             BehaviourOut::RandomKademliaStarted => {}
             BehaviourOut::NotificationStreamOpened {

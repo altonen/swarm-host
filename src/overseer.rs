@@ -613,11 +613,14 @@ mod tests {
             todo!();
         }
 
-        fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
+        async fn connect(
+            &mut self,
+            _peer: <MockchainBackend as NetworkBackend>::PeerId,
+        ) -> crate::Result<()> {
             todo!();
         }
 
-        fn disconnect(
+        async fn disconnect(
             &mut self,
             _peer: <MockchainBackend as NetworkBackend>::PeerId,
         ) -> crate::Result<()> {

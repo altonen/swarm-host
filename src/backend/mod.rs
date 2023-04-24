@@ -175,15 +175,16 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 }
 
 /// Abstraction which allows `swarm-host` to maintain connections to remote peers.
+#[async_trait::async_trait]
 pub trait Interface<T: NetworkBackend> {
     /// Return reference to the interface ID.
     fn id(&self) -> &T::InterfaceId;
 
     /// Attempt to establish connection with a remote peer.
-    fn connect(&mut self, address: SocketAddr) -> crate::Result<()>;
+    async fn connect(&mut self, peer: T::PeerId) -> crate::Result<()>;
 
     /// Attempt to disconnect peer from the interface.
-    fn disconnect(&mut self, peer: T::PeerId) -> crate::Result<()>;
+    async fn disconnect(&mut self, peer: T::PeerId) -> crate::Result<()>;
 }
 
 /// Traits which each network backend must implement.
