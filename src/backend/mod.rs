@@ -23,15 +23,10 @@ pub enum NetworkBackendType {
     Substrate,
 }
 
-// TODO: how to express capabilities in a generic way?
-// TODO: specify how node backed interfaces work?
 #[derive(Debug)]
 pub enum InterfaceType {
     /// Interface will masquerade a real node.
     Masquerade,
-
-    /// Interface is backed up by a real node.
-    _NodeBacked,
 }
 
 /// Abstraction which allows `swarm-host` to send packets to peer.

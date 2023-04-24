@@ -34,7 +34,6 @@ use std::{
 };
 
 mod masquerade;
-mod node_backed;
 pub mod types;
 
 const LOG_TARGET: &'static str = "mockchain";
@@ -42,7 +41,6 @@ const LOG_TARGET: &'static str = "mockchain";
 // TODO: ugly
 enum P2pType {
     Masquerade(masquerade::P2p),
-    NodeBacked(node_backed::P2p),
 }
 
 /// Interface handle.
@@ -71,9 +69,6 @@ impl MockchainHandle {
         let p2p_type = match interface_type {
             InterfaceType::Masquerade => {
                 P2pType::Masquerade(masquerade::P2p::start(iface_tx, listener, id))
-            }
-            InterfaceType::_NodeBacked => {
-                P2pType::NodeBacked(node_backed::P2p::start(iface_tx, listener, id))
             }
         };
 
@@ -201,9 +196,6 @@ impl NetworkBackend for MockchainBackend {
                         self.interfaces.insert(address, id);
                         (handle, stream)
                     })
-            }
-            InterfaceType::_NodeBacked => {
-                todo!();
             }
         }
     }
