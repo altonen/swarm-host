@@ -179,17 +179,6 @@ pub trait Interface<T: NetworkBackend> {
     /// Return reference to the interface ID.
     fn id(&self) -> &T::InterfaceId;
 
-    /// Get handle to installed filter
-    fn filter(
-        &self,
-        filter_name: &String,
-    ) -> Option<
-        Box<
-            dyn Fn(T::InterfaceId, T::PeerId, T::InterfaceId, T::PeerId, &T::Message) -> bool
-                + Send,
-        >,
-    >;
-
     /// Attempt to establish connection with a remote peer.
     fn connect(&mut self, address: SocketAddr) -> crate::Result<()>;
 

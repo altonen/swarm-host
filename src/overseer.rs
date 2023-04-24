@@ -613,24 +613,6 @@ mod tests {
             todo!();
         }
 
-        fn filter(
-            &self,
-            _filter_name: &String,
-        ) -> Option<
-            Box<
-                dyn Fn(
-                        <MockchainBackend as NetworkBackend>::InterfaceId,
-                        <MockchainBackend as NetworkBackend>::PeerId,
-                        <MockchainBackend as NetworkBackend>::InterfaceId,
-                        <MockchainBackend as NetworkBackend>::PeerId,
-                        &<MockchainBackend as NetworkBackend>::Message,
-                    ) -> bool
-                    + Send,
-            >,
-        > {
-            todo!()
-        }
-
         fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
             todo!();
         }

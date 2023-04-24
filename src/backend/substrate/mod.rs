@@ -347,25 +347,6 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
         &self.interface_id
     }
 
-    /// Get handle to installed filter
-    fn filter(
-        &self,
-        _filter_name: &String,
-    ) -> Option<
-        Box<
-            dyn Fn(
-                    <SubstrateBackend as NetworkBackend>::InterfaceId,
-                    <SubstrateBackend as NetworkBackend>::PeerId,
-                    <SubstrateBackend as NetworkBackend>::InterfaceId,
-                    <SubstrateBackend as NetworkBackend>::PeerId,
-                    &<SubstrateBackend as NetworkBackend>::Message,
-                ) -> bool
-                + Send,
-        >,
-    > {
-        todo!();
-    }
-
     /// Attempt to establish connection with a remote peer.
     fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
         todo!();
