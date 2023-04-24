@@ -1,7 +1,6 @@
 use crate::{
-    backend::{Idable, InterfaceType, NetworkBackend, PacketSink},
-    ensure,
-    error::{Error, ExecutorError, FilterError},
+    backend::{Idable, NetworkBackend, PacketSink},
+    error::{Error, ExecutorError},
     executor::{
         Executor, NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
     },
@@ -10,16 +9,11 @@ use crate::{
 };
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
-use petgraph::{
-    graph::{DiGraph, EdgeIndex, NodeIndex},
-    visit::{Dfs, Walker},
-};
-use pyo3::prelude::*;
 use tokio::{sync::mpsc, time};
 use tracing::Level;
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     time::Duration,
 };
@@ -260,7 +254,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     command_rx: mpsc::Receiver<FilterCommand<T>>,
 
     /// TX channel for sending events to `Overseer`.
-    event_tx: mpsc::Sender<FilterEvent>,
+    _event_tx: mpsc::Sender<FilterEvent>,
 
     /// Registered peers.
     peers: HashMap<T::PeerId, Box<dyn PacketSink<T>>>,
@@ -269,7 +263,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     pending_inbound: HashMap<T::RequestId, T::PeerId>,
 
     // Pending outbound requests.
-    pending_outbound: HashMap<T::RequestId, T::RequestId>,
+    _pending_outbound: HashMap<T::RequestId, T::RequestId>,
 
     /// Heuristics handle.
     heuristics_handle: HeuristicsHandle<T>,
@@ -281,7 +275,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
-        event_tx: mpsc::Sender<FilterEvent>,
+        _event_tx: mpsc::Sender<FilterEvent>,
         heuristics_handle: HeuristicsHandle<T>,
     ) -> (Filter<T, E>, FilterHandle<T>) {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -290,12 +284,12 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             Filter::<T, E> {
                 interface,
                 command_rx: rx,
-                event_tx,
+                _event_tx,
                 executor: None,
                 heuristics_handle,
                 peers: HashMap::new(),
                 pending_inbound: HashMap::new(),
-                pending_outbound: HashMap::new(),
+                _pending_outbound: HashMap::new(),
                 delayed_notifications: FuturesUnordered::new(),
             },
             FilterHandle::new(tx),
@@ -411,7 +405,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         }
                     }
                 },
-                notification = self.delayed_notifications.select_next_some(), if !self.delayed_notifications.is_empty() => {
+                _notification = self.delayed_notifications.select_next_some(), if !self.delayed_notifications.is_empty() => {
                     todo!();
                 }
             }

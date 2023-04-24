@@ -15,7 +15,6 @@ use pyo3::{
     types::{PyDict, PyList},
     FromPyPointer,
 };
-use rand::Rng;
 use tracing::Level;
 
 #[cfg(test)]
@@ -264,7 +263,7 @@ where
 
         // verify that `filter_notification()` exists in the code
         Python::with_gil(|py| {
-            let fun = PyModule::from_code(
+            PyModule::from_code(
                 py,
                 &code,
                 "",

@@ -1,4 +1,4 @@
-use crate::{backend::NetworkBackend, error::Error};
+use crate::backend::NetworkBackend;
 
 pub mod pyo3;
 

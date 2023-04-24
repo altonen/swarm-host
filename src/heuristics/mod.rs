@@ -3,7 +3,7 @@ use crate::{
     error::Error,
 };
 
-use futures::{SinkExt, StreamExt};
+use futures::SinkExt;
 use serde::Serialize;
 use tokio::{net::TcpListener, sync::mpsc};
 use tokio_tungstenite::tungstenite::Message;
@@ -17,9 +17,6 @@ use std::{
 /// Logging target for the file.
 const LOG_TARGET: &'static str = "heuristics";
 
-/// Logging target for binary messages.
-const LOG_TARGET_MSG: &'static str = "heuristics::msg";
-
 /// Update heuristics front-end every 5 seconds.
 const UPDATE_INTERVAL: u64 = 5u64;
 
@@ -27,7 +24,7 @@ const UPDATE_INTERVAL: u64 = 5u64;
 #[derive(Debug, Clone)]
 enum HeuristicsEvent<T: NetworkBackend> {
     /// Register interface.
-    RegisterInterface {
+    _RegisterInterface {
         /// Interface ID.
         interface: T::InterfaceId,
     },
@@ -35,14 +32,14 @@ enum HeuristicsEvent<T: NetworkBackend> {
     /// Link interfaces.
     LinkInterfaces {
         /// ID of the first interface.
-        first: T::InterfaceId,
+        _first: T::InterfaceId,
 
         /// ID of the second interface.
-        second: T::InterfaceId,
+        _second: T::InterfaceId,
     },
 
     /// Unlink interfaces.
-    UnlinkInterfaces {
+    _UnlinkInterfaces {
         /// ID of the first interface.
         first: T::InterfaceId,
 
@@ -62,7 +59,7 @@ enum HeuristicsEvent<T: NetworkBackend> {
     /// Unregister interface
     UnregisterPeer {
         /// Interface ID.
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
 
         /// Peer ID.
         peer: T::PeerId,
@@ -71,7 +68,7 @@ enum HeuristicsEvent<T: NetworkBackend> {
     /// Message was received from `peer` to `interface`.
     MessageReceived {
         /// Interface ID.
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
 
         /// Protocol.
         protocol: T::Protocol,
@@ -89,7 +86,7 @@ enum HeuristicsEvent<T: NetworkBackend> {
     /// Message was sent from `interface` to `peers`.
     MessageSent {
         /// Interface ID.
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
 
         /// Protocol.
         protocol: T::Protocol,
@@ -114,23 +111,23 @@ pub struct HeuristicsHandle<T: NetworkBackend> {
 
 impl<T: NetworkBackend> HeuristicsHandle<T> {
     /// Register interface.
-    pub fn register_interface(&self, interface: T::InterfaceId) {
+    pub fn _register_interface(&self, interface: T::InterfaceId) {
         self.tx
-            .send(HeuristicsEvent::RegisterInterface { interface })
+            .send(HeuristicsEvent::_RegisterInterface { interface })
             .expect("channel to stay open");
     }
 
     /// Link interface.
-    pub fn link_interfaces(&self, first: T::InterfaceId, second: T::InterfaceId) {
+    pub fn link_interfaces(&self, _first: T::InterfaceId, _second: T::InterfaceId) {
         self.tx
-            .send(HeuristicsEvent::LinkInterfaces { first, second })
+            .send(HeuristicsEvent::LinkInterfaces { _first, _second })
             .expect("channel to stay open");
     }
 
     /// Unlink interface.
-    pub fn unlink_interfaces(&self, first: T::InterfaceId, second: T::InterfaceId) {
+    pub fn _unlink_interfaces(&self, first: T::InterfaceId, second: T::InterfaceId) {
         self.tx
-            .send(HeuristicsEvent::UnlinkInterfaces { first, second })
+            .send(HeuristicsEvent::_UnlinkInterfaces { first, second })
             .expect("channel to stay open");
     }
 
@@ -142,23 +139,23 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 
     /// Unregister `peer` from `interface`'s known peers.
-    pub fn unregister_peer(&self, interface: T::InterfaceId, peer: T::PeerId) {
+    pub fn unregister_peer(&self, _interface: T::InterfaceId, peer: T::PeerId) {
         self.tx
-            .send(HeuristicsEvent::UnregisterPeer { interface, peer })
+            .send(HeuristicsEvent::UnregisterPeer { _interface, peer })
             .expect("channel to stay open");
     }
 
     /// Register that `notification` was received from `peer` to `interface`.
     pub fn register_notification_received(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peer: T::PeerId,
         notification: &T::Message,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageReceived {
-                interface,
+                _interface,
                 protocol,
                 peer,
                 hash: notification.hash(),
@@ -170,14 +167,14 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     /// Register that `notification` was forwarded from `interface` to `peers`.
     pub fn register_notification_sent(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peers: Vec<T::PeerId>,
         notification: &T::Message,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageSent {
-                interface,
+                _interface,
                 protocol,
                 peers,
                 hash: notification.hash(),
@@ -189,14 +186,14 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     /// Register that `request` was received from `peer` to `interface.`
     pub fn register_request_received(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peer: T::PeerId,
         request: &T::Request,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageReceived {
-                interface,
+                _interface,
                 protocol,
                 peer,
                 hash: request.hash(),
@@ -206,16 +203,16 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 
     /// Register that `request` was sent to `peer` from `interface.`
-    pub fn register_request_sent(
+    pub fn _register_request_sent(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peer: T::PeerId,
         request: &T::Request,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageSent {
-                interface,
+                _interface,
                 protocol,
                 peers: vec![peer],
                 hash: request.hash(),
@@ -228,14 +225,14 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     /// Register that `response` was received from `peer` to `interface.`
     pub fn register_response_received(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peer: T::PeerId,
         response: &T::Response,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageReceived {
-                interface,
+                _interface,
                 protocol,
                 peer,
                 hash: response.hash(),
@@ -245,16 +242,16 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 
     /// Register that `response` was sent to `peer` from `interface.`
-    pub fn register_response_sent(
+    pub fn _register_response_sent(
         &self,
-        interface: T::InterfaceId,
+        _interface: T::InterfaceId,
         protocol: T::Protocol,
         peer: T::PeerId,
         response: &T::Response,
     ) {
         self.tx
             .send(HeuristicsEvent::MessageSent {
-                interface,
+                _interface,
                 protocol,
                 peers: vec![peer],
                 hash: response.hash(),
@@ -369,13 +366,19 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
 
     fn handle_event(&mut self, event: HeuristicsEvent<T>) {
         match event {
-            HeuristicsEvent::RegisterInterface { interface } => {
+            HeuristicsEvent::_RegisterInterface { interface: _ } => {
                 // TODO: implement
             }
-            HeuristicsEvent::LinkInterfaces { first, second } => {
+            HeuristicsEvent::LinkInterfaces {
+                _first: _,
+                _second: _,
+            } => {
                 // TODO: implement
             }
-            HeuristicsEvent::UnlinkInterfaces { first, second } => {
+            HeuristicsEvent::_UnlinkInterfaces {
+                first: _,
+                second: _,
+            } => {
                 // TODO: implement
             }
             HeuristicsEvent::RegisterPeer { interface, peer } => {
@@ -385,11 +388,14 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                     .interfaces
                     .insert(interface);
             }
-            HeuristicsEvent::UnregisterPeer { interface, peer } => {
+            HeuristicsEvent::UnregisterPeer {
+                _interface: _,
+                peer,
+            } => {
                 self.peers.remove(&peer);
             }
             HeuristicsEvent::MessageReceived {
-                interface,
+                _interface: _,
                 protocol,
                 peer,
                 hash,
@@ -400,7 +406,7 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                 }
             }
             HeuristicsEvent::MessageSent {
-                interface,
+                _interface: _,
                 protocol,
                 peers,
                 hash,
@@ -443,7 +449,7 @@ async fn heuristics_server(
     address: SocketAddr,
 ) -> crate::Result<()> {
     let server = TcpListener::bind(address).await?;
-    let (socket, addr) = server.accept().await.unwrap();
+    let (socket, _addr) = server.accept().await.unwrap();
 
     tracing::debug!(target: LOG_TARGET, "client connected to heuristics backend");
 

@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use crate::{backend::NetworkBackend, types::OverseerEvent};
 
 use jsonrpsee::{
@@ -13,8 +11,6 @@ use std::net::SocketAddr;
 
 const LOG_TARGET: &'static str = "rpc";
 
-// TODO: convert into a struct
-
 pub async fn run_server<T>(overseer_tx: Sender<OverseerEvent<T>>, address: SocketAddr)
 where
     T: NetworkBackend + 'static,
@@ -27,7 +23,7 @@ where
     );
 
     let server = ServerBuilder::default().build(address).await.unwrap();
-    let mut module = RpcModule::new((overseer_tx));
+    let mut module = RpcModule::new(overseer_tx);
 
     module
         .register_async_method("create_interface", |params, ctx| async move {

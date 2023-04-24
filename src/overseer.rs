@@ -1,11 +1,8 @@
-#![allow(unused)]
-
 use crate::{
     backend::{
         ConnectionUpgrade, Idable, Interface, InterfaceEvent, InterfaceType, NetworkBackend,
         PacketSink,
     },
-    ensure,
     error::Error,
     executor::Executor,
     filter::{Filter, FilterEvent, FilterHandle},
@@ -13,21 +10,15 @@ use crate::{
     types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
 };
 
-use futures::{stream::SelectAll, FutureExt, Stream, StreamExt};
+use futures::{stream::SelectAll, Stream, StreamExt};
 use petgraph::{
     graph::{EdgeIndex, NodeIndex, UnGraph},
     visit::{Dfs, Walker},
 };
-use tokio::{
-    io::{AsyncWrite, AsyncWriteExt},
-    sync::mpsc::{self, Receiver, Sender},
-};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    fmt::Debug,
-    future::Future,
-    hash::Hash,
     net::SocketAddr,
     pin::Pin,
 };
@@ -47,7 +38,7 @@ struct PeerInfo<T: NetworkBackend> {
 /// Interface information.
 struct InterfaceInfo<T: NetworkBackend> {
     /// Interface handle.
-    handle: T::InterfaceHandle,
+    _handle: T::InterfaceHandle,
 
     /// Interface peers.
     peers: HashMap<T::PeerId, PeerInfo<T>>,
@@ -61,10 +52,10 @@ struct InterfaceInfo<T: NetworkBackend> {
 
 impl<T: NetworkBackend> InterfaceInfo<T> {
     /// Create new [`InterfaceInfo`] from `T::InterfaceHandle`.
-    pub fn new(index: NodeIndex, handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
+    pub fn new(index: NodeIndex, _handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
         Self {
             index,
-            handle,
+            _handle,
             filter,
             peers: HashMap::new(),
         }
@@ -80,7 +71,7 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     overseer_rx: Receiver<OverseerEvent<T>>,
 
     /// TX channel for sending events to [`Overseer`].
-    overseer_tx: Sender<OverseerEvent<T>>,
+    _overseer_tx: Sender<OverseerEvent<T>>,
 
     /// Interfaces.
     interfaces: HashMap<T::InterfaceId, InterfaceInfo<T>>,
@@ -89,7 +80,7 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
 
     /// Events received from the filters.
-    filter_events: mpsc::Receiver<FilterEvent>,
+    _filter_events: mpsc::Receiver<FilterEvent>,
 
     /// TX channel passed to new `Filter`s.
     filter_event_tx: mpsc::Sender<FilterEvent>,
@@ -111,7 +102,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     /// Create new [`Overseer`].
     pub fn new(ws_address: Option<SocketAddr>) -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let (filter_event_tx, filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (filter_event_tx, _filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (backend, heuristics_handle) = HeuristicsBackend::new(ws_address);
 
         // start running the heuristics backend in the background
@@ -122,11 +113,11 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 backend: T::new(),
                 overseer_rx,
                 event_streams: SelectAll::new(),
-                overseer_tx: overseer_tx.clone(),
+                _overseer_tx: overseer_tx.clone(),
                 links: UnGraph::new_undirected(),
                 edges: HashMap::new(),
                 interfaces: HashMap::new(),
-                filter_events,
+                _filter_events,
                 filter_event_tx,
                 heuristics_handle,
                 _marker: Default::default(),
@@ -160,10 +151,10 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                         result.send(self.link_interfaces(first, second)).expect("channel to stay open");
                     }
                     OverseerEvent::UnlinkInterface { first, second, result } => {
-                        result.send(self.unlink_interfaces(first, second));
+                        result.send(self.unlink_interfaces(first, second)).expect("channel to stay open");
                     }
                     OverseerEvent::InitializeFilter { interface, code, context, result } => {
-                        result.send(self.initialize_filter(interface, code, context).await);
+                        result.send(self.initialize_filter(interface, code, context).await).expect("channel to stay open");
                     }
                     OverseerEvent::InstallNotificationFilter {
                         interface,
@@ -172,7 +163,6 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                         context,
                         result
                     } => {
-                        let result =
                         result
                             .send(
                                 self.install_notification_filter(
@@ -191,7 +181,6 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                         context,
                         result
                     } => {
-                        let result =
                         result
                             .send(
                                 self.install_request_response_filter(
@@ -206,76 +195,76 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 },
                 event = self.event_streams.next() => match event {
                     Some(InterfaceEvent::PeerConnected { peer, interface, protocols, sink }) => {
-                        if let Err(err) = self.register_peer(interface, peer, protocols, sink).await {
+                        if let Err(error) = self.register_peer(interface, peer, protocols, sink).await {
                            tracing::warn!(
                                 target: LOG_TARGET,
                                 ?interface,
                                 ?peer,
+                                ?error,
                                 "failed to register peer",
                             );
                         }
                     }
                     Some(InterfaceEvent::PeerDisconnected { peer, interface }) => {
-                        if let Err(err) = self.unregister_peer(interface, peer).await {
+                        if let Err(error) = self.unregister_peer(interface, peer).await {
                            tracing::warn!(
                                 target: LOG_TARGET,
                                 ?interface,
                                 ?peer,
+                                ?error,
                                 "failed to unregister peer",
                             );
                         }
                     }
                     Some(InterfaceEvent::MessageReceived { interface, peer, protocol, message }) => {
-                        if let Err(err) = self.inject_notification(interface, peer, protocol, message).await {
+                        if let Err(error) = self.inject_notification(interface, peer, protocol, message).await {
                            tracing::warn!(
                                 target: LOG_TARGET,
-                                interface_id = ?interface,
-                                peer_id = ?peer,
+                                ?interface,
+                                ?peer,
+                                ?error,
                                 "peer already exists in the filter",
                             );
                         }
                     }
                     Some(InterfaceEvent::RequestReceived { interface, peer, protocol, request }) => {
-                        if let Err(err) = self.inject_request(interface, peer, protocol, request).await {
+                        if let Err(error) = self.inject_request(interface, peer, protocol, request).await {
                             tracing::error!(
                                 target: LOG_TARGET,
-                                interface_id = ?interface,
-                                peer_id = ?peer,
-                                err = ?err,
+                                ?interface,
+                                ?peer,
+                                ?error,
                                 "failed to inject request into `MessageFilter`",
                             );
                         }
                     },
                     Some(InterfaceEvent::ResponseReceived { interface, peer, protocol, request_id, response }) => {
-                        if let Err(err) = self
+                        if let Err(error) = self
                             .inject_response(interface, peer, protocol, request_id, response)
                             .await
                         {
                             tracing::error!(
                                 target: LOG_TARGET,
-                                interface_id = ?interface,
-                                peer_id = ?peer,
-                                err = ?err,
+                                ?interface,
+                                ?peer,
+                                ?error,
                                 "failed to inject response into `MessageFilter`",
                             );
                         }
                     },
                     Some(InterfaceEvent::ConnectionUpgraded { interface, peer, upgrade }) => {
-                        if let Err(err) = self.apply_connection_upgrade(interface, peer, upgrade) {
+                        if let Err(error) = self.apply_connection_upgrade(interface, peer, upgrade) {
                             tracing::error!(
                                 target: LOG_TARGET,
-                                interface_id = ?interface,
-                                peer_id = ?peer,
-                                error = ?err,
+                                ?interface,
+                                ?peer,
+                                ?error,
                                 "failed to apply connection upgrade",
                             );
                         }
                     },
                     _ => {},
                 },
-                event = self.filter_events.recv() => match event.expect("channel to stay open") {
-                    _ => todo!(),
-                }
             }
         }
     }
@@ -292,7 +281,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             .spawn_interface(address, InterfaceType::Masquerade)
             .await
         {
-            Ok((mut handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
+            Ok((handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
                 Entry::Vacant(entry) => {
                     let interface_id = *handle.id();
                     let node_index = self.links.add_node(interface_id);
@@ -546,7 +535,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         interface: T::InterfaceId,
         peer: T::PeerId,
         protocol: T::Protocol,
-        request_id: T::RequestId,
+        _request_id: T::RequestId,
         response: T::Response,
     ) -> crate::Result<()> {
         tracing::trace!(
@@ -607,8 +596,7 @@ mod tests {
     use super::*;
     use crate::{
         backend::mockchain::{
-            self,
-            types::{ProtocolId, Request, RequestId, Response},
+            types::{ProtocolId, RequestId},
             MockchainBackend, MockchainHandle,
         },
         executor::pyo3::PyO3Executor,

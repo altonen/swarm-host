@@ -7,37 +7,20 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
-use futures::{channel, FutureExt, StreamExt};
-use pyo3::{
-    conversion::AsPyPointer,
-    prelude::*,
-    types::{PyBytes, PyDict},
-    FromPyObject, IntoPy,
-};
-use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
+use pyo3::{prelude::*, types::PyDict, FromPyObject, IntoPy};
+use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{instrument::WithSubscriber, Subscriber};
 
 use sc_network::{
-    config::NetworkConfiguration, Command, Multiaddr, NodeType, PeerId as SubstratePeerId,
-    ProtocolName as SubstrateProtocolName, SubstrateNetwork, SubstrateNetworkEvent,
-};
-use sc_network_common::{
-    config::{
-        NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
-    },
-    protocol::role::{Role, Roles},
-    request_responses::{IncomingRequest, ProtocolConfig},
-    sync::message::BlockAnnouncesHandshake,
+    Command, Multiaddr, NodeType, PeerId as SubstratePeerId, ProtocolName as SubstrateProtocolName,
+    SubstrateNetwork, SubstrateNetworkEvent,
 };
 
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     hash::Hasher,
-    iter,
     net::SocketAddr,
-    time::Duration,
 };
 
 // TODO: this code needs some heavy refactoring
@@ -89,12 +72,6 @@ impl<'de> Deserialize<'de> for ProtocolName {
     }
 }
 
-impl ProtocolName {
-    fn new(protocol: SubstrateProtocolName) -> Self {
-        Self(protocol)
-    }
-}
-
 #[derive(Debug)]
 pub struct SubstrateRequest {
     id: usize,
@@ -107,10 +84,14 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Request {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         let fields = PyDict::new(context);
-        fields.set_item("id", self.id.into_py(context));
-        fields.set_item("payload", self.payload.into_py(context));
+        fields
+            .set_item("id", self.id.into_py(context))
+            .expect("to succeed");
+        fields
+            .set_item("payload", self.payload.into_py(context))
+            .expect("to succeed");
 
-        let mut request = PyDict::new(context);
+        let request = PyDict::new(context);
         request.set_item("Request", fields).unwrap();
         request.into()
     }
@@ -146,10 +127,10 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Response {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         let fields = PyDict::new(context);
-        fields.set_item("id", self.id.into_py(context));
-        fields.set_item("payload", self.payload.into_py(context));
+        let _ = fields.set_item("id", self.id.into_py(context));
+        let _ = fields.set_item("payload", self.payload.into_py(context));
 
-        let mut request = PyDict::new(context);
+        let request = PyDict::new(context);
         request.set_item("Response", fields).unwrap();
         request.into()
     }
@@ -252,15 +233,15 @@ impl InterfaceHandle {
     // TODO: pass interface id here
     // TODO: pass listen address
     pub async fn new(
-        interface_type: InterfaceType,
+        _interface_type: InterfaceType,
         interface_id: usize,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (event_tx, mut event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let (command_tx, mut command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (command_tx, command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         // TODO: create all protocols on substrate side
-        let mut network = SubstrateNetwork::new(
+        let network = SubstrateNetwork::new(
             NodeType::Masquerade,
             Box::new(move |fut| {
                 tokio::spawn(fut);
@@ -369,7 +350,7 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
     /// Get handle to installed filter
     fn filter(
         &self,
-        filter_name: &String,
+        _filter_name: &String,
     ) -> Option<
         Box<
             dyn Fn(
@@ -386,14 +367,14 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
     }
 
     /// Attempt to establish connection with a remote peer.
-    fn connect(&mut self, address: SocketAddr) -> crate::Result<()> {
+    fn connect(&mut self, _address: SocketAddr) -> crate::Result<()> {
         todo!();
     }
 
     /// Attempt to disconnect peer from the interface.
     fn disconnect(
         &mut self,
-        peer: <SubstrateBackend as NetworkBackend>::PeerId,
+        _peer: <SubstrateBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
         todo!();
     }
@@ -487,7 +468,7 @@ impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::RequestId {
 impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::Request {
     type ExecutorType<'a> = &'a PyAny;
 
-    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+    fn from_executor_object(_executor_type: &'_ Self::ExecutorType<'_>) -> Self {
         todo!();
     }
 }

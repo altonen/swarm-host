@@ -72,7 +72,7 @@ impl MockchainHandle {
             InterfaceType::Masquerade => {
                 P2pType::Masquerade(masquerade::P2p::start(iface_tx, listener, id))
             }
-            InterfaceType::NodeBacked => {
+            InterfaceType::_NodeBacked => {
                 P2pType::NodeBacked(node_backed::P2p::start(iface_tx, listener, id))
             }
         };
@@ -202,7 +202,7 @@ impl NetworkBackend for MockchainBackend {
                         (handle, stream)
                     })
             }
-            InterfaceType::NodeBacked => {
+            InterfaceType::_NodeBacked => {
                 todo!();
             }
         }

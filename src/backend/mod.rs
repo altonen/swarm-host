@@ -1,17 +1,9 @@
-#![allow(unused)]
-use crate::{
-    executor::{FromExecutorObject, IntoExecutorObject},
-    types::OverseerEvent,
-};
+use crate::executor::{FromExecutorObject, IntoExecutorObject};
 
 use futures::stream::Stream;
-use pyo3::{prelude::*, AsPyPointer, FromPyObject, IntoPy};
 use serde::{de::DeserializeOwned, Serialize};
-use tokio::{io::AsyncWrite, sync::mpsc::Sender};
 
-use std::{
-    collections::HashSet, fmt::Debug, future::Future, hash::Hash, net::SocketAddr, pin::Pin,
-};
+use std::{collections::HashSet, fmt::Debug, hash::Hash, net::SocketAddr, pin::Pin};
 
 pub mod mockchain;
 pub mod substrate;
@@ -39,7 +31,7 @@ pub enum InterfaceType {
     Masquerade,
 
     /// Interface is backed up by a real node.
-    NodeBacked,
+    _NodeBacked,
 }
 
 /// Abstraction which allows `swarm-host` to send packets to peer.

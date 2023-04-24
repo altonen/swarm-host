@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use crate::{
     backend::{mockchain::MockchainBackend, substrate::SubstrateBackend, NetworkBackendType},
     error::Error,
@@ -9,7 +7,6 @@ use crate::{
 };
 
 use clap::Parser;
-use tracing_subscriber::fmt::SubscriberBuilder;
 
 use std::net::SocketAddr;
 
@@ -58,7 +55,7 @@ async fn run_mockchain_backend(flags: Flags) {
             .expect("valid address")
     });
 
-    let (mut overseer, tx) =
+    let (overseer, tx) =
         Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(ws_address);
     tokio::spawn(async move { overseer.run().await });
 
@@ -78,7 +75,7 @@ async fn run_substrate_backend(flags: Flags) {
             .expect("valid address")
     });
 
-    let (mut overseer, tx) =
+    let (overseer, tx) =
         Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(ws_address);
     tokio::spawn(async move { overseer.run().await });
 
