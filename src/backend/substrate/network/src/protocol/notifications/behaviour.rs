@@ -1918,7 +1918,9 @@ impl NetworkBehaviour for Notifications {
                             self.events
                                 .push_back(NetworkBehaviourAction::GenerateEvent(event));
 
-                            panic!("what should happen here");
+                            error!(target: "filter", "NODE DISCONNECTED\n\n");
+
+                            // panic!("what should happen here");
                             // TODO: fix handshake maybe
                             // self.update_protocol_handshake(set_id, peer_id);
                         }
