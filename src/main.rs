@@ -1,5 +1,5 @@
 use crate::{
-    backend::{mockchain::MockchainBackend, substrate::SubstrateBackend, NetworkBackendType},
+    backend::{substrate::SubstrateBackend, NetworkBackendType},
     error::Error,
     executor::pyo3::PyO3Executor,
     overseer::Overseer,
@@ -48,26 +48,6 @@ struct Flags {
     backend: NetworkBackendType,
 }
 
-async fn run_mockchain_backend(flags: Flags) {
-    let ws_address = flags.ws_port.map(|port| {
-        format!("127.0.0.1:{}", port)
-            .parse::<SocketAddr>()
-            .expect("valid address")
-    });
-
-    let (overseer, tx) =
-        Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(ws_address);
-    tokio::spawn(async move { overseer.run().await });
-
-    run_server(
-        tx,
-        format!("127.0.0.1:{}", flags.rpc_port)
-            .parse::<SocketAddr>()
-            .expect("valid address"),
-    )
-    .await;
-}
-
 async fn run_substrate_backend(flags: Flags) {
     let ws_address = flags.ws_port.map(|port| {
         format!("127.0.0.1:{}", port)
@@ -106,7 +86,9 @@ async fn main() {
     });
 
     match flags.backend {
-        NetworkBackendType::Mockchain => run_mockchain_backend(flags).await,
         NetworkBackendType::Substrate => run_substrate_backend(flags).await,
+        NetworkBackendType::Mockchain => {
+            tracing::error!("`mockchain` is not meant to be run as a binary")
+        }
     }
 }
