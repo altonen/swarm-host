@@ -21,10 +21,10 @@ use tracing::Level;
 mod tests;
 
 /// Logging target for the file.
-const LOG_TARGET: &'static str = "executor::pyo3";
+const LOG_TARGET: &str = "executor::pyo3";
 
 /// Logging target for noisy messages.
-const LOG_TARGET_MSG: &'static str = "executor::pyo3::msg";
+const LOG_TARGET_MSG: &str = "executor::pyo3::msg";
 
 struct Context(*mut pyo3::ffi::PyObject);
 
@@ -36,11 +36,11 @@ impl<'a> FromPyObject<'a> for NotificationHandlingResult {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
 
-        if dict.get_item(&"Drop").is_some() {
+        if dict.get_item("Drop").is_some() {
             return PyResult::Ok(Self::Drop);
         } else if dict.get_item("Forward").is_some() {
             return PyResult::Ok(Self::Forward);
-        } else if let Some(delay) = dict.get_item(&"Delay") {
+        } else if let Some(delay) = dict.get_item("Delay") {
             let delay = delay.extract::<usize>()?;
             return PyResult::Ok(Self::Delay { delay });
         }
@@ -62,7 +62,7 @@ where
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
 
-        if dict.get_item(&"DoNothing").is_some() {
+        if dict.get_item("DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
         } else if let Some(request) = dict.get_item("Request") {
             let dict = request.downcast::<PyDict>()?;
@@ -114,7 +114,7 @@ where
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
 
-        if dict.get_item(&"DoNothing").is_some() {
+        if dict.get_item("DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
         } else if let Some(result) = dict.get_item("Response") {
             let results = result.downcast::<PyList>()?;
@@ -341,7 +341,7 @@ where
             let peer_py = peer.into_executor_object(py);
             let notification_py = notification.into_executor_object(py);
 
-            Ok(fun.call1((ctx, peer_py, notification_py))?.extract()?)
+            fun.call1((ctx, peer_py, notification_py))?.extract()
         })
         .map_err(From::from)
     }
@@ -378,7 +378,7 @@ where
             let peer_py = peer.into_executor_object(py);
             let request_py = request.into_executor_object(py);
 
-            Ok(fun.call1((ctx, peer_py, request_py))?.extract()?)
+            fun.call1((ctx, peer_py, request_py))?.extract()
         })
         .map_err(From::from)
     }
@@ -415,7 +415,7 @@ where
             let peer_py = peer.into_executor_object(py);
             let response_py = response.into_executor_object(py);
 
-            Ok(fun.call1((ctx, peer_py, response_py))?.extract()?)
+            fun.call1((ctx, peer_py, response_py))?.extract()
         })
         .map_err(From::from)
     }

@@ -36,7 +36,7 @@ use std::{
 mod masquerade;
 pub mod types;
 
-const LOG_TARGET: &'static str = "mockchain";
+const LOG_TARGET: &str = "mockchain";
 
 // TODO: ugly
 enum P2pType {

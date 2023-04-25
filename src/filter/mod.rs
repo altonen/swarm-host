@@ -22,10 +22,10 @@ use std::{
 mod tests;
 
 /// Logging target for the file.
-const LOG_TARGET: &'static str = "filter";
+const LOG_TARGET: &str = "filter";
 
 /// Logging target for binary messages.
-const LOG_TARGET_MSG: &'static str = "filter::msg";
+const LOG_TARGET_MSG: &str = "filter::msg";
 
 /// Events produced by [`Filter`].
 #[derive(Debug)]
@@ -588,7 +588,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
                 Ok(())
             }
-            Err(err) => return Err(err),
+            Err(err) => Err(err),
         }
     }
 

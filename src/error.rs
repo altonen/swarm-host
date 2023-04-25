@@ -13,10 +13,10 @@ pub enum Error {
     AddressInUse(SocketAddr),
 
     #[error("I/O error: `{0}`")]
-    IoError(io::Error),
+    Io(io::Error),
 
     #[error("Serde CBOR error: `{0}`")]
-    SerdeCborError(serde_cbor::Error),
+    SerdeCbor(serde_cbor::Error),
 
     #[error("Interface already exists")]
     InterfaceAlreadyExists,
@@ -43,7 +43,7 @@ pub enum Error {
     RequestDoesntExist,
 
     #[error("Substrate error: `{0}`")]
-    SubstrateError(sc_network_common::error::Error),
+    Substrate(sc_network_common::error::Error),
 
     #[error("Custom error: `{0}`")]
     Custom(String),
@@ -81,19 +81,19 @@ impl From<pyo3::PyErr> for Error {
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Error::IoError(error)
+        Error::Io(error)
     }
 }
 
 impl From<serde_cbor::Error> for Error {
     fn from(error: serde_cbor::Error) -> Self {
-        Error::SerdeCborError(error)
+        Error::SerdeCbor(error)
     }
 }
 
 impl From<sc_network_common::error::Error> for Error {
     fn from(error: sc_network_common::error::Error) -> Self {
-        Error::SubstrateError(error)
+        Error::Substrate(error)
     }
 }
 
@@ -104,8 +104,8 @@ impl PartialEq for Error {
                 address1 == address2
             }
             (Error::AddressInUse(address1), Error::AddressInUse(address2)) => address1 == address2,
-            (Error::IoError(error1), Error::IoError(error2)) => error1.kind() == error2.kind(),
-            (Error::SerdeCborError(error1), Error::SerdeCborError(error2)) => {
+            (Error::Io(error1), Error::Io(error2)) => error1.kind() == error2.kind(),
+            (Error::SerdeCbor(error1), Error::SerdeCbor(error2)) => {
                 // TODO: verify
                 error1.classify() == error2.classify()
             }

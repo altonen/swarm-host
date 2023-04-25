@@ -23,7 +23,7 @@ use tokio::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 
-const LOG_TARGET: &'static str = "mockchain-masquerade";
+const LOG_TARGET: &str = "mockchain-masquerade";
 
 // TODO: move all type declarations to `type.rs`
 
@@ -111,7 +111,7 @@ impl Peer {
                 ],
             })?;
 
-            stream.write(&handshake).await?;
+            let _ = stream.write(&handshake).await?;
         }
 
         let nread = stream.read(&mut buf).await?;

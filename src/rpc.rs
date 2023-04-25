@@ -9,7 +9,7 @@ use tokio::sync::{mpsc::Sender, oneshot};
 
 use std::net::SocketAddr;
 
-const LOG_TARGET: &'static str = "rpc";
+const LOG_TARGET: &str = "rpc";
 
 pub async fn run_server<T>(overseer_tx: Sender<OverseerEvent<T>>, address: SocketAddr)
 where
@@ -51,7 +51,6 @@ where
                 Ok(_) => rx
                     .await
                     .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map(|id| id)
                     .map_err(|err| Error::Custom(err.to_string())),
                 Err(_) => {
                     Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
@@ -89,7 +88,6 @@ where
                 Ok(_) => rx
                     .await
                     .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map(|id| id)
                     .map_err(|err| Error::Custom(err.to_string())),
                 Err(_) => {
                     Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
@@ -127,7 +125,6 @@ where
                 Ok(_) => rx
                     .await
                     .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map(|id| id)
                     .map_err(|err| Error::Custom(err.to_string())),
                 Err(_) => {
                     Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
@@ -164,7 +161,6 @@ where
                 Ok(_) => rx
                     .await
                     .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map(|id| id)
                     .map_err(|err| Error::Custom(err.to_string())),
                 Err(_) => {
                     Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
@@ -210,7 +206,6 @@ where
                 Ok(_) => rx
                     .await
                     .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map(|id| id)
                     .map_err(|err| Error::Custom(err.to_string())),
                 Err(_) => {
                     Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
@@ -258,7 +253,6 @@ where
                     Ok(_) => rx
                         .await
                         .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                        .map(|id| id)
                         .map_err(|err| Error::Custom(err.to_string())),
                     Err(_) => Result::<_, Error>::Err(Error::Custom(String::from(
                         "Essential task closed",

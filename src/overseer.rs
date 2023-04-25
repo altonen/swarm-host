@@ -24,10 +24,10 @@ use std::{
 };
 
 /// Logging target for the file.
-const LOG_TARGET: &'static str = "overseer";
+const LOG_TARGET: &str = "overseer";
 
 /// Logging target for binary messages.
-const LOG_TARGET_MSG: &'static str = "overseer::msg";
+const LOG_TARGET_MSG: &str = "overseer::msg";
 
 /// Peer-related information.
 struct PeerInfo<T: NetworkBackend> {

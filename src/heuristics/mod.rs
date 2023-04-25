@@ -15,7 +15,7 @@ use std::{
 };
 
 /// Logging target for the file.
-const LOG_TARGET: &'static str = "heuristics";
+const LOG_TARGET: &str = "heuristics";
 
 /// Update heuristics front-end every 5 seconds.
 const UPDATE_INTERVAL: u64 = 5u64;
@@ -261,7 +261,7 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 struct MessageHeuristics {
     total_bytes_sent: usize,
     total_messages_sent: usize,
@@ -271,21 +271,6 @@ struct MessageHeuristics {
     redundant_bytes_received: usize,
     unique_messages_sent: HashSet<u64>,
     unique_messages_received: HashSet<u64>,
-}
-
-impl Default for MessageHeuristics {
-    fn default() -> Self {
-        Self {
-            total_bytes_sent: 0usize,
-            total_messages_sent: 0usize,
-            total_bytes_received: 0usize,
-            total_messages_received: 0usize,
-            redundant_bytes_sent: 0usize,
-            redundant_bytes_received: 0usize,
-            unique_messages_sent: Default::default(),
-            unique_messages_received: Default::default(),
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]

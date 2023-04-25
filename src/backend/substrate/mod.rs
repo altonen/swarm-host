@@ -29,7 +29,7 @@ use std::{
 #[cfg(test)]
 mod tests;
 
-const LOG_TARGET: &'static str = "substrate";
+const LOG_TARGET: &str = "substrate";
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ProtocolName(SubstrateProtocolName);
@@ -39,7 +39,7 @@ impl serde::Serialize for ProtocolName {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_str(&*(self.0))
+        serializer.serialize_str(&self.0)
     }
 }
 
