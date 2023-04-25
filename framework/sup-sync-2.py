@@ -11,6 +11,16 @@ from enum import IntFlag
 import struct
 import proto
 
+class RequestResponseHandler():
+    def __init__(self):
+        pass
+
+    def inject_request(self, peer):
+        pass
+
+    def inject_response(self, peer):
+        pass
+
 class Permissions(IntFlag):
 	# Include block header.
 	HEADER = 1
@@ -24,6 +34,14 @@ class Permissions(IntFlag):
 	JUSTIFICATION = 16
 
 def filter_request(ctx, peer, request):
+
+    # TODO: what needs to happen:
+    # TODO:   - request is received
+    # TODO:   - parse it and check if all of the blocks are in local db
+    # TODO:   - if they are, respond to the request
+    # TODO:   - if not, forward the request to some other peer
+    # TODO:   - when response to the forwarded request is received, respond to all pending requests
+
     request_id = request['Request']['id']
 
     decoded = proto.BlockRequest()
@@ -162,10 +180,11 @@ def filter_response(ctx, peer, response):
         ctx.database.set(key, str(repr))
 
     if needed_block in ctx.pending_requests:
+        print(ctx.pending_requests[needed_block])
         (peer, request_id) = ctx.pending_requests[needed_block][0]
         print("pending request exists for %s, peer %s" % ((str(needed_block), str(peer))))
         
-        ctx.pending_requests[needed_block] = {}
+        del ctx.pending_requests[needed_block]
 
         print("send response for", request_id)
         print(type(response))
