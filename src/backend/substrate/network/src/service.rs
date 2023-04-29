@@ -715,13 +715,23 @@ impl SubstrateNetwork {
                 self.notification_sinks
                     .insert((remote, protocol.clone()), notifications_sink);
 
-                self.event_tx
-                    .send(SubstrateNetworkEvent::ProtocolOpened {
-                        peer: remote,
-                        protocol,
-                    })
-                    .await
-                    .expect("channel to stay open");
+                if protocol == String::from("/sup/block-announces/1").into() {
+                    log::error!(target: "sub-libp2p", "SEND CONNECTION OPENED");
+                    self.event_tx
+                        .send(SubstrateNetworkEvent::PeerConnected { peer: remote })
+                        .await
+                        .expect("channel to stay open");
+                } else {
+                    log::warn!(target: "sub-libp2p", "SEND PROTOCOL OPENED");
+
+                    self.event_tx
+                        .send(SubstrateNetworkEvent::ProtocolOpened {
+                            peer: remote,
+                            protocol,
+                        })
+                        .await
+                        .expect("channel to stay open");
+                }
             }
             BehaviourOut::NotificationStreamReplaced {
                 remote: _,
@@ -849,19 +859,6 @@ impl SubstrateNetwork {
                         } else {
                             debug!(target: "sub-libp2p", "Libp2p => Connected({:?})", peer_id);
                         }
-
-                        // TODO: if this is another connection from peer, don't update bound peer information
-                        if !self.rename.insert(peer_id) {
-                            continue
-                        }
-
-                        // TODO: this whole code is very dubious
-                        self.event_tx.send(SubstrateNetworkEvent::PeerConnected {
-                            peer: peer_id,
-                        })
-                        .await
-                        .expect("channel to stay open");
-
                     }
                     SwarmEvent::ConnectionClosed {
                         peer_id,
