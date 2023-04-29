@@ -16,13 +16,6 @@ pub mod substrate;
 /// Stream which allows reading events from the interface.
 pub type InterfaceEventStream<T> = Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>;
 
-/// List of supported network backends.
-#[derive(clap::ValueEnum, Clone)]
-pub enum NetworkBackendType {
-    Mockchain,
-    Substrate,
-}
-
 #[derive(Debug)]
 pub enum InterfaceType {
     /// Interface will masquerade a real node.
@@ -259,8 +252,11 @@ pub trait NetworkBackend: Clone + Debug + 'static {
     where
         Self: Sized;
 
+    /// Parameters passed from `Overseer` to the backend when it's constructed.
+    type NetworkParameters: Debug;
+
     /// Create new `NetworkBackend`.
-    fn new() -> Self;
+    fn new(parameters: Self::NetworkParameters) -> Self;
 
     /// Start new interface for accepting incoming connections.
     ///

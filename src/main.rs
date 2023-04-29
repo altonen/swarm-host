@@ -1,12 +1,13 @@
 use crate::{
-    backend::{substrate::SubstrateBackend, NetworkBackendType},
+    backend::substrate::{SubstrateBackend, SubstrateParameters},
     error::Error,
     executor::pyo3::PyO3Executor,
     overseer::Overseer,
     rpc::run_server,
 };
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use hex;
 
 use std::net::SocketAddr;
 
@@ -44,24 +45,38 @@ struct Flags {
     ws_port: Option<u16>,
 
     /// Network backend type.
-    #[clap(long)]
-    backend: NetworkBackendType,
+    #[command(subcommand)]
+    backend: Backend,
 }
 
-async fn run_substrate_backend(flags: Flags) {
-    let ws_address = flags.ws_port.map(|port| {
+#[derive(Clone, Subcommand)]
+enum Backend {
+    /// Substrate backend.
+    Substrate {
+        /// Genesis hash.
+        #[clap(long)]
+        genesis_hash: String,
+    },
+}
+
+async fn run_substrate_backend(rpc_port: u16, ws_port: Option<u16>, genesis_hash: &String) {
+    let ws_address = ws_port.map(|port| {
         format!("127.0.0.1:{}", port)
             .parse::<SocketAddr>()
             .expect("valid address")
     });
 
+    let parameters = SubstrateParameters {
+        genesis_hash: hex::decode(&genesis_hash[2..]).expect("valid genesis hash"),
+    };
+
     let (overseer, tx) =
-        Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(ws_address);
+        Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(ws_address, parameters);
     tokio::spawn(async move { overseer.run().await });
 
     run_server(
         tx,
-        format!("127.0.0.1:{}", flags.rpc_port)
+        format!("127.0.0.1:{}", rpc_port)
             .parse::<SocketAddr>()
             .expect("valid address"),
     )
@@ -86,9 +101,8 @@ async fn main() {
     });
 
     match flags.backend {
-        NetworkBackendType::Substrate => run_substrate_backend(flags).await,
-        NetworkBackendType::Mockchain => {
-            tracing::error!("`mockchain` is not meant to be run as a binary")
+        Backend::Substrate { ref genesis_hash } => {
+            run_substrate_backend(flags.rpc_port, flags.ws_port, &genesis_hash).await
         }
     }
 }

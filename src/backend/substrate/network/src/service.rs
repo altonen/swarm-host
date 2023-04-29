@@ -192,6 +192,7 @@ impl SubstrateNetwork {
         executor: Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send>>) + Send>,
         event_tx: mpsc::Sender<SubstrateNetworkEvent>,
         command_rx: mpsc::Receiver<Command>,
+        genesis_hash: Vec<u8>,
     ) -> Result<Self, Error> {
         let key_config = NodeKeyConfig::Ed25519(parse_ed25519_secret(
             "0000000000000000000000000000000000000000000000000000000000000001",

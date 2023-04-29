@@ -140,9 +140,10 @@ impl NetworkBackend for MockchainBackend {
     type Request = Request;
     type Response = Response;
     type InterfaceHandle = MockchainHandle;
+    type NetworkParameters = ();
 
     /// Create new [`MockchainBackend`].
-    fn new() -> Self {
+    fn new(_parameters: Self::NetworkParameters) -> Self {
         MockchainBackend::new()
     }
 

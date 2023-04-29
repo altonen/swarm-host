@@ -236,6 +236,7 @@ impl InterfaceHandle {
     pub async fn new(
         _interface_type: InterfaceType,
         interface_id: usize,
+        genesis_hash: Vec<u8>,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (event_tx, mut event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -249,6 +250,7 @@ impl InterfaceHandle {
             }),
             event_tx,
             command_rx,
+            genesis_hash,
         )?;
         tokio::spawn(network.run());
 
@@ -385,13 +387,15 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
 #[derive(Debug, Clone)]
 pub struct SubstrateBackend {
     next_iface_id: usize,
+    genesis_hash: Vec<u8>,
 }
 
 impl SubstrateBackend {
     /// Create new `SubstrateBackend`.
-    pub fn new() -> Self {
+    pub fn new(parameters: SubstrateParameters) -> Self {
         Self {
             next_iface_id: 0usize,
+            genesis_hash: parameters.genesis_hash,
         }
     }
 
@@ -506,6 +510,14 @@ impl WithMessageInfo for Message {
     }
 }
 
+/// Parameters received from the command that are passed to [`SubstrateBackend`]
+/// when it's constructed.
+#[derive(Debug)]
+pub struct SubstrateParameters {
+    /// Genesis hash.
+    pub genesis_hash: Vec<u8>,
+}
+
 #[async_trait::async_trait]
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;
@@ -516,12 +528,13 @@ impl NetworkBackend for SubstrateBackend {
     type Request = SubstrateRequest;
     type Response = SubstrateResponse;
     type InterfaceHandle = InterfaceHandle;
+    type NetworkParameters = SubstrateParameters;
 
     /// Create new [`SubstrateBackend`].
-    fn new() -> Self {
+    fn new(parameters: Self::NetworkParameters) -> Self {
         tracing::debug!(target: LOG_TARGET, "create new substrate backend",);
 
-        SubstrateBackend::new()
+        SubstrateBackend::new(parameters)
     }
 
     /// Start new interface for accepting incoming connections.
@@ -544,6 +557,11 @@ impl NetworkBackend for SubstrateBackend {
             "create new substrate backend",
         );
 
-        InterfaceHandle::new(interface_type, self.next_interface_id()).await
+        InterfaceHandle::new(
+            interface_type,
+            self.next_interface_id(),
+            self.genesis_hash.clone(),
+        )
+        .await
     }
 }

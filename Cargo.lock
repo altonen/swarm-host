@@ -5967,6 +5967,7 @@ dependencies = [
  "async-trait",
  "clap",
  "futures",
+ "hex",
  "jsonrpsee",
  "mockall",
  "parity-scale-codec",
