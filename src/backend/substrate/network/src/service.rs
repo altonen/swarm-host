@@ -194,9 +194,7 @@ impl SubstrateNetwork {
         command_rx: mpsc::Receiver<Command>,
         genesis_hash: Vec<u8>,
     ) -> Result<Self, Error> {
-        let key_config = NodeKeyConfig::Ed25519(parse_ed25519_secret(
-            "0000000000000000000000000000000000000000000000000000000000000001",
-        ));
+        let key_config = NodeKeyConfig::default();
         let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
 
