@@ -5,11 +5,26 @@ class Context():
         self.database = redis.Redis(host = 'localhost', port = 6379, decode_responses = True)
         self.database.ping()
         self.peers = {}
+        self.number_to_block_hash = {}
         self.cached_requests = {}
         self.pending_requests = {}
 
     """
-        Find a peer who is able to provide the requested block
+        Map block number to block hash.
+    """
+    def set_block_hash(self, number, hash):
+        if number not in self.number_to_block_hash:
+            self.number_to_block_hash[number] = hash
+
+    """
+        Get block hash with a block number.
+    """
+    def get_block_hash_from_number(self, number):
+        if number in self.number_to_block_hash:
+            return self.number_to_block_hash[number]
+
+    """
+        Find a peer who is able to provide the requested block.
     """
     def get_provider(ctx, block):
         for peer in ctx.peers:
@@ -64,6 +79,33 @@ class Context():
                 ctx.inject_request(peer, request)
         return result
 
+    """
+        Create `BlockResponse` from a block and return it to user.
+    """
+    def return_response(self, peer, block):
+        print("try to return response to %s for block %s" % (peer, block))
+        block = json.loads(block)
+
+        justification = block.get('justification')
+        if justification is not None:
+            justification = bytes.fromhex(justification)
+
+        body = block.get('body')
+        if body is not None:
+            body = [bytes.fromhex(body) for body in body]
+
+        response = BlockResponse.new(
+            bytes.fromhex(block['hash']),
+            bytes.fromhex(block['header']),
+            body,
+            justification,
+        )
+
+        return { 'Response': [{
+                'peer': peer,
+                'payload': response,
+            }]
+        }
 
 class PeerContext():
     def __init__(self):

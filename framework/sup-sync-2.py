@@ -17,38 +17,22 @@ import struct
 import random
 
 """
-    Create `BlockResponse` from a block and return it to user.
-"""
-def return_response(peer, block):
-    block = json.loads(block)
-
-    justification = block.get('justification')
-    if justification is not None:
-        justification = bytes.fromhex(justification)
-
-    body = block.get('body')
-    if body is not None:
-        body = [bytes.fromhex(body) for body in body]
-
-    response = BlockResponse.new(
-        bytes.fromhex(block['hash']),
-        bytes.fromhex(block['header']),
-        body,
-        justification,
-    )
-
-    return [{ 'Response': {
-            'peer': peer,
-            'response': response,
-        }
-    }]
-
-"""
     Inject request into filter.
 """
 def filter_request(ctx, peer, request):
     request = BlockRequest(bytes(request['Request']['payload']))
-    block_hash = request.hash().hex()
+
+    block_hash = request.hash()
+    print("block reqeuest hash", block_hash)
+    if len(block_hash) == 0:
+        print("block hash is `None`, use number", request.number())
+        number = int.from_bytes(request.number(), 'little')
+        print("block number", number)
+        block_hash = ctx.get_block_hash_from_number(number)
+        if block_hash is None:
+            return { 'Reject': None }
+    else:
+        block_hash = block_hash.hex()
 
     # check if the block is already in the storage and if so, create a response right away
     block = ctx.database.get(block_hash)
@@ -69,8 +53,7 @@ def filter_request(ctx, peer, request):
     # get provider for the block
     provider = ctx.get_provider(block_hash)
     if provider is None and ctx.is_unknown_block(block_hash):
-        print("reject block:", block_hash)
-        print("block number", request.number())
+        print("unknown block", block_hash)
         return { 'Reject': None }
 
     # if provider is `None` it means all peers that can provide the block

@@ -55,6 +55,12 @@ class BlockAnnounce():
         return self.announce['header']
 
     """
+        Get block number
+    """
+    def number(self):
+        return int(self.announce['header']['number'].value_object)
+
+    """
         Calculate block hash
     """
     def hash(self):

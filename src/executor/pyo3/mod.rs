@@ -89,7 +89,7 @@ where
                     .ok_or(PyErr::new::<PyTypeError, _>("Peer missing"))?;
                 let payload = dict
                     .get_item("payload")
-                    .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
+                    .ok_or(PyErr::new::<PyTypeError, _>("Response missing"))?
                     .extract::<Vec<u8>>()?;
 
                 responses.push((T::PeerId::from_executor_object(&peer), payload));

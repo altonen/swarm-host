@@ -17,6 +17,7 @@ def filter_notification(
     try:
         block_announce = BlockAnnounce(bytes(notification))
         ctx.peers[peer].known_blocks.add(block_announce.hash())
+        ctx.set_block_hash(block_announce.number(), block_announce.hash())
         return { 'Forward': None }
     except Exception as e:
         print("failed to handle block announce:", e)
