@@ -212,9 +212,13 @@ impl SubstrateNetwork {
             warp_config,
             light_config,
         ]);
+        network_config.listen_addresses.clear();
         network_config
             .listen_addresses
-            .push("/ip6/::1/tcp/8888".parse().unwrap());
+            .push("/ip6/::0/tcp/0".parse().unwrap());
+        network_config
+            .listen_addresses
+            .push("/ip4/0.0.0.0/tcp/0".parse().unwrap());
         network_config
             .extra_sets
             .push(Self::build_transaction_protocol());
@@ -696,8 +700,8 @@ impl SubstrateNetwork {
                 }
             }
             BehaviourOut::Discovered(peer) => {
-                log::info!(target: "sub-libp2p", "attempt to connect to {peer}");
-                self.swarm.behaviour_mut().user_protocol_mut().connect(peer);
+                // log::error!(target: "sub-libp2p", "attempt to connect to {peer}");
+                // self.swarm.behaviour_mut().user_protocol_mut().connect(peer);
             }
             BehaviourOut::RandomKademliaStarted => {}
             BehaviourOut::NotificationStreamOpened {
