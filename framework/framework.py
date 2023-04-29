@@ -13,59 +13,59 @@ logging.basicConfig(
     datefmt = '%Y-%m-%d %H:%M:%S',
 )
 
-# host = SwarmHost(8884, "substrate")
+host = SwarmHost(8884, "substrate")
 
 # time.sleep(1)
 
 iface1_addr = "127.0.0.1:4444"
-response = requests.post(
-    "http://localhost:%d/" % (8884),
-    json = request(
-        "create_interface",
-        params = [iface1_addr],
-    )
-)
+# response = requests.post(
+#     "http://localhost:%d/" % (8884),
+#     json = request(
+#         "create_interface",
+#         params = [iface1_addr],
+#     )
+# )
+
+# filter = open("context.py").read()
+
+# response = requests.post(
+#     "http://localhost:%d/" % (8884),
+#     json = request(
+#         "initialize_filter",
+#         params = [0, filter, ""],
+#     )
+# )
 
 filter = open("context.py").read()
-
-response = requests.post(
-    "http://localhost:%d/" % (8884),
-    json = request(
-        "initialize_filter",
-        params = [0, filter, ""],
-    )
-)
-
-# iface1_id = host.create_interface(iface1_addr)
-# print("interface id '%d'" % iface1_id)
-
+iface1_id = host.create_interface(iface1_addr)
+host.install_context_filter(iface1_id, filter, "")
 
 filter = open("block-announce-filter.py").read()
-# context = base64.b64encode(nodes[0].get_metadata()).decode('utf-8')
+host.install_notification_filter(iface1_id, "/sup/block-announces/1", filter, "")
 
-response = requests.post(
-    "http://localhost:%d/" % (8884),
-    json = request(
-        "install_notification_filter",
-        params = [0, "/sup/block-announces/1", filter, ""],
-    )
-)
+# response = requests.post(
+#     "http://localhost:%d/" % (8884),
+#     json = request(
+#         "install_notification_filter",
+#         params = [0, "/sup/block-announces/1", filter, ""],
+#     )
+# )
 
-filter = open("sup-sync-2.py").read()
-response = requests.post(
-    "http://localhost:%d/" % (8884),
-    json = request(
-        "install_request_response_filter",
-        params = [0, "/sup/sync/2", filter, ""],
-    )
-)
+# filter = open("sup-sync-2.py").read()
+# response = requests.post(
+#     "http://localhost:%d/" % (8884),
+#     json = request(
+#         "install_request_response_filter",
+#         params = [0, "/sup/sync/2", filter, ""],
+#     )
+# )
 # host.install_notification_filter(iface1_id, "/sup/transactions/1", context, filter)
 
-print("filter installed")
+# print("filter installed")
 
-time.sleep(3)
+time.sleep(1)
 
-# TODO: launching new nodes has to be made easier (better defaults)
+# # TODO: launching new nodes has to be made easier (better defaults)
 nodes = []
 nodes.append(NodeTemplate()\
     .with_p2p_port(0 + 7000)\
@@ -75,7 +75,7 @@ nodes.append(NodeTemplate()\
     .with_force_authoring()\
     .with_chain_spec(dev = True)\
     .with_base_path(tmp = True)\
-    .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
+    # .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
     .build()
 )
@@ -91,6 +91,18 @@ nodes.append(NodeTemplate()\
     # .with_reserved_only()
     .build()
 )
+
+# nodes.append(NodeTemplate()\
+#     .with_p2p_port(2 + 7000)\
+#     .with_rpc_port(2 + 8000)\
+#     .with_ws_port(2 + 9944)\
+#     .with_chain_spec(dev = True)\
+#     .with_base_path(tmp = True)\
+#     # .with_reserved_peer("/ip6/::1/tcp/8888/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp")
+#     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
+#     # .with_reserved_only()
+#     .build()
+# )
 
 # filter = open("transaction-filter.py").read()
 # context = base64.b64encode(nodes[0].get_metadata()).decode('utf-8')

@@ -63,18 +63,29 @@ class SwarmHost:
         logging.info("unlink interface")
 
     """
-        Install filter for protocol.
-
-        TODO: document properly
+        Initialize filter context for the interface.
     """
-    def install_notification_filter(self, interface, protocol, ctx, filter):
+    def install_context_filter(self, interface, filter, ctx):
+        response = requests.post(
+            "http://localhost:%d/" % (self.rpc_port),
+            json = request(
+                "initialize_filter",
+                params = [interface, filter, ctx],
+            )
+        )
+
+
+    """
+        Install filter for protocol.
+    """
+    def install_notification_filter(self, interface, protocol, filter, ctx):
         logging.info("install notification filter for %s" % (protocol))
 
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
             json = request(
                 "install_notification_filter",
-                params = [interface, protocol, ctx, filter],
+                params = [interface, protocol, filter, ctx],
             )
         )
         if "result" in response.json():
