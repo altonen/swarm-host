@@ -46,7 +46,6 @@ class BlockAnnounce():
             data = ScaleBytes(notification),
         )
         self.announce.decode()
-        print(self.announce['header'])
 
     """
         Get block header.

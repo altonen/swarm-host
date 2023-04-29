@@ -117,3 +117,7 @@ def initialize_ctx(ctx):
 
 def register_peer(ctx, peer):
     ctx.peers[peer] = PeerContext()
+
+def unregister_peer(ctx, peer):
+    if peer in ctx.peers:
+        del ctx.peers[peer]

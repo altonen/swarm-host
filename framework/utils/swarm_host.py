@@ -65,7 +65,7 @@ class SwarmHost:
     """
         Initialize filter context for the interface.
     """
-    def install_context_filter(self, interface, filter, ctx):
+    def install_context_filter(self, interface, filter, ctx = ""):
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
             json = request(
@@ -74,11 +74,10 @@ class SwarmHost:
             )
         )
 
-
     """
         Install filter for protocol.
     """
-    def install_notification_filter(self, interface, protocol, filter, ctx):
+    def install_notification_filter(self, interface, protocol, filter, ctx = ""):
         logging.info("install notification filter for %s" % (protocol))
 
         response = requests.post(
@@ -86,6 +85,26 @@ class SwarmHost:
             json = request(
                 "install_notification_filter",
                 params = [interface, protocol, filter, ctx],
+            )
+        )
+        if "result" in response.json():
+            print("success %s" % (response.json()["result"]))
+            return response.json()["result"]
+        elif "error" in response.json():
+            print("failure %s" % (response.json()["error"]))
+            return response.json()["error"]
+
+    """
+        Install request-response filter.
+    """
+    def install_request_response_filter(self, interface, protocol, filter, ctx = ""):
+        logging.info("install request-response filter for %s" % (protocol))
+
+        response = requests.post(
+            "http://localhost:%d/" % (self.rpc_port),
+            json = request(
+                "install_request_response_filter",
+                params = [0, protocol, filter, ctx],
             )
         )
         if "result" in response.json():
