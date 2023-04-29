@@ -1,7 +1,7 @@
 use crate::{
     backend::{
         ConnectionUpgrade, Idable, Interface, InterfaceEvent, InterfaceType, NetworkBackend,
-        PacketSink,
+        PacketSink, WithMessageInfo,
     },
     error::Error,
     executor::Executor,
@@ -482,7 +482,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         notification: T::Message,
     ) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "inject notification");
-        tracing::trace!(target: LOG_TARGET_MSG, ?notification);
+        tracing::trace!(target: LOG_TARGET_MSG, has = ?notification.hash(), ?notification);
 
         match self.interfaces.get_mut(&interface) {
             None => Err(Error::InterfaceDoesntExist),
