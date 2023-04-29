@@ -251,11 +251,8 @@ impl SubstrateNetwork {
                 let mut config = DiscoveryConfig::new(local_public.clone());
                 config.with_permanent_addresses(known_addresses);
                 config.discovery_limit(u64::from(network_config.default_peers_set.out_peers) + 15);
-                config.with_kademlia(&ProtocolId::from("sup"));
-                // // TODO: add kademlia support for both node types
-                // if let Some(genesis_hash) = genesis_hash {
-                // 	config.with_kademlia(genesis_hash, fork_id.as_deref(), &protocol_id);
-                // }
+                // TODO: fork id maybe some day?
+                config.with_kademlia(genesis_hash, &ProtocolId::from("sup"));
                 config.with_dht_random_walk(network_config.enable_dht_random_walk);
                 config.allow_non_globals_in_dht(network_config.allow_non_globals_in_dht);
                 config.use_kademlia_disjoint_query_paths(
@@ -272,7 +269,7 @@ impl SubstrateNetwork {
                         allow_private_ip: allow_private_ipv4,
                         ..
                     } => {
-                        config.with_mdns(enable_mdns);
+                        config.with_mdns(true);
                         config.allow_private_ip(allow_private_ipv4);
                     }
                 }
