@@ -84,15 +84,15 @@ where
 
             for dict in results {
                 let dict = dict.downcast::<PyDict>()?;
-                let request_id = dict
-                    .get_item("request_id")
-                    .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+                let peer = dict
+                    .get_item("peer")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Peer missing"))?;
                 let payload = dict
                     .get_item("payload")
                     .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
                     .extract::<Vec<u8>>()?;
 
-                responses.push((T::RequestId::from_executor_object(&request_id), payload));
+                responses.push((T::PeerId::from_executor_object(&peer), payload));
             }
 
             return PyResult::Ok(Self::Response { responses });
@@ -108,7 +108,7 @@ where
 /// Type conversion from Python dictionary to `ResponseHandlingResult`
 impl<'a, T: NetworkBackend> FromPyObject<'a> for ResponseHandlingResult<T>
 where
-    <T as NetworkBackend>::RequestId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::PeerId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
 {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
@@ -117,23 +117,36 @@ where
         if dict.get_item("DoNothing").is_some() {
             return PyResult::Ok(Self::DoNothing);
         } else if let Some(result) = dict.get_item("Response") {
-            let results = result.downcast::<PyList>()?;
-            let mut responses = Vec::new();
+            let results = result.downcast::<PyDict>()?;
 
-            for dict in results {
+            let responses = results
+                .get_item("Responses")
+                .ok_or(PyErr::new::<PyTypeError, _>("Responses missing"))?
+                .downcast::<PyList>()?;
+            // TODO: handle cached requests
+            let request = results
+                .get_item("Request")
+                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?;
+            // let _tmp = RequestHandlingResult::<T>::extract(request)?;
+
+            let mut return_results = Vec::new();
+            for dict in responses {
                 let dict = dict.downcast::<PyDict>()?;
-                let request_id = dict
-                    .get_item("request_id")
-                    .ok_or(PyErr::new::<PyTypeError, _>("Request ID missing"))?;
+                tracing::info!(target: LOG_TARGET, "{dict:#?}");
+                let peer = dict
+                    .get_item("peer")
+                    .ok_or(PyErr::new::<PyTypeError, _>("Peer 111 missing"))?;
                 let payload = dict
                     .get_item("payload")
                     .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
                     .extract::<Vec<u8>>()?;
-
-                responses.push((T::RequestId::from_executor_object(&request_id), payload));
+                return_results.push((T::PeerId::from_executor_object(&peer), payload));
             }
 
-            return PyResult::Ok(Self::Response { responses });
+            return PyResult::Ok(Self::Response {
+                responses: return_results,
+                request: None,
+            });
         }
 
         Err(PyErr::new::<PyTypeError, _>(format!(

@@ -215,7 +215,12 @@ def filter_response(ctx, peer, response):
                         'payload': byte_string,
                     })
                 ctx.pending_requests[block['number'].value_object] = None
-                return { 'Response': responses }
+
+                return {"Response": {
+                        "Responses": responses,
+                        "Request": None,
+                    },
+                }
         return { 'DoNothing' : None }
     except Exception as e:
         print("failed to decode block response:", e)

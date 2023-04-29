@@ -1,201 +1,155 @@
 from scalecodec.base import RuntimeConfiguration, ScaleBytes
 from scalecodec.types import U128
 
-import random
-import json
 from google.protobuf.internal import builder as _builder
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import symbol_database as _symbol_database
-from enum import IntFlag
-import struct
+
+from backend.substrate.block_request import BlockRequest, Attributes
+from backend.substrate.block_response import BlockResponse
+
+from enum import IntFlag, Enum
+
+import json
 import proto
+import struct
+import random
 
-class RequestResponseHandler():
-    def __init__(self):
-        pass
+"""
+    Create `BlockResponse` from a block and return it to user.
+"""
+def return_response(peer, block):
+    block = json.loads(block)
 
-    def inject_request(self, peer):
-        pass
+    justification = block.get('justification')
+    if justification is not None:
+        justification = bytes.fromhex(justification)
 
-    def inject_response(self, peer):
-        pass
+    body = block.get('body')
+    if body is not None:
+        body = [bytes.fromhex(body) for body in body]
 
-class Permissions(IntFlag):
-	# Include block header.
-	HEADER = 1
-	# Include block body.
-	BODY = 2
-	# Include block receipt.
-	RECEIPT = 4
-	# Include block message queue.
-	MESSAGE_QUEUE = 8
-	# Include a justification for the block.
-	JUSTIFICATION = 16
-
-def filter_request(ctx, peer, request):
-
-    # TODO: what needs to happen:
-    # TODO:   - request is received
-    # TODO:   - parse it and check if all of the blocks are in local db
-    # TODO:   - if they are, respond to the request
-    # TODO:   - if not, forward the request to some other peer
-    # TODO:   - when response to the forwarded request is received, respond to all pending requests
-
-    request_id = request['Request']['id']
-
-    decoded = proto.BlockRequest()
-    decoded.ParseFromString(bytes(request['Request']['payload']))
-
-    print(decoded)
-
-    RuntimeConfiguration().update_type_registry(load_type_registry_preset("core"))
-    obj = RuntimeConfiguration().create_scale_object(
-        'Hash',
-        data = ScaleBytes(decoded.hash)
+    response = BlockResponse.new(
+        bytes.fromhex(block['hash']),
+        bytes.fromhex(block['header']),
+        body,
+        justification,
     )
-    obj.decode()
 
-    little_endian_bytes = struct.pack('<I', decoded.fields)
-    little_endian_int = struct.unpack('>I', little_endian_bytes)[0]
+    return [{ 'Response': {
+            'peer': peer,
+            'response': response,
+        }
+    }]
 
-    hash = str(obj)
-    # key = "%s_%d" % (hash, little_endian_int)
-    key = "%s" % (hash)
-    # print("key", key)
+"""
+    Inject request into filter.
+"""
+def filter_request(ctx, peer, request):
+    request = BlockRequest(bytes(request['Request']['payload']))
+    block_hash = request.hash().hex()
 
-    block = ctx.database.get(key)
+    # check if the block is already in the storage and if so, create a response right away
+    block = ctx.database.get(block_hash)
     if block is not None:
-        print("return block right away")
-    else:
-        for current_peer in ctx.peers:
-            print("peer has", ctx.peers[current_peer].known_blocks)
-            if hash in ctx.peers[current_peer].known_blocks:
-                ctx.peers[current_peer].pending_request = True
-                ctx.pending_requests[key] = [(peer, request_id)]
-                print('forward request to', current_peer)
-                print("save request for %s, requestId %d" % (str(peer), request_id))
+        return ctx.return_response(peer, block)
 
-                return {
-                    'Request': {
-                        'peer':  current_peer,
-                        'payload': request['Request']['payload']
-                    }
-                }
-
-    print("nobody found?")
-
-    try:
-        obj = RuntimeConfiguration().create_scale_object(
-            'BlockRequest',
-            data = ScaleBytes(bytes(request['Request']['payload'])),
-        )
-        obj.decode()
-
-        start_from = obj['start_from'].value_object
-        block =  ctx.database.get("block_%d" % (start_from))
-
-        if block is not None:
-            block = block.replace("'", "\"")
-            block = json.loads(block)
-            response = RuntimeConfiguration().create_scale_object(
-                type_string = "BlockResponse"
-            )
-            encoded = response.encode({
-                "blocks": [block],
-            })
-            byte_string = bytes.fromhex(encoded.to_hex()[2:])
-            byte_list = [b for b in byte_string]
-
-            return {
-                'Response': [
-                    {
-                        'request_id': request_id,
-                        'payload': byte_list,
-                    }
-                ]
-            }
-        else:
-            if start_from in ctx.pending_requests:
-                ctx.pending_requests[start_from].append((peer, request_id))
-                return { 'DoNothing': None }
-
-            for current_peer in ctx.peers:
-                peer_best = ctx.peers[current_peer].best_block 
-                if peer_best is not None and peer_best >= start_from and current_peer != peer:
-                    if ctx.peers[peer].pending_request is True:
-                        print("skip peer as it's already busy")
-                        continue
-
-                    ctx.peers[current_peer].pending_request = True
-                    request = RuntimeConfiguration().create_scale_object(
-                        type_string = "BlockRequest"
-                    )
-                    encoded = request.encode({
-                        "start_from": start_from,
-                        "num_blocks": 1,
-                    })
-                    byte_string = bytes.fromhex(encoded.to_hex()[2:])
-                    byte_list = [b for b in byte_string]
-                    # TODO: save the original request so it can be reconstructed?
-                    ctx.pending_requests[start_from] = [(peer, request_id)]
-
-                    return {
-                        'Request': {
-                            'peer':  current_peer,
-                            'payload': byte_list,
-                        }
-                    }
-        return { 'DoNothing': None }
-    except Exception as e:
-        print("failed to handle request", e)
+    # check if the request is already pending and if so, add peer to the table
+    # of peers expecting a response and return early
+    if block_hash in ctx.pending_requests:
+        ctx.pending_requests[block_hash].append(peer)
         return { 'DoNothing': None }
 
+    # if the block is already cached, just mark that `peer` is expecting a response
+    if block_hash in ctx.cached_requests:
+        ctx.cached_requests[block_hash]['peers'].append(peer)
+        return { 'DoNothing': None }
+
+    # get provider for the block
+    provider = ctx.get_provider(block_hash)
+    if provider is None and ctx.is_unknown_block(block_hash):
+        print("reject block:", block_hash)
+        print("block number", request.number())
+        return { 'Reject': None }
+
+    # if provider is `None` it means all peers that can provide the block
+    # are busy and cannot answer the block request right now. cache the 
+    # block request and send it later when one of the providers free up.
+    if provider is None:
+        ctx.cached_requests[block_hash] = { 'request': request, 'peers': [peer] }
+        return { 'DoNothing': None }
+
+    # set the request as pending, mark the provider as busy and return
+    # the request so the filter filter can forward it to `provider`
+    ctx.pending_requests[block_hash] = [peer]
+    ctx.peers[provider].busy = True
+
+    print("return request for", provider)
+
+    return { 'Request': {
+            'peer': provider,
+            'payload': request.to_bytes(),
+        }
+    }
+
+# inject response to filter
 def filter_response(ctx, peer, response):
-    # mark peer as not busy
-    ctx.peers[peer].pending_request = False
+    response = BlockResponse(bytes(response['Response']['payload']))
 
-    decoded = proto.BlockResponse()
-    decoded.ParseFromString(bytes(response['Response']['payload']))
-    print(decoded)
+    responses = []
+    completed_pending_requests = []
+    completed_cached_requests = []
 
-    needed_block = None
-    for block in decoded.blocks:
-        obj = RuntimeConfiguration().create_scale_object(
-            'Hash',
-            data = ScaleBytes(block.hash)
-        )
-        obj.decode()
+    # mark the peer as not busy
+    ctx.peers[peer].busy = False
 
-        key = "%s" % str(obj)
+    for block in response.blocks():
+        # insert block to database if it doesn't exist
+        block_hash = block.hash.hex()
+        if ctx.database.get(block_hash) is None:
+            ctx.save_block_to_database(block)
 
-        if needed_block is None:
-            needed_block = key
+        # check if any peer is waiting `block`
+        for pending_block in ctx.pending_requests:
+            # if there are peers waiting for this block, mark the request as completed,
+            # create a response and return it to all peers who are waiting for it
+            if pending_block == block_hash:
+                completed_pending_requests.append(block_hash)
+                response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
 
-        repr = {
-            'hash': str(block.hash),
-            'header': str(block.header),
-            'body': str(block.body)
+                for peer in ctx.pending_requests[pending_block]:
+                    responses.append({
+                        'peer': peer,
+                        'payload': response
+                    })
+
+        # check if the response completed any cached requests
+        for pending_block in ctx.cached_requests:
+            if pending_block == block_hash:
+                completed_cached_requests.append(block_hash)
+                response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
+
+                for peer in ctx.cached_requests[pending_block]['peers']:
+                    responses.append({
+                        'peer': peer,
+                        'payload': response
+                    })
+
+    # remove all completed pending requests
+    for block_hash in completed_pending_requests:
+        del ctx.pending_requests[block_hash]
+
+    # remove all completed cached requests
+    for block_hash in completed_cached_requests:
+        del ctx.cached_requests[block_hash]
+
+    # check if `peer` can accept any cached request
+    request = ctx.get_cached_request()
+
+    return {"Response": {
+            "Responses": responses,
+            "Request": request,
         }
-        ctx.database.set(key, str(repr))
+    }
 
-    if needed_block in ctx.pending_requests:
-        print(ctx.pending_requests[needed_block])
-        (peer, request_id) = ctx.pending_requests[needed_block][0]
-        print("pending request exists for %s, peer %s" % ((str(needed_block), str(peer))))
-        
-        del ctx.pending_requests[needed_block]
-
-        print("send response for", request_id)
-        print(type(response))
-        print(response)
-
-        return {
-            'Response': [{
-                'request_id': request_id,
-                'payload': response['Response']['payload']
-            }]
-        }
-    else:
-        print("do nothing", ctx.pending_requests, key, needed_block)
-        return { 'DoNothing' : None }

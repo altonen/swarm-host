@@ -37,7 +37,7 @@ pub enum RequestHandlingResult<T: NetworkBackend> {
     /// Respond to one or more received requests.
     Response {
         /// Responses.
-        responses: Vec<(T::RequestId, Vec<u8>)>,
+        responses: Vec<(T::PeerId, Vec<u8>)>,
     },
 }
 
@@ -50,7 +50,10 @@ pub enum ResponseHandlingResult<T: NetworkBackend> {
     /// Respond to one or more received requests.
     Response {
         /// Responses.
-        responses: Vec<(T::RequestId, Vec<u8>)>,
+        responses: Vec<(T::PeerId, Vec<u8>)>,
+
+        /// Another request sent to the peer, if any.
+        request: Option<(T::RequestId, Vec<u8>)>,
     },
 }
 

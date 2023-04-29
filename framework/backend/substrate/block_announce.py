@@ -46,6 +46,7 @@ class BlockAnnounce():
             data = ScaleBytes(notification),
         )
         self.announce.decode()
+        print(self.announce['header'])
 
     """
         Get block header.
@@ -65,4 +66,4 @@ class BlockAnnounce():
         hash_object = hashlib.blake2b(digest_size = 32)
         hash_object.update(byte_string)
 
-        return '0x' + str(hash_object.digest().hex())
+        return str(hash_object.digest().hex())
