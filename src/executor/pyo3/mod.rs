@@ -110,6 +110,7 @@ impl<'a, T: NetworkBackend> FromPyObject<'a> for ResponseHandlingResult<T>
 where
     <T as NetworkBackend>::PeerId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    RequestHandlingResult<T>: FromPyObject<'a>,
 {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
         let dict = object.downcast::<PyDict>()?;
@@ -123,11 +124,14 @@ where
                 .get_item("Responses")
                 .ok_or(PyErr::new::<PyTypeError, _>("Responses missing"))?
                 .downcast::<PyList>()?;
+
             // TODO: handle cached requests
-            let request = results
-                .get_item("Request")
-                .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?;
-            // let _tmp = RequestHandlingResult::<T>::extract(request)?;
+            // let request = results
+            //     .get_item("Request")
+            //     .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?;
+            // let request = match RequestHandlingResult::<T>::extract(request)? {
+            //     RequestHandlingResult::DoNothing {.. } | RequestHandlingResult::Response { responses }
+            // }
 
             let mut return_results = Vec::new();
             for dict in responses {
