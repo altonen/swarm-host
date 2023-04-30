@@ -1,3 +1,5 @@
+from scalecodec.base import RuntimeConfiguration
+
 import redis
 
 class Context():
@@ -8,6 +10,7 @@ class Context():
         self.number_to_block_hash = {}
         self.cached_requests = {}
         self.pending_requests = {}
+        self.runtime_config = None
 
     """
         Map block number to block hash.

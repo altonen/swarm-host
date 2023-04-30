@@ -28,9 +28,9 @@ for i in range(0, 50):
     iface_id = host.create_interface(rpc_address)
     host.install_context_filter(iface_id, context_filter)
     host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
-    host.install_notification_filter(iface_id, "/sup/sync/1", sync_filter)
+    host.install_request_response_filter(iface_id, "/sup/sync/2", sync_filter)
 
-time.sleep(2)
+time.sleep(1)
 
 nodes = []
 nodes.append(NodeTemplate()\

@@ -7,18 +7,25 @@ from scalecodec.base import RuntimeConfiguration, ScaleBytes
 import base64
 import hashlib
 
-from backend.substrate.block_announce import BlockAnnounce
+from backend.substrate.block_announce import BlockAnnounce, init_runtime_config
 
 def filter_notification(
     ctx,
     peer,
     notification
 ):
+    if ctx.runtime_config is None:
+        ctx.runtime_config = init_runtime_config()
+
     try:
-        block_announce = BlockAnnounce(bytes(notification))
-        ctx.peers[peer].known_blocks.add(block_announce.hash())
-        ctx.set_block_hash(block_announce.number(), block_announce.hash())
-        return { 'Forward': None }
+        block_announce = BlockAnnounce(ctx.runtime_config, bytes(notification))
+        number = block_announce.number()
+        hash = block_announce.hash(ctx.runtime_config)
+        ctx.peers[peer].known_blocks.add(hash)
+        ctx.set_block_hash(number, hash)
     except Exception as e:
+        print(number)
         print("failed to handle block announce:", e)
         return { 'Reject': None }
+
+    return { 'Forward': None }
