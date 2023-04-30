@@ -338,6 +338,13 @@ impl InterfaceHandle {
                             .await
                             .expect("channel to stay open");
                         }
+                        SubstrateNetworkEvent::PeerDiscovered { peer } => {
+                            tx.send(InterfaceEvent::PeerDiscovered {
+                                peer: PeerId(peer),
+                            })
+                            .await
+                            .expect("channel to stay open");
+                        }
                     },
                 }
             }
@@ -413,7 +420,7 @@ impl SubstrateBackend {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PeerId(SubstratePeerId);
 
 impl serde::Serialize for PeerId {

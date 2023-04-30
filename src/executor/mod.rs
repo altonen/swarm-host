@@ -83,6 +83,9 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Register `peer` to filter.
     fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
 
+    /// Discover peer.
+    fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
+
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
 

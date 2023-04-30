@@ -43,6 +43,12 @@ pub enum FilterCommand<T: NetworkBackend> {
         sink: Box<dyn PacketSink<T>>,
     },
 
+    /// Discover peer.
+    DiscoverPeer {
+        /// Peer ID.
+        peer: T::PeerId,
+    },
+
     /// Unregister peer from [`Filter`].
     UnregisterPeer {
         /// Peer ID.
@@ -134,6 +140,14 @@ impl<T: NetworkBackend> FilterHandle<T> {
     pub async fn register_peer(&self, peer: T::PeerId, sink: Box<dyn PacketSink<T>>) {
         self.tx
             .send(FilterCommand::RegisterPeer { peer, sink })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Discover peer.
+    pub async fn discover_peer(&self, peer: T::PeerId) {
+        self.tx
+            .send(FilterCommand::DiscoverPeer { peer })
             .await
             .expect("channel to stay open");
     }
@@ -310,6 +324,16 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                             );
                         }
                     }
+                    FilterCommand::DiscoverPeer { peer } => {
+                        if let Err(error) = self.discover_peer(peer) {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                ?error,
+                                "failed to discover peer",
+                            );
+                        }
+                    }
                     FilterCommand::UnregisterPeer { peer } => {
                         if let Err(error) = self.unregister_peer(peer) {
                             tracing::error!(
@@ -431,6 +455,15 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             }
             Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
         }
+    }
+
+    fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
+
+        self.executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .discover_peer(peer)
     }
 
     /// Unregister peer to [`Filter`].

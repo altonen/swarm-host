@@ -85,6 +85,9 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Interfaces.
     interfaces: HashMap<T::InterfaceId, InterfaceInfo<T>>,
 
+    /// Interface peer IDs.
+    interface_peer_ids: HashMap<T::PeerId, T::InterfaceId>,
+
     /// Event streams for spawned interfaces.
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
 
@@ -129,6 +132,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 links: UnGraph::new_undirected(),
                 edges: HashMap::new(),
                 interfaces: HashMap::new(),
+                interface_peer_ids: HashMap::new(),
                 _filter_events,
                 filter_event_tx,
                 heuristics_handle,
@@ -275,6 +279,16 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                             );
                         }
                     },
+                    Some(InterfaceEvent::PeerDiscovered { peer }) => {
+                        if let Err(error) = self.discover_peer(peer).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                ?error,
+                                "failed to register discovered peer",
+                            );
+                        }
+                    }
                     _ => {},
                 },
             }
@@ -307,6 +321,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     tracing::trace!(target: LOG_TARGET, interface = ?interface_id, ?node_index, "interface created");
 
                     self.event_streams.push(event_stream);
+                    self.interface_peer_ids.insert(peer_id, interface_id);
                     entry.insert(InterfaceInfo::new(
                         node_index,
                         peer_id,
@@ -603,6 +618,25 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             ConnectionUpgrade::ProtocolClosed { protocols } => peer_info
                 .protocols
                 .retain(|protocol| !protocols.contains(protocol)),
+        }
+
+        Ok(())
+    }
+
+    /// Discover peer
+    ///
+    /// Depending on what discovery mechanisms are used, the network backend
+    /// may discover other interfaces so those must not be registered to filters.
+    async fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
+
+        if self.interface_peer_ids.contains_key(&peer) {
+            tracing::trace!(target: LOG_TARGET, ?peer, "ignore discovered interface");
+            return Ok(());
+        }
+
+        for (_, info) in &self.interfaces {
+            info.filter.discover_peer(peer).await;
         }
 
         Ok(())

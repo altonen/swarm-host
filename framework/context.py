@@ -124,3 +124,6 @@ def register_peer(ctx, peer):
 def unregister_peer(ctx, peer):
     if peer in ctx.peers:
         del ctx.peers[peer]
+
+def discover_peer(ctx, peer):
+    print("peer %s discovered, connect maybe?" % (peer))

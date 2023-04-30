@@ -165,6 +165,12 @@ pub enum InterfaceEvent<T: NetworkBackend> {
         /// Received message.
         response: T::Response,
     },
+
+    /// Peer was discovered by the networking backend.
+    PeerDiscovered {
+        /// Discovered peer.
+        peer: T::PeerId,
+    },
 }
 
 /// Abstraction which allows `swarm-host` to maintain connections to remote peers.
@@ -192,6 +198,7 @@ pub trait NetworkBackend: Clone + Debug + 'static {
         + Clone
         + Eq
         + Hash
+        + Ord
         + Send
         + Sync
         + Serialize

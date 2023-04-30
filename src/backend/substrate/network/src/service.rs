@@ -93,9 +93,13 @@ type PendingResponse = Pin<
 #[derive(Debug)]
 pub enum SubstrateNetworkEvent {
     /// Peer connected.
-    PeerConnected { peer: PeerId },
+    PeerConnected {
+        peer: PeerId,
+    },
     /// Peer disconnected.
-    PeerDisconnected { peer: PeerId },
+    PeerDisconnected {
+        peer: PeerId,
+    },
     /// Peer opened a protocol.
     ProtocolOpened {
         peer: PeerId,
@@ -123,6 +127,9 @@ pub enum SubstrateNetworkEvent {
         protocol: ProtocolName,
         request_id: usize,
         response: Vec<u8>,
+    },
+    PeerDiscovered {
+        peer: PeerId,
     },
 }
 
@@ -172,6 +179,7 @@ pub struct SubstrateNetwork {
     pending_requests: HashMap<usize, (u64, channel::oneshot::Sender<OutgoingResponse>)>,
     pending_responses: FuturesUnordered<PendingResponse>,
     cached_responses: HashMap<u64, Vec<u8>>,
+    discovered: HashSet<PeerId>,
     rename: HashSet<PeerId>,
 }
 
@@ -392,6 +400,7 @@ impl SubstrateNetwork {
                 pending_requests: HashMap::new(),
                 pending_responses: FuturesUnordered::new(),
                 cached_responses: HashMap::new(),
+                discovered: HashSet::new(),
                 rename: HashSet::new(),
             },
         ))
@@ -701,8 +710,12 @@ impl SubstrateNetwork {
                 }
             }
             BehaviourOut::Discovered(peer) => {
-                // log::error!(target: "sub-libp2p", "attempt to connect to {peer}");
-                // self.swarm.behaviour_mut().user_protocol_mut().connect(peer);
+                if self.discovered.insert(peer) {
+                    self.event_tx
+                        .send(SubstrateNetworkEvent::PeerDiscovered { peer })
+                        .await
+                        .expect("channel to stay open");
+                }
             }
             BehaviourOut::RandomKademliaStarted => {}
             BehaviourOut::NotificationStreamOpened {

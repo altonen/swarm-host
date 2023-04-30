@@ -245,6 +245,31 @@ where
         })
     }
 
+    /// Discover `peer`.
+    fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+        tracing::trace!(target: LOG_TARGET, ?peer, "discover peer");
+
+        Python::with_gil(|py| {
+            let fun = PyModule::from_code(
+                py,
+                &self.code,
+                "",
+                format!("module{:?}", self.interface).as_str(),
+            )?
+            .getattr("discover_peer")?;
+
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+
+            fun.call1((ctx, peer_py)).map(|_| ()).map_err(From::from)
+        })
+    }
+
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
         tracing::trace!(target: LOG_TARGET, ?peer, "unregister peer");
