@@ -228,6 +228,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 pub struct InterfaceHandle {
     command_tx: mpsc::Sender<Command>,
     interface_id: usize,
+    peer_id: PeerId,
 }
 
 impl InterfaceHandle {
@@ -243,7 +244,7 @@ impl InterfaceHandle {
         let (command_tx, command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         // TODO: create all protocols on substrate side
-        let network = SubstrateNetwork::new(
+        let (peer_id, network) = SubstrateNetwork::new(
             NodeType::Masquerade,
             Box::new(move |fut| {
                 tokio::spawn(fut);
@@ -346,6 +347,7 @@ impl InterfaceHandle {
             Self {
                 interface_id,
                 command_tx,
+                peer_id: PeerId(peer_id),
             },
             Box::pin(ReceiverStream::new(rx)),
         ))
@@ -354,8 +356,12 @@ impl InterfaceHandle {
 
 #[async_trait::async_trait]
 impl Interface<SubstrateBackend> for InterfaceHandle {
-    fn id(&self) -> &<SubstrateBackend as NetworkBackend>::InterfaceId {
+    fn interface_id(&self) -> &<SubstrateBackend as NetworkBackend>::InterfaceId {
         &self.interface_id
+    }
+
+    fn peer_id(&self) -> &<SubstrateBackend as NetworkBackend>::PeerId {
+        &self.peer_id
     }
 
     /// Attempt to establish connection with a remote peer.

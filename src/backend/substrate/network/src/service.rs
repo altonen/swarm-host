@@ -193,7 +193,7 @@ impl SubstrateNetwork {
         event_tx: mpsc::Sender<SubstrateNetworkEvent>,
         command_rx: mpsc::Receiver<Command>,
         genesis_hash: Vec<u8>,
-    ) -> Result<Self, Error> {
+    ) -> Result<(PeerId, Self), Error> {
         let key_config = NodeKeyConfig::default();
         let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
@@ -346,7 +346,7 @@ impl SubstrateNetwork {
                 SwarmBuilder::with_executor(
                     transport,
                     behaviour,
-                    local_peer_id,
+                    local_peer_id.clone(),
                     SpawnImpl(executor),
                 )
             };
@@ -380,18 +380,21 @@ impl SubstrateNetwork {
             );
         }
 
-        Ok(Self {
-            swarm,
-            event_tx,
-            command_rx,
-            map,
-            notification_sinks: HashMap::new(),
-            next_request_id: 0usize,
-            pending_requests: HashMap::new(),
-            pending_responses: FuturesUnordered::new(),
-            cached_responses: HashMap::new(),
-            rename: HashSet::new(),
-        })
+        Ok((
+            local_peer_id,
+            Self {
+                swarm,
+                event_tx,
+                command_rx,
+                map,
+                notification_sinks: HashMap::new(),
+                next_request_id: 0usize,
+                pending_requests: HashMap::new(),
+                pending_responses: FuturesUnordered::new(),
+                cached_responses: HashMap::new(),
+                rename: HashSet::new(),
+            },
+        ))
     }
 
     /// Build block announce protocol config.
@@ -709,21 +712,18 @@ impl SubstrateNetwork {
                 notifications_sink,
                 handshake,
             } => {
-                log::info!("notification stream opened: {protocol}");
+                log::debug!("notification stream opened: {protocol}");
 
                 // TODO: save notification sink
                 self.notification_sinks
                     .insert((remote, protocol.clone()), notifications_sink);
 
                 if protocol == String::from("/sup/block-announces/1").into() {
-                    log::error!(target: "sub-libp2p", "SEND CONNECTION OPENED");
                     self.event_tx
                         .send(SubstrateNetworkEvent::PeerConnected { peer: remote })
                         .await
                         .expect("channel to stay open");
                 } else {
-                    log::warn!(target: "sub-libp2p", "SEND PROTOCOL OPENED");
-
                     self.event_tx
                         .send(SubstrateNetworkEvent::ProtocolOpened {
                             peer: remote,
@@ -790,12 +790,12 @@ impl SubstrateNetwork {
                 event = self.map.next() => match event {
                     Some((protocol, request)) => {
                         let request_id = self.next_request_id();
-                        log::warn!(
-                            target: "sub-libp2p",
-                            "request received peer {}, protocol {:?}, {request_id}",
-                            request.peer,
-                            protocol,
-                        );
+                        // log::warn!(
+                        //     target: "sub-libp2p",
+                        //     "request received peer {}, protocol {:?}, {request_id}",
+                        //     request.peer,
+                        //     protocol,
+                        // );
                         let digest = {
                             let mut hasher = DefaultHasher::new();
                             hasher.write(&request.payload);

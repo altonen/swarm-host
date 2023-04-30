@@ -171,7 +171,10 @@ pub enum InterfaceEvent<T: NetworkBackend> {
 #[async_trait::async_trait]
 pub trait Interface<T: NetworkBackend> {
     /// Return reference to the interface ID.
-    fn id(&self) -> &T::InterfaceId;
+    fn interface_id(&self) -> &T::InterfaceId;
+
+    /// Return reference to the interface's peer ID.
+    fn peer_id(&self) -> &T::PeerId;
 
     /// Attempt to establish connection with a remote peer.
     async fn connect(&mut self, peer: T::PeerId) -> crate::Result<()>;

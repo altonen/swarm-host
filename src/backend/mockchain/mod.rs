@@ -48,6 +48,9 @@ pub struct MockchainHandle {
     /// Unique ID of the interface.
     id: InterfaceId,
 
+    /// Unique peer ID of the interface.
+    peer_id: PeerId,
+
     // TODO: is there need to store p2p here?
     /// Peer-to-peer functionality.
     p2p_type: P2pType,
@@ -75,6 +78,7 @@ impl MockchainHandle {
         Ok((
             Self {
                 id,
+                peer_id: id as PeerId,
                 p2p_type,
                 peers: HashMap::new(),
             },
@@ -86,8 +90,13 @@ impl MockchainHandle {
 #[async_trait::async_trait]
 impl Interface<MockchainBackend> for MockchainHandle {
     /// Get ID of the interface.
-    fn id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
+    fn interface_id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
         &self.id
+    }
+
+    /// Get the peer ID of the interface.
+    fn peer_id(&self) -> &<MockchainBackend as NetworkBackend>::PeerId {
+        &self.peer_id
     }
 
     /// Connect to peer.

@@ -499,7 +499,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<()> {
-        tracing::trace!(target: LOG_TARGET, ?protocol, "inject notification");
+        tracing::debug!(target: LOG_TARGET, ?protocol, "inject notification");
 
         // register the received notification to heuristics backend
         self.heuristics_handle.register_notification_received(
@@ -599,7 +599,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<()> {
-        tracing::trace!(target: LOG_TARGET, ?peer, ?protocol, request_id = ?request.id(), "inject request");
+        tracing::debug!(target: LOG_TARGET, ?peer, ?protocol, request_id = ?request.id(), "inject request");
         tracing::trace!(target: LOG_TARGET_MSG, ?request);
 
         // save the id of the received request so later on the response received from the executor
@@ -697,7 +697,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         response: T::Response,
     ) -> crate::Result<()> {
-        tracing::trace!(target: LOG_TARGET, ?protocol, ?peer, "inject response");
+        tracing::debug!(target: LOG_TARGET, ?protocol, ?peer, "inject response");
         tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?response);
 
         // register the received response to heuristics backend

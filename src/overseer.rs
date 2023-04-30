@@ -48,13 +48,22 @@ struct InterfaceInfo<T: NetworkBackend> {
 
     /// Index to the link graph.
     index: NodeIndex,
+
+    /// Peer ID of the interface.
+    _peer: T::PeerId,
 }
 
 impl<T: NetworkBackend> InterfaceInfo<T> {
     /// Create new [`InterfaceInfo`] from `T::InterfaceHandle`.
-    pub fn new(index: NodeIndex, _handle: T::InterfaceHandle, filter: FilterHandle<T>) -> Self {
+    pub fn new(
+        index: NodeIndex,
+        _peer: T::PeerId,
+        _handle: T::InterfaceHandle,
+        filter: FilterHandle<T>,
+    ) -> Self {
         Self {
             index,
+            _peer,
             _handle,
             filter,
             peers: HashMap::new(),
@@ -284,9 +293,10 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             .spawn_interface(address, InterfaceType::Masquerade)
             .await
         {
-            Ok((handle, event_stream)) => match self.interfaces.entry(*handle.id()) {
+            Ok((handle, event_stream)) => match self.interfaces.entry(*handle.interface_id()) {
                 Entry::Vacant(entry) => {
-                    let interface_id = *handle.id();
+                    let interface_id = *handle.interface_id();
+                    let peer_id = *handle.peer_id();
                     let node_index = self.links.add_node(interface_id);
                     let (filter, filter_handle) = Filter::<T, E>::new(
                         interface_id,
@@ -297,7 +307,12 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     tracing::trace!(target: LOG_TARGET, interface = ?interface_id, ?node_index, "interface created");
 
                     self.event_streams.push(event_stream);
-                    entry.insert(InterfaceInfo::new(node_index, handle, filter_handle));
+                    entry.insert(InterfaceInfo::new(
+                        node_index,
+                        peer_id,
+                        handle,
+                        filter_handle,
+                    ));
                     tokio::spawn(filter.run());
 
                     Ok(interface_id)
