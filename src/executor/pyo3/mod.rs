@@ -15,6 +15,7 @@ use pyo3::{
     types::{PyDict, PyList},
     FromPyPointer,
 };
+use rand::Rng;
 use tracing::Level;
 
 #[cfg(test)]
@@ -139,7 +140,7 @@ where
                 tracing::info!(target: LOG_TARGET, "{dict:#?}");
                 let peer = dict
                     .get_item("peer")
-                    .ok_or(PyErr::new::<PyTypeError, _>("Peer 111 missing"))?;
+                    .ok_or(PyErr::new::<PyTypeError, _>("Peer missing"))?;
                 let payload = dict
                     .get_item("payload")
                     .ok_or(PyErr::new::<PyTypeError, _>("Request missing"))?
@@ -188,9 +189,30 @@ where
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::Response:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::InterfaceParameters:
+        FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     for<'a> RequestHandlingResult<T>: pyo3::FromPyObject<'a>,
     for<'a> ResponseHandlingResult<T>: pyo3::FromPyObject<'a>,
 {
+    /// Function that can be used to initialize interface parameters before the interface is created.
+    fn initialize_interface(code: String) -> crate::Result<T::InterfaceParameters> {
+        tracing::debug!(target: LOG_TARGET, "initialize interface parameters");
+        tracing::trace!(target: LOG_TARGET_MSG, ?code);
+
+        Python::with_gil(|py| -> pyo3::PyResult<T::InterfaceParameters> {
+            let fun = PyModule::from_code(
+                py,
+                &code,
+                "",
+                format!("module{}", rand::thread_rng().gen::<u64>()).as_str(),
+            )?
+            .getattr("initialize_interface")?;
+
+            Ok(T::InterfaceParameters::from_executor_object(&fun.call0()?))
+        })
+        .map_err(From::from)
+    }
+
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized,

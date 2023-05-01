@@ -150,6 +150,7 @@ impl NetworkBackend for MockchainBackend {
     type Response = Response;
     type InterfaceHandle = MockchainHandle;
     type NetworkParameters = ();
+    type InterfaceParameters = usize;
 
     /// Create new [`MockchainBackend`].
     fn new(_parameters: Self::NetworkParameters) -> Self {
@@ -161,6 +162,7 @@ impl NetworkBackend for MockchainBackend {
         &mut self,
         address: SocketAddr,
         interface_type: InterfaceType,
+        parameters: Option<Self::InterfaceParameters>,
     ) -> crate::Result<(Self::InterfaceHandle, InterfaceEventStream<Self>)> {
         ensure!(
             !self.interfaces.contains_key(&address),
@@ -169,7 +171,8 @@ impl NetworkBackend for MockchainBackend {
 
         tracing::debug!(
             target: LOG_TARGET,
-            address = ?address,
+            ?address,
+            ?parameters,
             "create interface"
         );
 

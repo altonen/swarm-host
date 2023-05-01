@@ -265,6 +265,9 @@ pub trait NetworkBackend: Clone + Debug + 'static {
     /// Parameters passed from `Overseer` to the backend when it's constructed.
     type NetworkParameters: Debug;
 
+    /// Parameters received from the provided preinit executor code.
+    type InterfaceParameters: Debug + Clone + FromExecutorObject;
+
     /// Create new `NetworkBackend`.
     fn new(parameters: Self::NetworkParameters) -> Self;
 
@@ -277,6 +280,7 @@ pub trait NetworkBackend: Clone + Debug + 'static {
         &mut self,
         address: SocketAddr,
         interface_type: InterfaceType,
+        parameters: Option<Self::InterfaceParameters>,
     ) -> crate::Result<(Self::InterfaceHandle, InterfaceEventStream<Self>)>
     where
         Self: Sized;

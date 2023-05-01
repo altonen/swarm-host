@@ -150,7 +150,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
                     OverseerEvent::CreateInterface { address, result } => {
-                        match self.create_interface(address).await {
+                        match self.create_interface(address, None).await {
                             Ok(interface) => result.send(Ok(interface)).expect("channel to stay open"),
                             Err(err) => {
                                 tracing::error!(
@@ -295,16 +295,32 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         }
     }
 
-    async fn create_interface(&mut self, address: SocketAddr) -> crate::Result<T::InterfaceId> {
+    /// Create new inteface
+    ///
+    /// Create new interface and spawn it to listen at `address`.
+    /// When the interface is created, the caller can specify optional executor code
+    /// which is called before the interface is created to initialize any interface parameters
+    /// that are needed for interface initialization.
+    async fn create_interface(
+        &mut self,
+        address: SocketAddr,
+        preinit: Option<String>,
+    ) -> crate::Result<T::InterfaceId> {
         tracing::debug!(
             target: LOG_TARGET,
             address = ?address,
             "create new interface",
         );
 
+        // initialize interface parameters by calling the preinit code if it was provided
+        let parameters = match preinit {
+            Some(code) => Some(E::initialize_interface(code)?),
+            None => None,
+        };
+
         match self
             .backend
-            .spawn_interface(address, InterfaceType::Masquerade)
+            .spawn_interface(address, InterfaceType::Masquerade, parameters)
             .await
         {
             Ok((handle, event_stream)) => match self.interfaces.entry(*handle.interface_id()) {

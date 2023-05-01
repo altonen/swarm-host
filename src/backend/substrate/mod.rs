@@ -542,6 +542,7 @@ impl NetworkBackend for SubstrateBackend {
     type Response = SubstrateResponse;
     type InterfaceHandle = InterfaceHandle;
     type NetworkParameters = SubstrateParameters;
+    type InterfaceParameters = usize;
 
     /// Create new [`SubstrateBackend`].
     fn new(parameters: Self::NetworkParameters) -> Self {
@@ -559,14 +560,16 @@ impl NetworkBackend for SubstrateBackend {
         &mut self,
         address: SocketAddr,
         interface_type: InterfaceType,
+        parameters: Option<Self::InterfaceParameters>,
     ) -> crate::Result<(Self::InterfaceHandle, InterfaceEventStream<Self>)>
     where
         Self: Sized,
     {
         tracing::debug!(
             target: LOG_TARGET,
-            address = ?address,
-            interface_type = ?interface_type,
+            ?address,
+            ?interface_type,
+            ?parameters,
             "create new substrate backend",
         );
 
