@@ -38,7 +38,7 @@ struct PeerInfo<T: NetworkBackend> {
 /// Interface information.
 struct InterfaceInfo<T: NetworkBackend> {
     /// Interface handle.
-    _handle: T::InterfaceHandle,
+    handle: T::InterfaceHandle,
 
     /// Interface peers.
     peers: HashMap<T::PeerId, PeerInfo<T>>,
@@ -58,13 +58,13 @@ impl<T: NetworkBackend> InterfaceInfo<T> {
     pub fn new(
         index: NodeIndex,
         _peer: T::PeerId,
-        _handle: T::InterfaceHandle,
+        handle: T::InterfaceHandle,
         filter: FilterHandle<T>,
     ) -> Self {
         Self {
             index,
             _peer,
-            _handle,
+            handle,
             filter,
             peers: HashMap::new(),
         }
@@ -92,10 +92,10 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     event_streams: SelectAll<Pin<Box<dyn Stream<Item = InterfaceEvent<T>> + Send>>>,
 
     /// Events received from the filters.
-    _filter_events: mpsc::Receiver<FilterEvent>,
+    filter_events: mpsc::Receiver<FilterEvent<T>>,
 
     /// TX channel passed to new `Filter`s.
-    filter_event_tx: mpsc::Sender<FilterEvent>,
+    filter_event_tx: mpsc::Sender<FilterEvent<T>>,
 
     /// Links between interfaces.
     links: UnGraph<T::InterfaceId, ()>,
@@ -117,7 +117,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         parameters: T::NetworkParameters,
     ) -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let (filter_event_tx, _filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+        let (filter_event_tx, filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (backend, heuristics_handle) = HeuristicsBackend::new(ws_address);
 
         // start running the heuristics backend in the background
@@ -133,7 +133,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 edges: HashMap::new(),
                 interfaces: HashMap::new(),
                 interface_peer_ids: HashMap::new(),
-                _filter_events,
+                filter_events,
                 filter_event_tx,
                 heuristics_handle,
                 _marker: Default::default(),
@@ -291,6 +291,18 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     }
                     _ => {},
                 },
+                event = self.filter_events.recv() => match event.expect("channel to stay open") {
+                    FilterEvent::Connect { interface, peer } => {
+                        if let Err(error) = self.connect_to_peer(interface, peer).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                ?interface,
+                                ?peer,
+                                "failed connect to peer",
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -656,6 +668,25 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         }
 
         Ok(())
+    }
+
+    /// Attempt to establish outbound connection to peer.
+    ///
+    /// The connection completes in the background and if it's established successfully,
+    /// `Overseer` is notified about it via `InterfaceEvent::PeerConnected`.
+    async fn connect_to_peer(
+        &mut self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "connect to peer");
+
+        self.interfaces
+            .get_mut(&interface)
+            .ok_or(Error::InterfaceDoesntExist)?
+            .handle
+            .connect(peer)
+            .await
     }
 }
 

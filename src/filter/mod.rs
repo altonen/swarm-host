@@ -29,7 +29,16 @@ const LOG_TARGET_MSG: &str = "filter::msg";
 
 /// Events produced by [`Filter`].
 #[derive(Debug)]
-pub enum FilterEvent {}
+pub enum FilterEvent<T: NetworkBackend> {
+    /// Connect to peer.
+    Connect {
+        /// Interface ID.
+        interface: T::InterfaceId,
+
+        /// Peer ID.
+        peer: T::PeerId,
+    },
+}
 
 /// Commands sent by `Overseer` to [`Filter`].
 #[derive(Debug)]
@@ -268,7 +277,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     command_rx: mpsc::Receiver<FilterCommand<T>>,
 
     /// TX channel for sending events to `Overseer`.
-    _event_tx: mpsc::Sender<FilterEvent>,
+    _event_tx: mpsc::Sender<FilterEvent<T>>,
 
     /// Registered peers.
     peers: HashMap<T::PeerId, Box<dyn PacketSink<T>>>,
@@ -289,7 +298,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
-        _event_tx: mpsc::Sender<FilterEvent>,
+        _event_tx: mpsc::Sender<FilterEvent<T>>,
         heuristics_handle: HeuristicsHandle<T>,
     ) -> (Filter<T, E>, FilterHandle<T>) {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
