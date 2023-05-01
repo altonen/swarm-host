@@ -531,6 +531,21 @@ pub struct SubstrateParameters {
     pub genesis_hash: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+pub struct InterfaceParameters {
+    handshake: Vec<u8>,
+}
+
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::InterfaceParameters {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object<'a>(executor_type: &'a Self::ExecutorType<'a>) -> Self {
+        let handshake = executor_type.extract::<Vec<u8>>().unwrap();
+
+        InterfaceParameters { handshake }
+    }
+}
+
 #[async_trait::async_trait]
 impl NetworkBackend for SubstrateBackend {
     type PeerId = PeerId;
@@ -542,11 +557,11 @@ impl NetworkBackend for SubstrateBackend {
     type Response = SubstrateResponse;
     type InterfaceHandle = InterfaceHandle;
     type NetworkParameters = SubstrateParameters;
-    type InterfaceParameters = usize;
+    type InterfaceParameters = InterfaceParameters;
 
     /// Create new [`SubstrateBackend`].
     fn new(parameters: Self::NetworkParameters) -> Self {
-        tracing::debug!(target: LOG_TARGET, "create new substrate backend",);
+        tracing::debug!(target: LOG_TARGET, "create new substrate backend");
 
         SubstrateBackend::new(parameters)
     }
