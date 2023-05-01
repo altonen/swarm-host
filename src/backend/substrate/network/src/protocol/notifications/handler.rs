@@ -147,7 +147,7 @@ pub struct ProtocolConfig {
     /// Names of the protocol to use if the main one isn't available.
     pub fallback_names: Vec<ProtocolName>,
     /// Handshake of the protocol. The `RwLock` is locked every time a new substream is opened.
-    pub handshake: Arc<RwLock<Option<Vec<u8>>>>,
+    pub handshake: Arc<RwLock<Vec<u8>>>,
     /// Maximum allowed size for a notification.
     pub max_notification_size: u64,
 }
@@ -562,20 +562,6 @@ impl ConnectionHandler for NotifsHandler {
                             "`Opening`/`Open`: echo back the same handshake",
                         );
 
-                        let handshake_message = if let Some(handshake) =
-                            protocol_info.config.handshake.read().clone()
-                        {
-                            // TODO: save the other handshake somewhere so it can be used as a backup
-                            // in_substream_open.handshake.clone()
-                            handshake.clone()
-                        } else {
-                            *protocol_info.config.handshake.write() =
-                                Some(in_substream_open.handshake.clone());
-                            in_substream_open.handshake.clone()
-                        };
-
-                        todo!("not implemented properly");
-
                         // Create `handshake_message` on a separate line to be sure that the
                         // lock is released as soon as possible.
                         let handshake_message = in_substream_open.handshake;
@@ -703,23 +689,6 @@ impl ConnectionHandler for NotifsHandler {
                         // if no node has has been bound yet, echo back the received handshake
                         let received_handshake = in_substream.received_handshake.clone();
                         let handshake_message = received_handshake.clone();
-                        // let handshake_message = if let Some(handshake) =
-                        //     protocol_info.config.handshake.read().clone()
-                        // {
-                        //     log::info!(
-                        //         target: "sub-libp2p",
-                        //         "`OpenDesiredByRemote`: use handshake of the bound peer",
-                        //     );
-
-                        //     handshake.clone()
-                        // } else {
-                        //     log::info!(
-                        //         target: "sub-libp2p",
-                        //         "`OpenDesiredByRemote`: echo back the received handshake",
-                        //     );
-
-                        //     received_handshake.clone()
-                        // };
 
                         if !*pending_opening {
                             let proto = NotificationsOut::new(

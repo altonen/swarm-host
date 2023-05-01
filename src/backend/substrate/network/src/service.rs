@@ -201,12 +201,13 @@ impl SubstrateNetwork {
         event_tx: mpsc::Sender<SubstrateNetworkEvent>,
         command_rx: mpsc::Receiver<Command>,
         genesis_hash: Vec<u8>,
+        handshake: Option<Vec<u8>>,
     ) -> Result<(PeerId, Self), Error> {
         let key_config = NodeKeyConfig::default();
         let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
 
-        let block_announce_config = Self::build_block_announce_protocol();
+        let block_announce_config = Self::build_block_announce_protocol(handshake);
         let sync_config = Self::build_sync_protocol(&mut map);
         let state_config = Self::build_state_sync_protocol(&mut map);
         let warp_config = Self::build_warp_sync_protocol(&mut map);
@@ -407,12 +408,12 @@ impl SubstrateNetwork {
     }
 
     /// Build block announce protocol config.
-    fn build_block_announce_protocol() -> NonDefaultSetConfig {
+    fn build_block_announce_protocol(handshake: Option<Vec<u8>>) -> NonDefaultSetConfig {
         NonDefaultSetConfig {
             notifications_protocol: format!("/sup/block-announces/1",).into(),
             fallback_names: vec![],
             max_notification_size: 8 * 1024 * 1024,
-            handshake: None,
+            handshake: handshake.map(|handshake| NotificationHandshake::from_bytes(handshake)),
             set_config: SetConfig {
                 in_peers: 400,
                 out_peers: 400,

@@ -238,6 +238,7 @@ impl InterfaceHandle {
         _interface_type: InterfaceType,
         interface_id: usize,
         genesis_hash: Vec<u8>,
+        parameters: Option<InterfaceParameters>,
     ) -> crate::Result<(Self, InterfaceEventStream<SubstrateBackend>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (event_tx, mut event_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -252,6 +253,7 @@ impl InterfaceHandle {
             event_tx,
             command_rx,
             genesis_hash,
+            parameters.map(|parameteres| parameteres.handshake),
         )?;
         tokio::spawn(network.run());
 
@@ -592,6 +594,7 @@ impl NetworkBackend for SubstrateBackend {
             interface_type,
             self.next_interface_id(),
             self.genesis_hash.clone(),
+            parameters,
         )
         .await
     }

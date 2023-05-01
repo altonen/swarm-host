@@ -371,7 +371,7 @@ impl Notifications {
             .map(|cfg| handler::ProtocolConfig {
                 name: cfg.name,
                 fallback_names: cfg.fallback_names,
-                handshake: Arc::new(RwLock::new(None)),
+                handshake: Arc::new(RwLock::new(cfg.handshake)),
                 max_notification_size: cfg.max_notification_size,
             })
             .collect::<Vec<_>>();
