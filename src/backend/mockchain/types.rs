@@ -6,16 +6,15 @@ use crate::{
 use parity_scale_codec::{Decode, Encode};
 use pyo3::{
     prelude::*,
-    types::{PyDict, PyList, PyString, PyTuple},
+    types::{PyDict, PyList},
 };
 use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
 
-use std::{collections::hash_map::DefaultHasher, hash::Hasher, net::IpAddr};
+use std::{collections::hash_map::DefaultHasher, hash::Hasher};
 
 /// Unique ID identifying the interface.
 pub type InterfaceId = usize;
@@ -28,9 +27,6 @@ pub type AccountId = u64;
 
 /// Unique block ID.
 pub type BlockId = u64;
-
-/// Unique message ID.
-pub type MessageId = u64;
 
 /// Unique request ID.
 #[derive(Debug, Copy, Clone, FromPyObject, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -166,7 +162,7 @@ impl IntoPy<PyObject> for Block {
             tx_list.append(tx_dict).unwrap();
         }
 
-        blk_dict.set_item("transactions", tx_list);
+        blk_dict.set_item("transactions", tx_list).unwrap();
         blk_dict.into()
     }
 }
@@ -255,11 +251,11 @@ impl IntoPy<PyObject> for Pex {
         for pair in &self.peers {
             // TODO: use tuple instead of dict
             let entry = PyDict::new(py);
-            entry.set_item("Entry", pair);
+            entry.set_item("Entry", pair).unwrap();
             pex_list.append(entry).unwrap();
         }
 
-        pex_dict.set_item("peers", pex_list);
+        pex_dict.set_item("peers", pex_list).unwrap();
         pex_dict.into()
     }
 }
@@ -277,28 +273,28 @@ impl IntoPy<PyObject> for Message {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self {
             Message::Transaction(transaction) => {
-                let mut dict = PyDict::new(py);
+                let dict = PyDict::new(py);
                 dict.set_item("Transaction", transaction.into_py(py))
                     .unwrap();
                 dict.into()
             }
             Message::Block(block) => {
-                let mut dict = PyDict::new(py);
+                let dict = PyDict::new(py);
                 dict.set_item("Block", block.into_py(py)).unwrap();
                 dict.into()
             }
             Message::Vote(vote) => {
-                let mut dict = PyDict::new(py);
+                let dict = PyDict::new(py);
                 dict.set_item("Vote", vote.into_py(py)).unwrap();
                 dict.into()
             }
             Message::Dispute(dispute) => {
-                let mut dict = PyDict::new(py);
+                let dict = PyDict::new(py);
                 dict.set_item("Dispute", dispute.into_py(py)).unwrap();
                 dict.into()
             }
             Message::PeerExchange(pex) => {
-                let mut dict = PyDict::new(py);
+                let dict = PyDict::new(py);
                 dict.set_item("PeerExchange", pex.into_py(py)).unwrap();
                 dict.into()
             }
@@ -307,7 +303,7 @@ impl IntoPy<PyObject> for Message {
 }
 
 impl<'a> FromPyObject<'a> for Message {
-    fn extract(object: &'a PyAny) -> PyResult<Self> {
+    fn extract(_object: &'a PyAny) -> PyResult<Self> {
         todo!();
     }
 }
@@ -407,7 +403,7 @@ pub enum ConnectionType {
 
     /// Local node initiated the connection and must send a handshake
     /// message to remote node before doing anything elsE.
-    Outbound,
+    _Outbound,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, FromPyObject)]
@@ -420,7 +416,7 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
+    pub fn _new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
     }
 }
@@ -431,10 +427,12 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Request {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         let fields = PyDict::new(context);
-        fields.set_item("id", self.id.into_py(context));
-        fields.set_item("payload", self.payload.into_py(context));
+        fields.set_item("id", self.id.into_py(context)).unwrap();
+        fields
+            .set_item("payload", self.payload.into_py(context))
+            .unwrap();
 
-        let mut request = PyDict::new(context);
+        let request = PyDict::new(context);
         request.set_item("Request", fields).unwrap();
         request.into()
     }
@@ -468,7 +466,7 @@ pub struct BlockRequest {
 }
 
 impl BlockRequest {
-    pub fn new(start_from: u128, num_blocks: u8) -> Self {
+    pub fn _new(start_from: u128, num_blocks: u8) -> Self {
         Self {
             start_from,
             num_blocks,
@@ -483,7 +481,7 @@ pub struct BlockResponse {
 }
 
 impl BlockResponse {
-    pub fn new(blocks: Vec<Block>) -> Self {
+    pub fn _new(blocks: Vec<Block>) -> Self {
         Self { blocks }
     }
 }
@@ -498,15 +496,15 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
+    pub fn _new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
     }
 
-    pub fn id(&self) -> &RequestId {
+    pub fn _id(&self) -> &RequestId {
         &self.id
     }
 
-    pub fn payload(&self) -> &Vec<u8> {
+    pub fn _payload(&self) -> &Vec<u8> {
         &self.payload
     }
 }
@@ -517,10 +515,12 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Response {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         let fields = PyDict::new(context);
-        fields.set_item("id", self.id.into_py(context));
-        fields.set_item("payload", self.payload.into_py(context));
+        fields.set_item("id", self.id.into_py(context)).unwrap();
+        fields
+            .set_item("payload", self.payload.into_py(context))
+            .unwrap();
 
-        let mut request = PyDict::new(context);
+        let request = PyDict::new(context);
         request.set_item("Response", fields).unwrap();
         request.into()
     }

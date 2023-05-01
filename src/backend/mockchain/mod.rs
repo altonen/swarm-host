@@ -1,47 +1,24 @@
-#![allow(unused)]
-
 use crate::{
     backend::{
         mockchain::types::{
             InterfaceId, Message, PeerId, ProtocolId, Request, RequestId, Response,
         },
-        Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend,
+        Interface, InterfaceEventStream, InterfaceType, NetworkBackend,
     },
     ensure,
     error::Error,
-    types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
+    types::DEFAULT_CHANNEL_SIZE,
 };
 
-use futures::stream::Stream;
-use serde::{Deserialize, Serialize};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-        TcpListener, TcpStream,
-    },
-    sync::mpsc::{self, Receiver, Sender},
-};
+use tokio::{net::TcpListener, sync::mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    fmt::Debug,
-    future::Future,
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::{collections::HashMap, fmt::Debug, net::SocketAddr};
 
 mod masquerade;
 pub mod types;
 
 const LOG_TARGET: &str = "mockchain";
-
-// TODO: ugly
-enum P2pType {
-    Masquerade(masquerade::P2p),
-}
 
 /// Interface handle.
 pub struct MockchainHandle {
@@ -51,12 +28,8 @@ pub struct MockchainHandle {
     /// Unique peer ID of the interface.
     peer_id: PeerId,
 
-    // TODO: is there need to store p2p here?
-    /// Peer-to-peer functionality.
-    p2p_type: P2pType,
-
     /// Connected peers.
-    peers: HashMap<PeerId, ()>,
+    _peers: HashMap<PeerId, ()>,
 }
 
 impl MockchainHandle {
@@ -69,18 +42,17 @@ impl MockchainHandle {
         let listener = TcpListener::bind(address).await?;
         let (iface_tx, iface_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-        let p2p_type = match interface_type {
+        match interface_type {
             InterfaceType::Masquerade => {
-                P2pType::Masquerade(masquerade::P2p::start(iface_tx, listener, id))
+                let _ = masquerade::P2p::start(iface_tx, listener, id);
             }
-        };
+        }
 
         Ok((
             Self {
                 id,
                 peer_id: id as PeerId,
-                p2p_type,
-                peers: HashMap::new(),
+                _peers: HashMap::new(),
             },
             Box::pin(ReceiverStream::new(iface_rx)),
         ))
@@ -102,7 +74,7 @@ impl Interface<MockchainBackend> for MockchainHandle {
     /// Connect to peer.
     async fn connect(
         &mut self,
-        peer: <MockchainBackend as NetworkBackend>::PeerId,
+        _peer: <MockchainBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
         todo!();
     }
@@ -110,7 +82,7 @@ impl Interface<MockchainBackend> for MockchainHandle {
     /// Disconnect peer.
     async fn disconnect(
         &mut self,
-        peer: <MockchainBackend as NetworkBackend>::PeerId,
+        _peer: <MockchainBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
         todo!();
     }

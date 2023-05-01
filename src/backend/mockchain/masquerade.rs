@@ -1,31 +1,18 @@
-use crate::{
-    backend::{
-        mockchain::{
-            types::{ConnectionType, Handshake, InterfaceId, Message, PeerId, ProtocolId},
-            MockchainBackend,
-        },
-        Interface, InterfaceEvent, InterfaceEventStream, InterfaceType, NetworkBackend, PacketSink,
+use crate::backend::{
+    mockchain::{
+        types::{ConnectionType, Handshake, InterfaceId, Message, PeerId, ProtocolId},
+        MockchainBackend,
     },
-    ensure,
-    error::Error,
-    types::{OverseerEvent, DEFAULT_CHANNEL_SIZE},
+    InterfaceEvent, NetworkBackend, PacketSink,
 };
 
-use futures::stream::Stream;
-use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-        TcpListener, TcpStream,
-    },
-    sync::mpsc::{self, Receiver, Sender},
+    net::{tcp::OwnedWriteHalf, TcpListener, TcpStream},
+    sync::mpsc::Sender,
 };
-use tokio_stream::wrappers::ReceiverStream;
 
 const LOG_TARGET: &str = "mockchain-masquerade";
-
-// TODO: move all type declarations to `type.rs`
 
 #[derive(Debug)]
 pub struct MockPacketSink {
@@ -71,8 +58,8 @@ impl PacketSink<MockchainBackend> for MockPacketSink {
     /// Send request to peer over `protocol`.
     async fn send_request(
         &mut self,
-        protocol: <MockchainBackend as NetworkBackend>::Protocol,
-        request: Vec<u8>,
+        _protocol: <MockchainBackend as NetworkBackend>::Protocol,
+        _request: Vec<u8>,
     ) -> crate::Result<<MockchainBackend as NetworkBackend>::RequestId> {
         todo!();
     }
@@ -81,8 +68,8 @@ impl PacketSink<MockchainBackend> for MockPacketSink {
     /// TODO: add request ID?
     async fn send_response(
         &mut self,
-        request_id: <MockchainBackend as NetworkBackend>::RequestId,
-        response: Vec<u8>,
+        _request_id: <MockchainBackend as NetworkBackend>::RequestId,
+        _response: Vec<u8>,
     ) -> crate::Result<()> {
         todo!();
     }
