@@ -27,12 +27,13 @@ where
 
     module
         .register_async_method("create_interface", |params, ctx| async move {
+            let mut params = params.sequence();
             let address = params
-                .sequence()
                 .next::<String>()
                 .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?
                 .parse::<SocketAddr>()
                 .map_err(|_| Error::Custom(String::from("Invalid socket address")))?;
+            let preinit: Option<String> = params.next().ok();
 
             tracing::debug!(
                 target: LOG_TARGET,
@@ -44,6 +45,7 @@ where
             match ctx
                 .send(OverseerEvent::CreateInterface {
                     address,
+                    preinit,
                     result: tx,
                 })
                 .await

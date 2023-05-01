@@ -27,14 +27,14 @@ class SwarmHost:
     def __del__(self):
         self.process.terminate()
 
-    def create_interface(self, address):
+    def create_interface(self, address, preinit = None):
         logging.info("create interface %s" % (address))
 
         response = requests.post(
             "http://localhost:%d/" % (self.rpc_port),
             json=request(
                 "create_interface",
-                params=[address],
+                params=[address, preinit],
             )
         )
         if "result" in response.json():

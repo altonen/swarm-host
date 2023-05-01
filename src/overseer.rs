@@ -149,8 +149,8 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         loop {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
-                    OverseerEvent::CreateInterface { address, result } => {
-                        match self.create_interface(address, None).await {
+                    OverseerEvent::CreateInterface { address, preinit, result } => {
+                        match self.create_interface(address, preinit).await {
                             Ok(interface) => result.send(Ok(interface)).expect("channel to stay open"),
                             Err(err) => {
                                 tracing::error!(

@@ -21,6 +21,9 @@ pub enum OverseerEvent<T: NetworkBackend> {
         /// Address where to bind the interface.
         address: SocketAddr,
 
+        /// Optional executor code that is called to initialize interface parameters.
+        preinit: Option<String>,
+
         /// Unique interface ID.
         result: oneshot::Sender<crate::Result<T::InterfaceId>>,
     },
