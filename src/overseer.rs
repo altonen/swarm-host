@@ -677,7 +677,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl Interface<MockchainBackend> for DummyHandle {
-        fn id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
+        fn interface_id(&self) -> &<MockchainBackend as NetworkBackend>::InterfaceId {
+            todo!();
+        }
+
+        fn peer_id(&self) -> &<MockchainBackend as NetworkBackend>::PeerId {
             todo!();
         }
 
@@ -760,7 +764,7 @@ mod tests {
     async fn apply_connection_upgrade() {
         let mut rng = rand::thread_rng();
         let (mut overseer, _) =
-            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None);
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None, ());
         let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
         let interface = rng.gen();
         let peer = rng.gen();
@@ -776,6 +780,7 @@ mod tests {
             interface,
             InterfaceInfo::<MockchainBackend>::new(
                 index,
+                rng.gen(),
                 MockchainHandle::new(
                     interface,
                     "[::1]:0".parse().unwrap(),
@@ -868,7 +873,7 @@ mod tests {
     async fn link_interfaces() {
         let mut rng = rand::thread_rng();
         let (mut overseer, _) =
-            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None);
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None, ());
         let interfaces = vec![rng.gen(), rng.gen(), rng.gen(), rng.gen()];
         let mut receivers = Vec::new();
 
@@ -882,6 +887,7 @@ mod tests {
                 *interface,
                 InterfaceInfo::<MockchainBackend>::new(
                     index,
+                    rng.gen(),
                     MockchainHandle::new(
                         *interface,
                         "[::1]:0".parse().unwrap(),

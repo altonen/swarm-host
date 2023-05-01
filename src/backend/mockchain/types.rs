@@ -416,7 +416,8 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn _new(id: RequestId, payload: Vec<u8>) -> Self {
+    #[allow(dead_code)]
+    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
     }
 }
@@ -466,7 +467,8 @@ pub struct BlockRequest {
 }
 
 impl BlockRequest {
-    pub fn _new(start_from: u128, num_blocks: u8) -> Self {
+    #[allow(dead_code)]
+    pub fn new(start_from: u128, num_blocks: u8) -> Self {
         Self {
             start_from,
             num_blocks,
@@ -481,7 +483,8 @@ pub struct BlockResponse {
 }
 
 impl BlockResponse {
-    pub fn _new(blocks: Vec<Block>) -> Self {
+    #[allow(dead_code)]
+    pub fn new(blocks: Vec<Block>) -> Self {
         Self { blocks }
     }
 }
@@ -496,7 +499,8 @@ pub struct Response {
 }
 
 impl Response {
-    pub fn _new(id: RequestId, payload: Vec<u8>) -> Self {
+    #[allow(dead_code)]
+    pub fn new(id: RequestId, payload: Vec<u8>) -> Self {
         Self { id, payload }
     }
 

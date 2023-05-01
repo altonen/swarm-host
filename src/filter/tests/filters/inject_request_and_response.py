@@ -93,7 +93,7 @@ def filter_request(ctx, peer, request):
             return {
                 'Response': [
                     {
-                        'request_id': request_id,
+                        'peer': peer,
                         'payload': byte_list,
                     }
                 ]
@@ -211,7 +211,7 @@ def filter_response(ctx, peer, response):
                 responses = []
                 for (peer, request_id) in ctx.pending_requests[block['number'].value_object]:
                     responses.append({
-                        'request_id': request_id,
+                        'peer': peer,
                         'payload': byte_string,
                     })
                 ctx.pending_requests[block['number'].value_object] = None
