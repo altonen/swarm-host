@@ -360,8 +360,8 @@ where
                 "",
                 format!("module{:?}", self.interface).as_str(),
             )?;
-            let _ = module.getattr("filter_request")?;
-            let _ = module.getattr("filter_response")?;
+            let _ = module.getattr("inject_request")?;
+            let _ = module.getattr("inject_response")?;
 
             self.request_response_filters.insert(protocol, code);
             Ok(())
@@ -431,7 +431,7 @@ where
                 "",
                 format!("module{:?}", self.interface).as_str(),
             )?
-            .getattr("filter_request")?;
+            .getattr("inject_request")?;
 
             // get access to types that `PyO3` understands
             //
@@ -468,7 +468,7 @@ where
                 "",
                 format!("module{:?}", self.interface).as_str(),
             )?
-            .getattr("filter_response")?;
+            .getattr("inject_response")?;
 
             // get access to types that `PyO3` understands
             //

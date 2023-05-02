@@ -298,6 +298,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                                 target: LOG_TARGET,
                                 ?interface,
                                 ?peer,
+                                ?error,
                                 "failed connect to peer",
                             );
                         }

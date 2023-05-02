@@ -19,7 +19,7 @@ import random
 """
     Inject request into filter.
 """
-def filter_request(ctx, peer, request):
+def inject_request(ctx, peer, request):
     request = BlockRequest(bytes(request['Request']['payload']))
 
     block_hash = request.hash()
@@ -77,7 +77,7 @@ def filter_request(ctx, peer, request):
     }
 
 # inject response to filter
-def filter_response(ctx, peer, response):
+def inject_response(ctx, peer, response):
     response = BlockResponse(bytes(response['Response']['payload']))
 
     responses = []
@@ -135,4 +135,3 @@ def filter_response(ctx, peer, response):
             "Request": request,
         }
     }
-

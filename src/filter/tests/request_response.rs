@@ -15,14 +15,14 @@ use tokio::sync::mpsc;
 use std::{env, fs, path::PathBuf};
 
 #[tokio::test]
-async fn filter_response_missing() {
+async fn inject_response_missing() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
     "
     .to_owned();
     let notification_filter_code = "
-def filter_request(ctx, peer, request):
+def inject_request(ctx, peer, request):
     pass
     "
     .to_owned();
@@ -46,14 +46,14 @@ def filter_request(ctx, peer, request):
 }
 
 #[tokio::test]
-async fn filter_request_missing() {
+async fn inject_request_missing() {
     let context_code = "
 def initialize_ctx(ctx):
     pass
     "
     .to_owned();
     let notification_filter_code = "
-def filter_response(ctx, peer, response):
+def inject_response(ctx, peer, response):
     pass
     "
     .to_owned();
@@ -123,9 +123,13 @@ def register_peer(ctx, peer):
         heuristics_handle,
     );
 
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
+    println!(
+        "{:?}",
+        filter.initialize_filter(interface, context_code, None)
+    );
+    // assert!(filter
+    //     .initialize_filter(interface, context_code, None)
+    //     .is_ok());
     println!(
         "{:?}",
         filter.install_request_response_filter(

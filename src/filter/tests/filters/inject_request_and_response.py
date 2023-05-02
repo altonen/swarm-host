@@ -4,7 +4,7 @@ from scalecodec.types import U128
 import random
 import json
 
-def filter_request(ctx, peer, request):
+def inject_request(ctx, peer, request):
     RuntimeConfiguration().update_type_registry({
         "types": {
             "BlockRequest": {
@@ -133,7 +133,7 @@ def filter_request(ctx, peer, request):
         print("failed to handle request", e)
         return { 'DoNothing': None }
 
-def filter_response(ctx, peer, response):
+def inject_response(ctx, peer, response):
     RuntimeConfiguration().update_type_registry({
         "types": {
             "BlockResponse": {
