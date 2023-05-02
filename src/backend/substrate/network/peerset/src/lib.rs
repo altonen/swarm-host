@@ -562,78 +562,86 @@ impl Peerset {
         }
     }
 
+    /// Attempt to connect to peer.
+    fn connect_to_peer(&mut self, peer: PeerId) {
+        self.message_queue.push_back(Message::Connect {
+            set_id: 0.into(),
+            peer_id: peer,
+        });
+    }
+
     /// Try to fill available out slots with nodes for the given set.
-    fn alloc_slots(&mut self, set_id: SetId) {
-        self.update_time();
+    fn alloc_slots(&mut self, _set_id: SetId) {
+        // self.update_time();
 
-        // Try to connect to all the reserved nodes that we are not connected to.
-        for reserved_node in &self.reserved_nodes[set_id.0].0 {
-            let entry = match self.data.peer(set_id.0, reserved_node) {
-                peersstate::Peer::Unknown(n) => n.discover(),
-                peersstate::Peer::NotConnected(n) => n,
-                peersstate::Peer::Connected(_) => continue,
-            };
+        // // Try to connect to all the reserved nodes that we are not connected to.
+        // for reserved_node in &self.reserved_nodes[set_id.0].0 {
+        //     let entry = match self.data.peer(set_id.0, reserved_node) {
+        //         peersstate::Peer::Unknown(n) => n.discover(),
+        //         peersstate::Peer::NotConnected(n) => n,
+        //         peersstate::Peer::Connected(_) => continue,
+        //     };
 
-            // Don't connect to nodes with an abysmal reputation, even if they're reserved.
-            // This is a rather opinionated behaviour, and it wouldn't be fundamentally wrong to
-            // remove that check. If necessary, the peerset should be refactored to give more
-            // control over what happens in that situation.
-            if entry.reputation() < BANNED_THRESHOLD {
-                break;
-            }
+        //     // Don't connect to nodes with an abysmal reputation, even if they're reserved.
+        //     // This is a rather opinionated behaviour, and it wouldn't be fundamentally wrong to
+        //     // remove that check. If necessary, the peerset should be refactored to give more
+        //     // control over what happens in that situation.
+        //     if entry.reputation() < BANNED_THRESHOLD {
+        //         break;
+        //     }
 
-            match entry.try_outgoing() {
-                Ok(conn) => self.message_queue.push_back(Message::Connect {
-                    set_id,
-                    peer_id: conn.into_peer_id(),
-                }),
-                Err(_) => {
-                    // An error is returned only if no slot is available. Reserved nodes are
-                    // marked in the state machine with a flag saying "doesn't occupy a slot",
-                    // and as such this should never happen.
-                    debug_assert!(false);
-                    log::error!(
-                        target: "peerset",
-                        "Not enough slots to connect to reserved node"
-                    );
-                }
-            }
-        }
+        //     match entry.try_outgoing() {
+        //         Ok(conn) => self.message_queue.push_back(Message::Connect {
+        //             set_id,
+        //             peer_id: conn.into_peer_id(),
+        //         }),
+        //         Err(_) => {
+        //             // An error is returned only if no slot is available. Reserved nodes are
+        //             // marked in the state machine with a flag saying "doesn't occupy a slot",
+        //             // and as such this should never happen.
+        //             debug_assert!(false);
+        //             log::error!(
+        //                 target: "peerset",
+        //                 "Not enough slots to connect to reserved node"
+        //             );
+        //         }
+        //     }
+        // }
 
-        // Now, we try to connect to other nodes.
+        // // Now, we try to connect to other nodes.
 
-        // Nothing more to do if we're in reserved mode.
-        if self.reserved_nodes[set_id.0].1 {
-            return;
-        }
+        // // Nothing more to do if we're in reserved mode.
+        // if self.reserved_nodes[set_id.0].1 {
+        //     return;
+        // }
 
-        // Try to grab the next node to attempt to connect to.
-        // Since `highest_not_connected_peer` is rather expensive to call, check beforehand
-        // whether we have an available slot.
-        while self.data.has_free_outgoing_slot(set_id.0) {
-            let next = match self.data.highest_not_connected_peer(set_id.0) {
-                Some(n) => n,
-                None => break,
-            };
+        // // Try to grab the next node to attempt to connect to.
+        // // Since `highest_not_connected_peer` is rather expensive to call, check beforehand
+        // // whether we have an available slot.
+        // while self.data.has_free_outgoing_slot(set_id.0) {
+        //     let next = match self.data.highest_not_connected_peer(set_id.0) {
+        //         Some(n) => n,
+        //         None => break,
+        //     };
 
-            // Don't connect to nodes with an abysmal reputation.
-            if next.reputation() < BANNED_THRESHOLD {
-                break;
-            }
+        //     // Don't connect to nodes with an abysmal reputation.
+        //     if next.reputation() < BANNED_THRESHOLD {
+        //         break;
+        //     }
 
-            match next.try_outgoing() {
-                Ok(conn) => self.message_queue.push_back(Message::Connect {
-                    set_id,
-                    peer_id: conn.into_peer_id(),
-                }),
-                Err(_) => {
-                    // This branch can only be entered if there is no free slot, which is
-                    // checked above.
-                    debug_assert!(false);
-                    break;
-                }
-            }
-        }
+        //     match next.try_outgoing() {
+        //         Ok(conn) => self.message_queue.push_back(Message::Connect {
+        //             set_id,
+        //             peer_id: conn.into_peer_id(),
+        //         }),
+        //         Err(_) => {
+        //             // This branch can only be entered if there is no free slot, which is
+        //             // checked above.
+        //             debug_assert!(false);
+        //             break;
+        //         }
+        //     }
+        // }
     }
 
     /// Indicate that we received an incoming connection. Must be answered either with
