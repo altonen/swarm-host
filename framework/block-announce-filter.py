@@ -9,7 +9,17 @@ import hashlib
 
 from backend.substrate.block_announce import BlockAnnounce, init_runtime_config
 
-def filter_notification(
+def inject_notification(
+    ctx,
+    peer,
+    notification,
+):
+    if ctx.block_announce_condition is not None:
+        return ctx.block_announce_condition(ctx, peer, notification)
+    else:
+        return inject_notification(ctx, peer, notification)
+
+def inject_notification(
     ctx,
     peer,
     notification

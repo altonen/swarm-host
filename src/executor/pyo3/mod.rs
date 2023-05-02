@@ -325,7 +325,7 @@ where
     ) -> crate::Result<()> {
         tracing::trace!(target: LOG_TARGET, ?protocol, "install notification filter");
 
-        // verify that `filter_notification()` exists in the code
+        // verify that `inject_notification()` exists in the code
         Python::with_gil(|py| {
             PyModule::from_code(
                 py,
@@ -333,7 +333,7 @@ where
                 "",
                 format!("module{:?}", self.interface).as_str(),
             )?
-            .getattr("filter_notification")?;
+            .getattr("inject_notification")?;
 
             self.notification_filters.insert(protocol, code);
             Ok(())
@@ -394,7 +394,7 @@ where
                 "",
                 format!("module{:?}", self.interface).as_str(),
             )?
-            .getattr("filter_notification")?;
+            .getattr("inject_notification")?;
 
             // get access to types that `PyO3` understands
             //

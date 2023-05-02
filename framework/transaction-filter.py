@@ -12,7 +12,7 @@ import base64
 # 
 # Check if `self.interface` should forward `notification` to  (`dst_interface`, `dst_peer`).
 # Return `True` if `notification` should be forwarded and `False` if it should not be.
-def filter_notification(
+def inject_notification(
     ctx,
     src_interface,
     src_peer,

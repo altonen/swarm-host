@@ -31,7 +31,7 @@ class NotificationFilter():
     """
         Execute custom filter for a received notification.
     """
-    def filter_notification(
+    def inject_notification(
         context,
         src_interface,
         src_peer,
@@ -49,7 +49,7 @@ class TransactionFilter(SubstrateNotificationFilter):
     def __init__(self, interface, context):
         super().__init__(interface, "/sup/transactions/1", context)
 
-    def filter_notification(
+    def inject_notification(
         context,
         src_interface,
         src_peer,

@@ -62,7 +62,7 @@ def initialize_ctx(ctx):
     "
     .to_owned();
     let notification_filter_code = "
-def filter_notification(ctx, peer, notification):
+def inject_notification(ctx, peer, notification):
     pass
     "
     .to_owned();
