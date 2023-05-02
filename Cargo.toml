@@ -14,7 +14,7 @@ pin-project = "1.0.12"
 petgraph = "0.6.3"
 rand = "0.8.5"
 sc-network = { version = "0.10.0-dev", path = "src/backend/substrate/network/" }
-sc-network-common = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-network-common = { version = "0.10.0-dev", path = "src/backend/substrate/network/common" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_cbor = "0.11.2"
 sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }

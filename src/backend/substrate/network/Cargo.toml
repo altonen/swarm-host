@@ -15,6 +15,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 array-bytes = "4.1"
+async-stream = "0.3.4"
 async-trait = "0.1"
 asynchronous-codec = "0.6"
 backtrace = "0.3.67"
@@ -27,6 +28,7 @@ futures-timer = "3.0.2"
 ip_network = "0.4.1"
 libp2p = { version = "0.50.0", features = ["dns", "identify", "kad", "macros", "mdns", "mplex", "noise", "ping", "tcp",  "tokio", "yamux", "websocket"] }
 tokio = { version = "1.22.0", features = ["macros"] }
+tokio-stream = "0.1.12"
 log = "0.4.17"
 lru = "0.8.1"
 mockall = "0.11.3"
@@ -43,13 +45,11 @@ zeroize = "1.4.3"
 sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
 sc-client-api = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
 sc-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
-sc-network-common = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
-sc-peerset = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-network-common = { version = "0.10.0-dev", path = "common" }
+sc-peerset = { version = "4.0.0-dev", path = "peerset" }
 sc-utils = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
 sp-arithmetic = { version = "6.0.0", git = "https://github.com/paritytech/substrate" }
 sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
 sp-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
 sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
 sp-runtime = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
-tokio-stream = "0.1.12"
-async-stream = "0.3.4"
