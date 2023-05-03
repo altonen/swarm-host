@@ -188,8 +188,7 @@ impl Protocol {
 
     /// Connect to peer.
     pub fn connect(&mut self, peer: PeerId) {
-        self.peerset_handle
-            .add_reserved_peer(HARDCODED_PEERSETS_SYNC, peer);
+        self.peerset_handle.connect_to_peer(peer);
     }
 }
 

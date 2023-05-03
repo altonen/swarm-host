@@ -28,6 +28,7 @@
 //! > for example connecting to some nodes in priority should be added outside of this
 //! > module, rather than inside.
 
+#![allow(unused)]
 use libp2p::PeerId;
 use log::error;
 use std::{

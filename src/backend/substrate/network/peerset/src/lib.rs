@@ -66,6 +66,7 @@ enum Action {
     AddToPeersSet(SetId, PeerId),
     RemoveFromPeersSet(SetId, PeerId),
     PeerReputation(PeerId, oneshot::Sender<i32>),
+    ConnectToPeer(PeerId),
 }
 
 /// Identifier of a set in the peerset.
@@ -168,6 +169,11 @@ impl PeersetHandle {
         let _ = self
             .tx
             .unbounded_send(Action::ReportPeer(peer_id, score_diff));
+    }
+
+    /// Attempt to connect to `peer`.
+    pub fn connect_to_peer(&self, peer: PeerId) {
+        let _ = self.tx.unbounded_send(Action::ConnectToPeer(peer));
     }
 
     /// Add a peer to a set.
@@ -805,6 +811,9 @@ impl Stream for Peerset {
                 }
                 Action::PeerReputation(peer_id, pending_response) => {
                     self.on_peer_reputation(peer_id, pending_response)
+                }
+                Action::ConnectToPeer(peer) => {
+                    self.connect_to_peer(peer);
                 }
             }
         }
