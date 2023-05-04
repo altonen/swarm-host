@@ -411,6 +411,7 @@ where
         tracing::trace!(
             target: LOG_TARGET,
             ?protocol,
+            interface = ?self.interface,
             "install request-response filter"
         );
 

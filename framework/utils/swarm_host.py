@@ -104,7 +104,7 @@ class SwarmHost:
             "http://localhost:%d/" % (self.rpc_port),
             json = request(
                 "install_request_response_filter",
-                params = [0, protocol, filter, ctx],
+                params = [interface, protocol, filter, ctx],
             )
         )
         if "result" in response.json():
