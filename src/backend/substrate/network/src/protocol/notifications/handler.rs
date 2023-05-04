@@ -662,22 +662,21 @@ impl ConnectionHandler for NotifsHandler {
                 let protocol_info = &mut self.protocols[protocol_index];
                 match &mut protocol_info.state {
                     State::Closed { pending_opening } => {
-                        todo!("swarm-host cannot establish outbound connections (yet)");
-                        // if !*pending_opening {
-                        //     let proto = NotificationsOut::new(
-                        //         protocol_info.config.name.clone(),
-                        //         protocol_info.config.fallback_names.clone(),
-                        //         protocol_info.config.handshake.read().clone(),
-                        //         protocol_info.config.max_notification_size,
-                        //     );
-                        //     self.events_queue.push_back(
-                        //         ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        //             protocol: SubstreamProtocol::new(proto, protocol_index)
-                        //                 .with_timeout(OPEN_TIMEOUT),
-                        //         },
-                        //     );
-                        // }
-                        // protocol_info.state = State::Opening { in_substream: None };
+                        if !*pending_opening {
+                            let proto = NotificationsOut::new(
+                                protocol_info.config.name.clone(),
+                                protocol_info.config.fallback_names.clone(),
+                                protocol_info.config.handshake.read().clone(),
+                                protocol_info.config.max_notification_size,
+                            );
+                            self.events_queue.push_back(
+                                ConnectionHandlerEvent::OutboundSubstreamRequest {
+                                    protocol: SubstreamProtocol::new(proto, protocol_index)
+                                        .with_timeout(OPEN_TIMEOUT),
+                                },
+                            );
+                        }
+                        protocol_info.state = State::Opening { in_substream: None };
                     }
                     State::OpenDesiredByRemote {
                         pending_opening,
