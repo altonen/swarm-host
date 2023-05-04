@@ -135,8 +135,10 @@ def unregister_peer(ctx, peer):
         del ctx.peers[peer]
 
 def discover_peer(ctx: Context, peer):
-    ctx.known_peers.add(peer)
+    if peer in ctx.pending_peers or peer in ctx.peers:
+        return
 
+    ctx.known_peers.add(peer)
     needed_peers = MAX_PEERS - len(ctx.peers) + len(ctx.pending_peers)
     if needed_peers <= 0:
         return
