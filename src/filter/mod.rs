@@ -2,7 +2,8 @@ use crate::{
     backend::{Idable, NetworkBackend, PacketSink},
     error::{Error, ExecutorError},
     executor::{
-        Executor, NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
+        Executor, ExecutorEvent, NotificationHandlingResult, RequestHandlingResult,
+        ResponseHandlingResult,
     },
     heuristics::HeuristicsHandle,
     types::DEFAULT_CHANNEL_SIZE,
@@ -277,7 +278,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     command_rx: mpsc::Receiver<FilterCommand<T>>,
 
     /// TX channel for sending events to `Overseer`.
-    _event_tx: mpsc::Sender<FilterEvent<T>>,
+    event_tx: mpsc::Sender<FilterEvent<T>>,
 
     /// Registered peers.
     peers: HashMap<T::PeerId, Box<dyn PacketSink<T>>>,
@@ -298,7 +299,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
-        _event_tx: mpsc::Sender<FilterEvent<T>>,
+        event_tx: mpsc::Sender<FilterEvent<T>>,
         heuristics_handle: HeuristicsHandle<T>,
     ) -> (Filter<T, E>, FilterHandle<T>) {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
@@ -307,7 +308,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             Filter::<T, E> {
                 interface,
                 command_rx: rx,
-                _event_tx,
+                event_tx,
                 executor: None,
                 heuristics_handle,
                 peers: HashMap::new(),
@@ -334,7 +335,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         }
                     }
                     FilterCommand::DiscoverPeer { peer } => {
-                        if let Err(error) = self.discover_peer(peer) {
+                        if let Err(error) = self.discover_peer(peer).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?peer,
@@ -445,6 +446,24 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         }
     }
 
+    /// Process events received from the executor.
+    async fn process_events(&mut self, events: Vec<ExecutorEvent<T>>) -> crate::Result<()> {
+        for event in events {
+            match event {
+                ExecutorEvent::Connect { peer } => self
+                    .event_tx
+                    .send(FilterEvent::Connect {
+                        interface: self.interface,
+                        peer,
+                    })
+                    .await
+                    .expect("channel to stay open"),
+            }
+        }
+
+        Ok(())
+    }
+
     /// Register peer to [`Filter`].
     fn register_peer(
         &mut self,
@@ -466,13 +485,16 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         }
     }
 
-    fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+    async fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
 
-        self.executor
+        let events = self
+            .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .discover_peer(peer)
+            .discover_peer(peer)?;
+
+        self.process_events(events).await
     }
 
     /// Unregister peer to [`Filter`].

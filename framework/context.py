@@ -2,6 +2,9 @@ from scalecodec.base import RuntimeConfiguration
 
 import redis
 
+# maximum peers each interface can have
+MAX_PEERS = 400
+
 class Context():
     def __init__(self):
         self.database = redis.Redis(host = 'localhost', port = 6379, decode_responses = True)
@@ -11,6 +14,9 @@ class Context():
         self.cached_requests = {}
         self.pending_requests = {}
         self.runtime_config = None
+        self.peer_events = []
+        self.pending_peers = set()
+        self.known_peers = set()
 
     """
         Map block number to block hash.
@@ -118,12 +124,33 @@ class PeerContext():
 def initialize_ctx(ctx):
     return Context()
 
-def register_peer(ctx, peer):
+def register_peer(ctx: Context, peer):
     ctx.peers[peer] = PeerContext()
+
+    if peer in ctx.pending_peers:
+        ctx.pending_peers.remove(peer)
 
 def unregister_peer(ctx, peer):
     if peer in ctx.peers:
         del ctx.peers[peer]
 
-def discover_peer(ctx, peer):
-    print("peer %s discovered, connect maybe?" % (peer))
+def discover_peer(ctx: Context, peer):
+    ctx.known_peers.add(peer)
+
+    needed_peers = MAX_PEERS - len(ctx.peers) + len(ctx.pending_peers)
+    if needed_peers <= 0:
+        return
+
+    selected = []
+    npeers = min(needed_peers, len(ctx.known_peers))
+    for peer in list(ctx.known_peers)[:npeers]:
+        ctx.known_peers.remove(peer)
+        ctx.pending_peers.add(peer)
+        ctx.peer_events.append({ 'Connect': peer })
+
+def poll(ctx: Context):
+    pending_events = []
+    pending_events.extend(ctx.peer_events)
+    ctx.peer_events.clear()
+
+    return pending_events

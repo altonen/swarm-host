@@ -798,11 +798,7 @@ impl Notifications {
 
             // Other states are kept as-is.
             st @ PeerState::Enabled { .. } => {
-                warn!(target: "sub-libp2p",
-					"PSM => Connect({}, {:?}): Already connected.",
-					occ_entry.key().0, set_id);
                 *occ_entry.into_mut() = st;
-                debug_assert!(false);
             }
             st @ PeerState::DisabledPendingEnable { .. } => {
                 warn!(target: "sub-libp2p",
