@@ -57,6 +57,16 @@ pub enum ResponseHandlingResult<T: NetworkBackend> {
     },
 }
 
+/// Event received from filter after polling it.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExecutorEvent<T: NetworkBackend> {
+    /// Connect to peer.
+    Connect {
+        /// Peer ID.
+        peer: T::PeerId,
+    },
+}
+
 /// Trait which allows converting types defined by the `NetworkBackend` into types that `Executor` understands.
 pub trait IntoExecutorObject {
     type NativeType;
@@ -82,6 +92,9 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>
     where
         Self: Sized;
+
+    /// Poll the executor and get all pending events, if any.
+    fn poll(&mut self) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Register `peer` to filter.
     fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;

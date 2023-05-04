@@ -4,8 +4,8 @@ use crate::{
     backend::NetworkBackend,
     error::{Error, ExecutorError},
     executor::{
-        Executor, FromExecutorObject, IntoExecutorObject, NotificationHandlingResult,
-        RequestHandlingResult, ResponseHandlingResult,
+        Executor, ExecutorEvent, FromExecutorObject, IntoExecutorObject,
+        NotificationHandlingResult, RequestHandlingResult, ResponseHandlingResult,
     },
 };
 
@@ -161,6 +161,38 @@ where
     }
 }
 
+// TODO: zzz
+struct ExecutorEvents<T: NetworkBackend> {
+    events: Vec<ExecutorEvent<T>>,
+}
+
+impl<'a, T: NetworkBackend> FromPyObject<'a> for ExecutorEvents<T>
+where
+    <T as NetworkBackend>::PeerId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    RequestHandlingResult<T>: FromPyObject<'a>,
+{
+    fn extract(object: &'a PyAny) -> PyResult<Self> {
+        if object.is_none() {
+            return PyResult::Ok(ExecutorEvents { events: Vec::new() });
+        }
+
+        let events = object.downcast::<PyList>().unwrap();
+        let mut results = Vec::new();
+
+        for item in events.iter() {
+            let dict = item.downcast::<PyDict>()?;
+
+            if let Some(peer) = dict.get_item(&"Connect") {
+                let peer = T::PeerId::from_executor_object(&peer);
+                results.push(ExecutorEvent::<T>::Connect { peer });
+            }
+        }
+
+        return PyResult::Ok(ExecutorEvents { events: results });
+    }
+}
+
 /// `PyO3` executor.
 pub struct PyO3Executor<T: NetworkBackend> {
     /// Initialize context.
@@ -179,6 +211,18 @@ pub struct PyO3Executor<T: NetworkBackend> {
     request_response_filters: HashMap<T::Protocol, String>,
 }
 
+/// Helper for calling an executor function and polling the result.
+macro_rules! call_executor {
+    ($py:ident, $interface:expr, $code:expr, $fn_name:literal, $ctx:expr $(, $args:expr)*) => {{
+        let module = format!("module{:?}", $interface);
+        let function = PyModule::from_code($py, $code, "", &module)?.getattr($fn_name)?;
+        function.call1(($ctx, $($args),*))?;
+
+        let poll = PyModule::from_code($py, $code, "", &module)?.getattr("poll")?;
+        poll.call1(($ctx,))?.extract::<ExecutorEvents<T>>().map(|result| result.events)
+    }};
+}
+
 impl<T: NetworkBackend> Executor<T> for PyO3Executor<T>
 where
     for<'a> <T as NetworkBackend>::PeerId:
@@ -193,6 +237,7 @@ where
         FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     for<'a> RequestHandlingResult<T>: pyo3::FromPyObject<'a>,
     for<'a> ResponseHandlingResult<T>: pyo3::FromPyObject<'a>,
+    for<'a> ExecutorEvents<T>: pyo3::FromPyObject<'a>,
 {
     /// Function that can be used to initialize interface parameters before the interface is created.
     fn initialize_interface(code: String) -> crate::Result<T::InterfaceParameters> {
@@ -240,6 +285,23 @@ where
             notification_filters: HashMap::new(),
             request_response_filters: HashMap::new(),
         })
+    }
+
+    /// Poll the executor.
+    fn poll(&mut self) -> crate::Result<Vec<ExecutorEvent<T>>> {
+        tracing::trace!(target: LOG_TARGET, "poll executor");
+
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+
+            call_executor!(py, self.interface, &self.code, "poll", ctx)
+        })
+        .map_err(From::from)
     }
 
     /// Register `peer` to filter.
