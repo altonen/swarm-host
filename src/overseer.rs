@@ -418,6 +418,16 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         protocols: Vec<T::Protocol>,
         sink: Box<dyn PacketSink<T> + Send>,
     ) -> crate::Result<()> {
+        // don't relay connect events of other interfaces
+        if self.interface_peer_ids.contains_key(&peer) {
+            tracing::trace!(
+                target: LOG_TARGET,
+                ?peer,
+                "ignore peer connection from another interface"
+            );
+            return Ok(());
+        }
+
         tracing::debug!(
             target: LOG_TARGET,
             ?interface,
@@ -449,6 +459,16 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         interface: T::InterfaceId,
         peer: T::PeerId,
     ) -> crate::Result<()> {
+        // don't relay disconnect events of other interfaces
+        if self.interface_peer_ids.contains_key(&peer) {
+            tracing::trace!(
+                target: LOG_TARGET,
+                ?peer,
+                "ignore peer disconnection from another interface"
+            );
+            return Ok(());
+        }
+
         tracing::debug!(target: LOG_TARGET, ?interface, ?peer, "peer disconnected");
 
         match self.interfaces.get_mut(&interface) {
