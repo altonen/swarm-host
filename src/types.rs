@@ -5,7 +5,7 @@ use tokio::sync::oneshot;
 use std::net::SocketAddr;
 
 /// Default channel size.
-pub const DEFAULT_CHANNEL_SIZE: usize = 64;
+pub const DEFAULT_CHANNEL_SIZE: usize = 50_000;
 
 /// Events that sent from `RPC` to `Overseer`.
 #[derive(Debug)]
