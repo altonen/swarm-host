@@ -171,8 +171,8 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Inject `response` to filter.
     fn inject_response(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         response: T::Response,
-    ) -> crate::Result<ResponseHandlingResult<T>>;
+    ) -> crate::Result<Vec<ExecutorEvent<T>>>;
 }

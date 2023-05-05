@@ -6,6 +6,7 @@ import requests
 import base64
 import logging
 import time
+import inspect
 
 logging.basicConfig(
     level   = logging.DEBUG,
@@ -24,7 +25,7 @@ sync_filter = open("sup-sync-2.py").read()
 
 interfaces = []
 
-for i in range(0, 50):
+for i in range(0, 1):
     iface_id = host.create_interface(rpc_address)
     host.install_context_filter(iface_id, context_filter)
     host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
@@ -59,6 +60,16 @@ nodes.append(NodeTemplate()\
     .with_p2p_port(2 + 7000)\
     .with_rpc_port(2 + 8000)\
     .with_ws_port(2 + 9944)\
+    .with_chain_spec(dev = True)\
+    .with_base_path(tmp = True)\
+    .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\
+    .build()
+)
+
+nodes.append(NodeTemplate()\
+    .with_p2p_port(3 + 7000)\
+    .with_rpc_port(3 + 8000)\
+    .with_ws_port(3 + 9944)\
     .with_chain_spec(dev = True)\
     .with_base_path(tmp = True)\
     .with_binary_path("/home/altonen/code/rust/substrate/target/release/node-template")\

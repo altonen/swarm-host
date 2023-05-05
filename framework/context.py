@@ -63,7 +63,7 @@ class Context():
         ctx.database.set(block.hash.hex(), json.dumps(encoded))
 
     # attempt to schedule cached request for sending
-    def get_cached_request(ctx):
+    def send_cached_request(ctx):
         block = None
         for cached in ctx.cached_requests:
             provider = ctx.get_provider(cached)
@@ -72,7 +72,7 @@ class Context():
                 break
 
         if block is None:
-            return None
+            return
 
         # if a cached request can be sent to some peer, schedule requests for
         # every peer that is waiting for the cached request to complete
@@ -80,18 +80,20 @@ class Context():
         peers = ctx.cached_requests[block]['peers']
         del ctx.cached_requests[block]
 
-        result = None
-        for peer in peers:
-            if result is None:
-                result = ctx.inject_request(peer, request)
-            else:
-                ctx.inject_request(peer, request)
-        return result
+        # TODO: implement properly
+        # ctx.in
+        # result = None
+        # for peer in peers:
+        #     if result is None:
+        #         result = ctx.inject_request(peer, request)
+        #     else:
+        #         ctx.inject_request(peer, request)
+        # return result
 
     """
         Create `BlockResponse` from a block and return it to user.
     """
-    def send_response(self, peer, block):
+    def create_and_send_response(self, peer, block):
         print("try to return response to %s for block %s" % (peer, block))
         block = json.loads(block)
 
@@ -127,11 +129,24 @@ class Context():
             }
         })
 
+    """
+        Send request to peer.
+    """
     def send_request(self, protocol, peer, request):
         self.pending_events.append({ 'SendRequest': {
                 'protocol': protocol,
                 'peer': peer,
                 'request': request
+            }
+        })
+
+    """
+        Send response to peer.
+    """
+    def send_response(self, peer, response):
+        self.pending_events.append({ 'SendResponse': {
+                'peer': peer,
+                'response': response
             }
         })
 

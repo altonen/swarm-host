@@ -1,7 +1,7 @@
 use crate::{
     backend::{Idable, NetworkBackend, PacketSink},
     error::{Error, ExecutorError},
-    executor::{Executor, ExecutorEvent, ResponseHandlingResult},
+    executor::{Executor, ExecutorEvent},
     heuristics::HeuristicsHandle,
     types::DEFAULT_CHANNEL_SIZE,
 };
@@ -425,7 +425,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         peer,
                         response,
                     } => {
-                        if let Err(error) = self.inject_response(&protocol, peer, response).await {
+                        if let Err(error) = self.inject_response(protocol.clone(), peer, response).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -754,7 +754,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     /// Inject response to filter.
     async fn inject_response(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         response: T::Response,
     ) -> crate::Result<()> {
@@ -764,73 +764,17 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         // register the received response to heuristics backend
         self.heuristics_handle.register_response_received(
             self.interface,
-            protocol.to_owned(),
+            protocol.clone(),
             peer,
             &response,
         );
 
-        match self
+        let events = self
             .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_response(protocol, peer, response)?
-        {
-            ResponseHandlingResult::DoNothing => Ok(()),
-            ResponseHandlingResult::Response {
-                responses,
-                request: _,
-            } => {
-                tracing::trace!(target: LOG_TARGET, number_of_response = ?responses.len(), "send responses");
+            .inject_response(protocol, peer, response)?;
 
-                for (peer, payload) in responses {
-                    match self.pending_inbound.remove(&peer) {
-                        Some(request_id) => {
-                            tracing::trace!(
-                                target: LOG_TARGET,
-                                ?peer,
-                                ?request_id,
-                                "send response"
-                            );
-
-                            match self
-                                .peers
-                                .get_mut(&peer)
-                                .ok_or(Error::PeerDoesntExist)?
-                                .send_response(request_id, payload)
-                                .await
-                            {
-                                Ok(_) => {
-                                    // TODO: register the new response
-                                    // self.heuristics_handle.register_response_sent(
-                                    //     self.interface,
-                                    //     protocol.to_owned(),
-                                    //     peer,
-                                    //     &response,
-                                    // );
-                                }
-                                Err(error) => {
-                                    tracing::warn!(
-                                        target: LOG_TARGET,
-                                        ?request_id,
-                                        ?peer,
-                                        ?error,
-                                        "failed to send response"
-                                    );
-                                }
-                            }
-                        }
-                        None => {
-                            tracing::warn!(
-                                target: LOG_TARGET,
-                                ?peer,
-                                "tried to respond to request that doesn't exist"
-                            );
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-        }
+        self.process_events(events).await
     }
 }

@@ -37,7 +37,7 @@ def inject_request(ctx, protocol, peer, request):
     # check if the block is already in the storage and if so, create a response right away
     block = ctx.database.get(block_hash)
     if block is not None:
-        ctx.send_response(peer, block)
+        ctx.create_and_send_response(peer, block)
         return
 
     # check if the request is already pending and if so, add peer to the table
@@ -76,7 +76,6 @@ def inject_request(ctx, protocol, peer, request):
 def inject_response(ctx, peer, response):
     response = BlockResponse(bytes(response['Response']['payload']))
 
-    responses = []
     completed_pending_requests = []
     completed_cached_requests = []
 
@@ -98,10 +97,7 @@ def inject_response(ctx, peer, response):
                 response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
 
                 for peer in ctx.pending_requests[pending_block]:
-                    responses.append({
-                        'peer': peer,
-                        'payload': response
-                    })
+                    ctx.send_response(peer, response)
 
         # check if the response completed any cached requests
         for pending_block in ctx.cached_requests:
@@ -110,10 +106,7 @@ def inject_response(ctx, peer, response):
                 response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
 
                 for peer in ctx.cached_requests[pending_block]['peers']:
-                    responses.append({
-                        'peer': peer,
-                        'payload': response
-                    })
+                    ctx.send_response(peer, response)
 
     # remove all completed pending requests
     for block_hash in completed_pending_requests:
@@ -122,12 +115,3 @@ def inject_response(ctx, peer, response):
     # remove all completed cached requests
     for block_hash in completed_cached_requests:
         del ctx.cached_requests[block_hash]
-
-    # check if `peer` can accept any cached request
-    request = ctx.get_cached_request()
-
-    return {"Response": {
-            "Responses": responses,
-            "Request": request,
-        }
-    }

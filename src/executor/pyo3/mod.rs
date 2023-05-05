@@ -334,9 +334,9 @@ where
             // the filter itself so it is safe to convert it to a borrowed pointer.
             let ctx: &PyAny =
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
-            let protocol_py = protocol.into_executor_object(py);
             let peer_py = peer.into_executor_object(py);
             let request_py = request.into_executor_object(py);
+            let protocol_py = protocol.into_executor_object(py);
 
             call_executor!(
                 py,
@@ -355,26 +355,18 @@ where
     /// Inject `response` to filter.
     fn inject_response(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         response: T::Response,
-    ) -> crate::Result<ResponseHandlingResult<T>> {
-        let request_response_code = self.request_response_filters.get(protocol);
+    ) -> crate::Result<Vec<ExecutorEvent<T>>> {
+        let request_response_code = self.request_response_filters.get(&protocol);
         let request_response_code = request_response_code
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
 
         tracing::trace!(target: LOG_TARGET, ?protocol, "inject response");
 
-        Python::with_gil(|py| -> pyo3::PyResult<ResponseHandlingResult<T>> {
-            let fun = PyModule::from_code(
-                py,
-                request_response_code,
-                "",
-                format!("module{:?}", self.interface).as_str(),
-            )?
-            .getattr("inject_response")?;
-
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
             //
             // SAFETY: each filter has its own context and it has the same lifetime as
@@ -384,7 +376,15 @@ where
             let peer_py = peer.into_executor_object(py);
             let response_py = response.into_executor_object(py);
 
-            fun.call1((ctx, peer_py, response_py))?.extract()
+            call_executor!(
+                py,
+                self.interface,
+                &request_response_code,
+                "inject_response",
+                ctx,
+                peer_py,
+                response_py
+            )
         })
         .map_err(From::from)
     }
