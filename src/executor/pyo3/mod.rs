@@ -141,18 +141,10 @@ where
     }
 
     /// Register `peer` to filter.
-    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>> {
         tracing::trace!(target: LOG_TARGET, ?peer, "register peer");
 
-        Python::with_gil(|py| {
-            let fun = PyModule::from_code(
-                py,
-                &self.code,
-                "",
-                format!("module{:?}", self.interface).as_str(),
-            )?
-            .getattr("register_peer")?;
-
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
             //
             // SAFETY: each filter has its own context and it has the same lifetime as
@@ -161,8 +153,16 @@ where
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
             let peer_py = peer.into_executor_object(py);
 
-            fun.call1((ctx, peer_py)).map(|_| ()).map_err(From::from)
+            call_executor!(
+                py,
+                self.interface,
+                &self.code,
+                "register_peer",
+                ctx,
+                peer_py
+            )
         })
+        .map_err(From::from)
     }
 
     /// Discover `peer`.
@@ -191,18 +191,10 @@ where
     }
 
     /// Unregister `peer` from filter.
-    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>> {
         tracing::trace!(target: LOG_TARGET, ?peer, "unregister peer");
 
-        Python::with_gil(|py| {
-            let fun = PyModule::from_code(
-                py,
-                &self.code,
-                "",
-                format!("module{:?}", self.interface).as_str(),
-            )?
-            .getattr("unregister_peer")?;
-
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
             //
             // SAFETY: each filter has its own context and it has the same lifetime as
@@ -211,8 +203,16 @@ where
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
             let peer_py = peer.into_executor_object(py);
 
-            fun.call1((ctx, peer_py)).map(|_| ()).map_err(From::from)
+            call_executor!(
+                py,
+                self.interface,
+                &self.code,
+                "unregister_peer",
+                ctx,
+                peer_py
+            )
         })
+        .map_err(From::from)
     }
 
     /// Install notification filter for `protocol`.

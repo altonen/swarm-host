@@ -325,7 +325,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             tokio::select! {
                 command = self.command_rx.recv() => match command.expect("channel to stay open ") {
                     FilterCommand::RegisterPeer { peer, sink } => {
-                        if let Err(error) = self.register_peer(peer, sink) {
+                        if let Err(error) = self.register_peer(peer, sink).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?peer,
@@ -345,7 +345,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         }
                     }
                     FilterCommand::UnregisterPeer { peer } => {
-                        if let Err(error) = self.unregister_peer(peer) {
+                        if let Err(error) = self.unregister_peer(peer).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?peer,
@@ -465,7 +465,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Register peer to [`Filter`].
-    fn register_peer(
+    async fn register_peer(
         &mut self,
         peer: T::PeerId,
         sink: Box<dyn PacketSink<T>>,
@@ -473,15 +473,17 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         tracing::debug!(target: LOG_TARGET, ?peer, "register peer");
 
         match self.peers.entry(peer) {
+            Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
             Entry::Vacant(entry) => {
-                self.executor
+                let events = self
+                    .executor
                     .as_mut()
                     .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
                     .register_peer(peer)?;
+
                 entry.insert(sink);
-                Ok(())
+                self.process_events(events).await
             }
-            Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
         }
     }
 
@@ -498,17 +500,20 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     /// Unregister peer to [`Filter`].
-    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
+    async fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?peer, "unregister peer");
 
-        self.peers
+        let events = self
+            .peers
             .remove(&peer)
             .map_or(Err(Error::PeerDoesntExist), |_| {
                 self.executor
                     .as_mut()
                     .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
                     .unregister_peer(peer)
-            })
+            })?;
+
+        self.process_events(events).await
     }
 
     /// Install filter context.

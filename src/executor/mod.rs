@@ -97,13 +97,13 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     fn poll(&mut self) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Register `peer` to filter.
-    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
+    fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Discover peer.
     fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Unregister `peer` from filter.
-    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()>;
+    fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Install notification filter for `protocol`.
     fn install_notification_filter(
