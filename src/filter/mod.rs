@@ -1,7 +1,7 @@
 use crate::{
     backend::{Idable, NetworkBackend, PacketSink},
     error::{Error, ExecutorError},
-    executor::{Executor, ExecutorEvent, RequestHandlingResult, ResponseHandlingResult},
+    executor::{Executor, ExecutorEvent, ResponseHandlingResult},
     heuristics::HeuristicsHandle,
     types::DEFAULT_CHANNEL_SIZE,
 };
@@ -410,7 +410,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         protocol,
                         request,
                     } => {
-                        if let Err(error) = self.inject_request(&protocol, peer, request).await {
+                        if let Err(error) = self.inject_request(protocol.clone(), peer, request).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -484,6 +484,80 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                     "failed to send notification"
                                 );
                             }
+                        }
+                    }
+                }
+                ExecutorEvent::SendRequest {
+                    protocol,
+                    peer,
+                    payload,
+                } => {
+                    tracing::trace!(target: LOG_TARGET, ?peer, "send request");
+                    tracing::trace!(target: LOG_TARGET_MSG, ?payload);
+
+                    // TODO: insert into `self.pending_outbound` maybe?
+
+                    if let Err(error) = self
+                        .peers
+                        .get_mut(&peer)
+                        .ok_or(Error::PeerDoesntExist)?
+                        .send_request(protocol.clone(), payload)
+                        .await
+                        .map(|_| ())
+                    {
+                        tracing::error!(
+                            target: LOG_TARGET,
+                            ?error,
+                            ?protocol,
+                            ?peer,
+                            "failed to send request"
+                        );
+                    }
+                }
+                ExecutorEvent::SendResponse { peer, payload } => {
+                    match self.pending_inbound.remove(&peer) {
+                        Some(request_id) => {
+                            tracing::trace!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                ?request_id,
+                                "send response"
+                            );
+                            tracing::trace!(target: LOG_TARGET_MSG, ?payload);
+
+                            match self
+                                .peers
+                                .get_mut(&peer)
+                                .ok_or(Error::PeerDoesntExist)?
+                                .send_response(request_id, payload)
+                                .await
+                            {
+                                Ok(_) => {
+                                    // TODO: register the new request
+                                    // self.heuristics_handle.register_request_sent(
+                                    //     self.interface,
+                                    //     protocol.to_owned(),
+                                    //     peer,
+                                    //     &response,
+                                    // );
+                                }
+                                Err(error) => {
+                                    tracing::warn!(
+                                        target: LOG_TARGET,
+                                        ?request_id,
+                                        ?peer,
+                                        ?error,
+                                        "failed to send response"
+                                    );
+                                }
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                target: LOG_TARGET,
+                                ?peer,
+                                "tried to respond to request that doesn't exist"
+                            );
                         }
                     }
                 }
@@ -649,7 +723,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     /// Inject request to filter.
     async fn inject_request(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<()> {
@@ -663,85 +737,18 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         self.pending_inbound.insert(peer, *request.id());
         self.heuristics_handle.register_request_received(
             self.interface,
-            protocol.to_owned(),
+            protocol.clone(),
             peer,
             &request,
         );
 
-        match self
+        let events = self
             .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_request(protocol, peer, request)?
-        {
-            RequestHandlingResult::DoNothing => {
-                tracing::trace!(target: LOG_TARGET, ?peer, "ignore request");
-                Ok(())
-            }
-            RequestHandlingResult::Request { peer, payload } => {
-                tracing::trace!(target: LOG_TARGET, ?peer, "send request");
-                tracing::trace!(target: LOG_TARGET_MSG, ?payload);
+            .inject_request(protocol, peer, request)?;
 
-                self.peers
-                    .get_mut(&peer)
-                    .ok_or(Error::PeerDoesntExist)?
-                    .send_request(protocol.clone(), payload)
-                    .await
-                    .map(|_| ())
-            }
-            RequestHandlingResult::Response { responses } => {
-                tracing::trace!(target: LOG_TARGET, number_of_responses = ?responses.len(), "send responses");
-
-                for (peer, payload) in responses {
-                    match self.pending_inbound.remove(&peer) {
-                        Some(request_id) => {
-                            tracing::trace!(
-                                target: LOG_TARGET,
-                                ?peer,
-                                ?request_id,
-                                "send response"
-                            );
-
-                            match self
-                                .peers
-                                .get_mut(&peer)
-                                .ok_or(Error::PeerDoesntExist)?
-                                .send_response(request_id, payload)
-                                .await
-                            {
-                                Ok(_) => {
-                                    // TODO: register the new request
-                                    // self.heuristics_handle.register_request_sent(
-                                    //     self.interface,
-                                    //     protocol.to_owned(),
-                                    //     peer,
-                                    //     &response,
-                                    // );
-                                }
-                                Err(error) => {
-                                    tracing::warn!(
-                                        target: LOG_TARGET,
-                                        ?request_id,
-                                        ?peer,
-                                        ?error,
-                                        "failed to send response"
-                                    );
-                                }
-                            }
-                        }
-                        None => {
-                            tracing::warn!(
-                                target: LOG_TARGET,
-                                ?peer,
-                                "tried to respond to request that doesn't exist"
-                            );
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-        }
+        self.process_events(events).await
     }
 
     /// Inject response to filter.

@@ -188,6 +188,24 @@ where
                     protocol,
                     notification,
                 });
+            } else if let Some(info) = dict.get_item(&"SendRequest") {
+                let info = info.downcast::<PyDict>()?;
+                let payload = info.get_item("request").unwrap().extract::<Vec<u8>>()?;
+                let peer = T::PeerId::from_executor_object(&info.get_item("peer").unwrap());
+                let protocol =
+                    T::Protocol::from_executor_object(&info.get_item("protocol").unwrap());
+
+                results.push(ExecutorEvent::SendRequest {
+                    peer,
+                    protocol,
+                    payload,
+                });
+            } else if let Some(info) = dict.get_item(&"SendResponse") {
+                let info = info.downcast::<PyDict>()?;
+                let payload = info.get_item("response").unwrap().extract::<Vec<u8>>()?;
+                let peer = T::PeerId::from_executor_object(&info.get_item("peer").unwrap());
+
+                results.push(ExecutorEvent::SendResponse { peer, payload });
             }
         }
 

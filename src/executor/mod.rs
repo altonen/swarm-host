@@ -77,6 +77,27 @@ pub enum ExecutorEvent<T: NetworkBackend> {
         /// Notification to forward.
         notification: T::Message,
     },
+
+    /// Send request to peer.
+    SendRequest {
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+
+        /// Request.
+        payload: Vec<u8>,
+    },
+
+    /// Send response.
+    SendResponse {
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Response.
+        payload: Vec<u8>,
+    },
 }
 
 /// Trait which allows converting types defined by the `NetworkBackend` into types that `Executor` understands.
@@ -142,10 +163,10 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Inject request to filter.
     fn inject_request(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         request: T::Request,
-    ) -> crate::Result<RequestHandlingResult<T>>;
+    ) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
     /// Inject `response` to filter.
     fn inject_response(

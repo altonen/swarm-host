@@ -19,7 +19,7 @@ import random
 """
     Inject request into filter.
 """
-def inject_request(ctx, peer, request):
+def inject_request(ctx, protocol, peer, request):
     request = BlockRequest(bytes(request['Request']['payload']))
 
     block_hash = request.hash()
@@ -30,38 +30,39 @@ def inject_request(ctx, peer, request):
         print("block number", number)
         block_hash = ctx.get_block_hash_from_number(number)
         if block_hash is None:
-            return { 'Reject': None }
+            return
     else:
         block_hash = block_hash.hex()
 
     # check if the block is already in the storage and if so, create a response right away
     block = ctx.database.get(block_hash)
     if block is not None:
-        return ctx.return_response(peer, block)
+        ctx.send_response(peer, block)
+        return
 
     # check if the request is already pending and if so, add peer to the table
     # of peers expecting a response and return early
     if block_hash in ctx.pending_requests:
         ctx.pending_requests[block_hash].append(peer)
-        return { 'DoNothing': None }
+        return
 
     # if the block is already cached, just mark that `peer` is expecting a response
     if block_hash in ctx.cached_requests:
         ctx.cached_requests[block_hash]['peers'].append(peer)
-        return { 'DoNothing': None }
+        return
 
     # get provider for the block
     provider = ctx.get_provider(block_hash)
     if provider is None and ctx.is_unknown_block(block_hash):
         print("unknown block", block_hash)
-        return { 'Reject': None }
+        return
 
     # if provider is `None` it means all peers that can provide the block
     # are busy and cannot answer the block request right now. cache the 
     # block request and send it later when one of the providers free up.
     if provider is None:
         ctx.cached_requests[block_hash] = { 'request': request, 'peers': [peer] }
-        return { 'DoNothing': None }
+        return
 
     # set the request as pending, mark the provider as busy and return
     # the request so the filter filter can forward it to `provider`
@@ -69,12 +70,7 @@ def inject_request(ctx, peer, request):
     ctx.peers[provider].busy = True
 
     print("return request for", provider)
-
-    return { 'Request': {
-            'peer': provider,
-            'payload': request.to_bytes(),
-        }
-    }
+    ctx.send_request(protocol, provider, request.to_bytes())
 
 # inject response to filter
 def inject_response(ctx, peer, response):

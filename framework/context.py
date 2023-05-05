@@ -91,7 +91,7 @@ class Context():
     """
         Create `BlockResponse` from a block and return it to user.
     """
-    def return_response(self, peer, block):
+    def send_response(self, peer, block):
         print("try to return response to %s for block %s" % (peer, block))
         block = json.loads(block)
 
@@ -110,11 +110,11 @@ class Context():
             justification,
         )
 
-        return { 'Response': [{
+        self.pending_events.append({ 'SendResponse': {
                 'peer': peer,
-                'payload': response,
-            }]
-        }
+                'response': response,
+            }
+        })
 
     """
         Forward `notification` to `peers`.
@@ -124,6 +124,14 @@ class Context():
                 'peers': peers,
                 'protocol': protocol,
                 'notification': notification,
+            }
+        })
+
+    def send_request(self, protocol, peer, request):
+        self.pending_events.append({ 'SendRequest': {
+                'protocol': protocol,
+                'peer': peer,
+                'request': request
             }
         })
 
