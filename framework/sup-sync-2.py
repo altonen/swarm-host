@@ -37,10 +37,7 @@ def inject_request(ctx, protocol, peer, request):
     # check if the block is already in the storage and if so, create a response right away
     block = ctx.database.get(block_hash)
     if block is not None:
-        if request.max_blocks() == 1:
-            ctx.create_and_send_response(peer, block)
-        else:
-            ctx.tmp(peer, block_hash, request.direction(), request.max_blocks())
+        ctx.create_and_send_response(peer, block_hash, request.direction(), request.max_blocks())
         return
 
     # check if the request is already pending and if so, add peer to the table
@@ -97,7 +94,7 @@ def inject_response(ctx, peer, response):
             # create a response and return it to all peers who are waiting for it
             if pending_block == block_hash:
                 completed_pending_requests.append(block_hash)
-                response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
+                response = BlockResponse.from_block(block.hash, block.header, [body for body in block.body], block.justifications)
 
                 for peer in ctx.pending_requests[pending_block]:
                     ctx.send_response(peer, response)
@@ -106,7 +103,7 @@ def inject_response(ctx, peer, response):
         for pending_block in ctx.cached_requests:
             if pending_block == block_hash:
                 completed_cached_requests.append(block_hash)
-                response = BlockResponse.new(block.hash, block.header, [body for body in block.body], block.justifications)
+                response = BlockResponse.from_block(block.hash, block.header, [body for body in block.body], block.justifications)
 
                 for peer in ctx.cached_requests[pending_block]['peers']:
                     ctx.send_response(peer, response)

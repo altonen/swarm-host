@@ -47,6 +47,9 @@ class BlockRequest():
     def max_blocks(self):
         return self.request.max_blocks
 
+    """
+        Get the direction for requested block range.
+    """
     def direction(self):
         if self.request.direction == Direction.ASCENDING:
             return Direction.ASCENDING

@@ -86,46 +86,10 @@ class Context():
         peers = ctx.cached_requests[block]['peers']
         del ctx.cached_requests[block]
 
-        # TODO: implement properly
-        # ctx.in
-        # result = None
-        # for peer in peers:
-        #     if result is None:
-        #         result = ctx.inject_request(peer, request)
-        #     else:
-        #         ctx.inject_request(peer, request)
-        # return result
-
     """
-        Create `BlockResponse` from a block and return it to user.
+        Create `BlockResponse` and push it to pending events
     """
-    def create_and_send_response(self, peer, block):
-        print("try to return response to %s for block %s" % (peer, block))
-        block = json.loads(block)
-
-        justification = block.get('justification')
-        if justification is not None:
-            justification = bytes.fromhex(justification)
-
-        body = block.get('body')
-        if body is not None:
-            body = [bytes.fromhex(body) for body in body]
-
-        response = BlockResponse.new(
-            bytes.fromhex(block['hash']),
-            bytes.fromhex(block['header']),
-            body,
-            justification,
-        )
-
-        self.pending_events.append({ 'SendResponse': {
-                'peer': peer,
-                'response': response,
-            }
-        })
-
-    def tmp(self, peer, start_hash, direction, max_blocks):
-        print("try to return response to %s for block %s, direction %d, max blocks %d" % (peer, str(start_hash), direction, max_blocks))
+    def create_and_send_response(self, peer, start_hash, direction, max_blocks):
         if start_hash not in self.block_hash_to_number:
             raise Exception("mapping between block hash and number doesn not exist")
 
@@ -166,7 +130,7 @@ class Context():
 
         self.pending_events.append({ 'SendResponse': {
                 'peer': peer,
-                'response': BlockResponse.new_from_blocks(block_data),
+                'response': BlockResponse.from_blocks(block_data),
             }
         })
 

@@ -24,7 +24,7 @@ class BlockResponse():
         self.response = proto.BlockResponse()
         self.response.ParseFromString(response)
 
-    def new(hash, header, body, justification):
+    def from_block(hash, header, body, justification):
         block_data = proto.BlockData()
         block_data.hash = hash
         block_data.header = header
@@ -40,7 +40,7 @@ class BlockResponse():
         response.blocks.append(block_data)
         return response.SerializeToString()
 
-    def new_from_blocks(blocks):
+    def from_blocks(blocks):
         response = proto.BlockResponse()
 
         for hash, header, body, justification in blocks:
