@@ -25,7 +25,7 @@ sync_filter = open("sup-sync-2.py").read()
 
 interfaces = []
 
-for i in range(0, 1):
+for i in range(0, 3):
     iface_id = host.create_interface(rpc_address)
     host.install_context_filter(iface_id, context_filter)
     host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)

@@ -18,6 +18,10 @@ class Attributes(IntFlag):
 	# Include a justification for the block.
 	JUSTIFICATION = 16
 
+class Direction(IntFlag):
+    ASCENDING = 0
+    DESCENDING = 1
+
 class BlockRequest():
     def __init__(self, request):
         self.original = request
@@ -36,6 +40,17 @@ class BlockRequest():
     def flags(self):
         flags = struct.pack('<I', self.request.fields)
         return struct.unpack('>I', flags)[0]
+
+    """
+        Return the maximum number of blocks requested.
+    """
+    def max_blocks(self):
+        return self.request.max_blocks
+
+    def direction(self):
+        if self.request.direction == Direction.ASCENDING:
+            return Direction.ASCENDING
+        return Direction.DESCENDING
 
     """
         Get block hash of the request

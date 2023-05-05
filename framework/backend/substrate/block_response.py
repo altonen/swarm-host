@@ -40,6 +40,25 @@ class BlockResponse():
         response.blocks.append(block_data)
         return response.SerializeToString()
 
+    def new_from_blocks(blocks):
+        response = proto.BlockResponse()
+
+        for hash, header, body, justification in blocks:
+            block_data = proto.BlockData()
+            block_data.hash = hash
+            block_data.header = header
+
+            if body is not None:
+                for body in body:
+                    block_data.body.append(body)
+
+            if justification is not None:
+                block_data.justification = justification
+
+            response.blocks.append(block_data)
+
+        return response.SerializeToString()
+
     def blocks(self):
         return self.response.blocks
 

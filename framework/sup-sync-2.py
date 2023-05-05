@@ -37,7 +37,10 @@ def inject_request(ctx, protocol, peer, request):
     # check if the block is already in the storage and if so, create a response right away
     block = ctx.database.get(block_hash)
     if block is not None:
-        ctx.create_and_send_response(peer, block)
+        if request.max_blocks() == 1:
+            ctx.create_and_send_response(peer, block)
+        else:
+            ctx.tmp(peer, block_hash, request.direction(), request.max_blocks())
         return
 
     # check if the request is already pending and if so, add peer to the table

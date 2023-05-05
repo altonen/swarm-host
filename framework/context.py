@@ -1,5 +1,8 @@
 from scalecodec.base import RuntimeConfiguration
 
+from backend.substrate.block_response import BlockResponse
+from backend.substrate.block_request import Direction
+
 import redis
 
 # maximum peers each interface can have
@@ -11,6 +14,7 @@ class Context():
         self.database.ping()
         self.peers = {}
         self.number_to_block_hash = {}
+        self.block_hash_to_number = {}
         self.cached_requests = {}
         self.pending_requests = {}
         self.runtime_config = None
@@ -24,6 +28,8 @@ class Context():
     def set_block_hash(self, number, hash):
         if number not in self.number_to_block_hash:
             self.number_to_block_hash[number] = hash
+        if hash not in self.block_hash_to_number:
+            self.block_hash_to_number[hash] = number
 
     """
         Get block hash with a block number.
@@ -115,6 +121,52 @@ class Context():
         self.pending_events.append({ 'SendResponse': {
                 'peer': peer,
                 'response': response,
+            }
+        })
+
+    def tmp(self, peer, start_hash, direction, max_blocks):
+        print("try to return response to %s for block %s, direction %d, max blocks %d" % (peer, str(start_hash), direction, max_blocks))
+        if start_hash not in self.block_hash_to_number:
+            raise Exception("mapping between block hash and number doesn not exist")
+
+        start_number = self.block_hash_to_number[start_hash]
+        block_data = []
+        block_number = start_number
+
+        while True:
+            if block_number not in self.number_to_block_hash:
+                break
+
+            block_hash = self.number_to_block_hash[block_number]
+            block = self.database.get(block_hash)
+            block = json.loads(block)
+
+            justification = block.get('justification')
+            if justification is not None:
+                justification = bytes.fromhex(justification)
+
+            body = block.get('body')
+            if body is not None:
+                body = [bytes.fromhex(body) for body in body]
+
+            block_data.append((
+                bytes.fromhex(block['hash']),
+                bytes.fromhex(block['header']),
+                body,
+                justification,
+            ))
+
+            max_blocks -= 1
+            if max_blocks == 0:
+                break
+            if direction == Direction.ASCENDING:
+                block_number += 1
+            else:
+                block_number -= 1
+
+        self.pending_events.append({ 'SendResponse': {
+                'peer': peer,
+                'response': BlockResponse.new_from_blocks(block_data),
             }
         })
 
