@@ -14,10 +14,9 @@ class Context():
         self.cached_requests = {}
         self.pending_requests = {}
         self.runtime_config = None
-        self.peer_events = []
         self.pending_peers = set()
         self.known_peers = set()
-        self.notification_events = []
+        self.pending_events = []
 
     """
         Map block number to block hash.
@@ -120,8 +119,8 @@ class Context():
     """
         Forward `notification` to `peers`.
     """
-    def forward_notification(self, protocol, notification, peers):
-        self.peer_events.append({ 'Forward': {
+    def forward_notification(self, protocol, peers, notification):
+        self.pending_events.append({ 'Forward': {
                 'peers': peers,
                 'protocol': protocol,
                 'notification': notification,
@@ -160,13 +159,10 @@ def discover_peer(ctx: Context, peer):
     for peer in list(ctx.known_peers)[:npeers]:
         ctx.known_peers.remove(peer)
         ctx.pending_peers.add(peer)
-        ctx.peer_events.append({ 'Connect': peer })
+        ctx.pending_events.append({ 'Connect': peer })
 
 def poll(ctx: Context):
-    pending_events = []
-    pending_events.extend(ctx.peer_events)
-    pending_events.extend(ctx.notification_events)
-    ctx.peer_events.clear()
-    ctx.notification_events.clear()
+    pending_events = ctx.pending_events.copy()
+    ctx.pending_events.clear()
 
     return pending_events
