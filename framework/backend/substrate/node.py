@@ -166,38 +166,8 @@ class Node():
             args,
             stdout=self.logfile,
             stderr=subprocess.STDOUT,
-            env={"RUST_LOG": "info,sync=debug,tx=debug"}
+            env={"RUST_LOG": "info,sync=trace"}
         )
-
-        # TODO: zzz
-        time.sleep(2)
-
-        self.substrate = SubstrateInterface(
-            url = "ws://127.0.0.1:%d" % (self.ws_port),
-            type_registry_preset = self.type_registry_preset,
-        )
-
-        # get local peer id
-        result = self.substrate.rpc_request("system_localPeerId", params = None).get("result")
-        if result is not None:
-            logging.debug("local peer id: %s" % (result))
-            self.local_peer_id = result
-        else:
-            raise RpcQueryError("failed to fetch local peer id: `%s`" % (response['error']['message']))
-
-        # fetch metadata for filters
-        response = self.substrate.rpc_request("state_getMetadata", params = None)
-
-        if 'error' in response:
-            raise RpcQueryError("failed to fetch metadata: `%s`" % (response['error']['message']))
-
-        if response.get('result'):
-            self.raw_metadata = bytearray.fromhex(response.get('result')[2:])
-            RuntimeConfiguration().update_type_registry(load_type_registry_preset(name="core"))
-            self.metadata = RuntimeConfiguration().create_scale_object(
-                'MetadataVersioned', data = ScaleBytes(response.get('result'))
-            )
-            self.metadata.decode()
 
         return self
 
