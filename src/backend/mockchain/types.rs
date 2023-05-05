@@ -6,7 +6,7 @@ use crate::{
 use parity_scale_codec::{Decode, Encode};
 use pyo3::{
     prelude::*,
-    types::{PyDict, PyList},
+    types::{PyDict, PyList, PyString},
 };
 use rand::{
     distributions::{Distribution, Standard},
@@ -87,6 +87,14 @@ impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Message {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         self.into_py(context)
+    }
+}
+
+impl FromExecutorObject for <MockchainBackend as NetworkBackend>::Message {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(_executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        todo!();
     }
 }
 
@@ -384,6 +392,42 @@ pub enum ProtocolId {
 
     /// Generic protocol.
     Generic,
+}
+
+impl FromExecutorObject for <MockchainBackend as NetworkBackend>::Protocol {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        let protocol = executor_type
+            .downcast::<PyString>()
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        match protocol {
+            "Transaction" => ProtocolId::Transaction,
+            "Block" => ProtocolId::Block,
+            "PeerExchange" => ProtocolId::PeerExchange,
+            "BlockRequest" => ProtocolId::BlockRequest,
+            "Generic" => ProtocolId::Generic,
+            _ => panic!("invalid protocol received"),
+        }
+    }
+}
+
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::Protocol {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        match self {
+            ProtocolId::Transaction => PyString::new(context, "Transaction").into(),
+            ProtocolId::Block => PyString::new(context, "Block").into(),
+            ProtocolId::PeerExchange => PyString::new(context, "PeerExchange").into(),
+            ProtocolId::BlockRequest => PyString::new(context, "BlockRequest").into(),
+            ProtocolId::Generic => PyString::new(context, "Generic").into(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

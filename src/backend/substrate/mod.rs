@@ -7,7 +7,11 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
-use pyo3::{prelude::*, types::PyDict, FromPyObject, IntoPy};
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyString},
+    FromPyObject, IntoPy,
+};
 use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -69,6 +73,30 @@ impl<'de> Deserialize<'de> for ProtocolName {
         D: Deserializer<'de>,
     {
         deserializer.deserialize_str(ProtocolNameVisitor)
+    }
+}
+
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::Protocol {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        let protocol = executor_type
+            .downcast::<PyString>()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        ProtocolName(SubstrateProtocolName::from(protocol))
+    }
+}
+
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Protocol {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        PyString::new(context, &self.0.to_string()).into()
     }
 }
 
@@ -475,6 +503,14 @@ impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::Message {
 
     fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
         self.0.into_py(context)
+    }
+}
+
+impl FromExecutorObject for <SubstrateBackend as NetworkBackend>::Message {
+    type ExecutorType<'a> = &'a PyAny;
+
+    fn from_executor_object(executor_type: &'_ Self::ExecutorType<'_>) -> Self {
+        Message(executor_type.extract::<Vec<u8>>().unwrap())
     }
 }
 

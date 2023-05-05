@@ -1,22 +1,18 @@
 use crate::{
     backend::{Idable, NetworkBackend, PacketSink},
     error::{Error, ExecutorError},
-    executor::{
-        Executor, ExecutorEvent, NotificationHandlingResult, RequestHandlingResult,
-        ResponseHandlingResult,
-    },
+    executor::{Executor, ExecutorEvent, RequestHandlingResult, ResponseHandlingResult},
     heuristics::HeuristicsHandle,
     types::DEFAULT_CHANNEL_SIZE,
 };
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
-use tokio::{sync::mpsc, time};
+use tokio::sync::mpsc;
 use tracing::Level;
 
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
-    time::Duration,
 };
 
 #[cfg(test)]
@@ -399,7 +395,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         protocol,
                         notification,
                     } => {
-                        if let Err(error) = self.inject_notification(&protocol, peer, notification).await {
+                        if let Err(error) = self.inject_notification(protocol.clone(), peer, notification).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?protocol,
@@ -458,6 +454,39 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     })
                     .await
                     .expect("channel to stay open"),
+                ExecutorEvent::Forward {
+                    peers,
+                    protocol,
+                    notification,
+                } => {
+                    for peer in peers {
+                        let Some(sink) = self.peers.get_mut(&peer) else {
+                            tracing::debug!(target: LOG_TARGET, ?peer, "peer doesn't exist");
+                            continue;
+                        };
+
+                        match sink
+                            .send_packet(Some(protocol.clone()), &notification)
+                            .await
+                        {
+                            Ok(_) => {
+                                self.heuristics_handle.register_notification_sent(
+                                    self.interface,
+                                    protocol.clone(),
+                                    vec![peer],
+                                    &notification,
+                                );
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    target: LOG_TARGET,
+                                    ?err,
+                                    "failed to send notification"
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -564,7 +593,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     /// Inject notification to filter.
     async fn inject_notification(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<()> {
@@ -582,53 +611,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .executor
             .as_mut()
             .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_notification(protocol, peer, notification.clone())
+            .inject_notification(protocol.clone(), peer, notification.clone())
         {
-            Ok(NotificationHandlingResult::Drop) => {
-                tracing::trace!(target: LOG_TARGET, "drop notification");
-                Ok(())
-            }
-            Ok(NotificationHandlingResult::Delay { delay }) => {
-                tracing::trace!(target: LOG_TARGET, "delay forwarding the notification");
-
-                // push the notification to list of delayed notifications
-                // when the timer expires, it is handled like any other forwarded notification
-                self.delayed_notifications.push(Box::pin(async move {
-                    time::sleep(Duration::from_secs(delay as u64)).await;
-                    notification
-                }));
-
-                Ok(())
-            }
-            Ok(NotificationHandlingResult::Forward) => {
-                tracing::trace!(
-                    target: LOG_TARGET,
-                    ?protocol,
-                    ?peer,
-                    "forward notification to connected peers",
-                );
-
-                for (peer, sink) in self.peers.iter_mut() {
-                    match sink
-                        .send_packet(Some(protocol.clone()), &notification)
-                        .await
-                    {
-                        Ok(_) => {
-                            self.heuristics_handle.register_notification_sent(
-                                self.interface,
-                                protocol.clone(),
-                                vec![*peer],
-                                &notification,
-                            );
-                        }
-                        Err(err) => {
-                            tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
-                        }
-                    }
-                }
-
-                Ok(())
-            }
+            Ok(events) => self.process_events(events).await,
             Err(Error::ExecutorError(ExecutorError::FilterDoesntExist)) => {
                 tracing::trace!(
                     target: LOG_TARGET,
@@ -784,7 +769,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .inject_response(protocol, peer, response)?
         {
             ResponseHandlingResult::DoNothing => Ok(()),
-            ResponseHandlingResult::Response { responses, request } => {
+            ResponseHandlingResult::Response {
+                responses,
+                request: _,
+            } => {
                 tracing::trace!(target: LOG_TARGET, number_of_response = ?responses.len(), "send responses");
 
                 for (peer, payload) in responses {

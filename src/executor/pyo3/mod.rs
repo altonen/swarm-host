@@ -3,8 +3,7 @@ use crate::{
     error::{Error, ExecutorError},
     executor::{
         pyo3::conversion::ExecutorEvents, Executor, ExecutorEvent, FromExecutorObject,
-        IntoExecutorObject, NotificationHandlingResult, RequestHandlingResult,
-        ResponseHandlingResult,
+        IntoExecutorObject, RequestHandlingResult, ResponseHandlingResult,
     },
 };
 
@@ -68,6 +67,8 @@ where
     for<'a> <T as NetworkBackend>::Request:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::Response:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::Protocol:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::InterfaceParameters:
         FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
@@ -270,11 +271,11 @@ where
     /// Inject `notification` from `peer` to filter.
     fn inject_notification(
         &mut self,
-        protocol: &T::Protocol,
+        protocol: T::Protocol,
         peer: T::PeerId,
         notification: T::Message,
-    ) -> crate::Result<NotificationHandlingResult> {
-        let notification_filter_code = self.notification_filters.get(protocol);
+    ) -> crate::Result<Vec<ExecutorEvent<T>>> {
+        let notification_filter_code = self.notification_filters.get(&protocol);
         let notification_filter_code = notification_filter_code
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
@@ -286,15 +287,7 @@ where
             "inject notification"
         );
 
-        Python::with_gil(|py| -> pyo3::PyResult<NotificationHandlingResult> {
-            let fun = PyModule::from_code(
-                py,
-                notification_filter_code,
-                "",
-                format!("module{:?}", self.interface).as_str(),
-            )?
-            .getattr("inject_notification")?;
-
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
             //
             // SAFETY: each filter has its own context and it has the same lifetime as
@@ -302,9 +295,19 @@ where
             let ctx: &PyAny =
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
             let peer_py = peer.into_executor_object(py);
+            let protocol_py = protocol.into_executor_object(py);
             let notification_py = notification.into_executor_object(py);
 
-            fun.call1((ctx, peer_py, notification_py))?.extract()
+            call_executor!(
+                py,
+                self.interface,
+                &notification_filter_code,
+                "inject_notification",
+                ctx,
+                peer_py,
+                protocol_py,
+                notification_py
+            )
         })
         .map_err(From::from)
     }

@@ -151,6 +151,8 @@ impl<'a, T: NetworkBackend> FromPyObject<'a> for ExecutorEvents<T>
 where
     <T as NetworkBackend>::PeerId: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     <T as NetworkBackend>::Request: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::Message: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
+    <T as NetworkBackend>::Protocol: FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     RequestHandlingResult<T>: FromPyObject<'a>,
 {
     fn extract(object: &'a PyAny) -> PyResult<Self> {
@@ -167,6 +169,25 @@ where
             if let Some(peer) = dict.get_item(&"Connect") {
                 let peer = T::PeerId::from_executor_object(&peer);
                 results.push(ExecutorEvent::<T>::Connect { peer });
+            } else if let Some(info) = dict.get_item(&"Forward") {
+                let info = info.downcast::<PyDict>()?;
+                let notification =
+                    T::Message::from_executor_object(&info.get_item("notification").unwrap());
+                let peers = info
+                    .get_item("peers")
+                    .unwrap()
+                    .downcast::<PyList>()?
+                    .iter()
+                    .map(|peer| T::PeerId::from_executor_object(&peer))
+                    .collect::<Vec<T::PeerId>>();
+                let protocol =
+                    T::Protocol::from_executor_object(&info.get_item("protocol").unwrap());
+
+                results.push(ExecutorEvent::Forward {
+                    peers,
+                    protocol,
+                    notification,
+                });
             }
         }
 

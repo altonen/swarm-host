@@ -229,7 +229,9 @@ pub trait NetworkBackend: Clone + Debug + 'static {
         + PartialEq
         + Eq
         + Send
-        + Sync;
+        + Sync
+        + IntoExecutorObject
+        + FromExecutorObject;
 
     /// Type identifying a message understood by the backend.
     type Message: Serialize
@@ -239,6 +241,7 @@ pub trait NetworkBackend: Clone + Debug + 'static {
         + Send
         + Sync
         + IntoExecutorObject
+        + FromExecutorObject
         + WithMessageInfo;
 
     /// Type identifying a request understood by the backend.
