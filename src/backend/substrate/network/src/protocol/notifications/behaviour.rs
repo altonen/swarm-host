@@ -801,18 +801,18 @@ impl Notifications {
                 *occ_entry.into_mut() = st;
             }
             st @ PeerState::DisabledPendingEnable { .. } => {
-                warn!(target: "sub-libp2p",
-					"PSM => Connect({}, {:?}): Already pending enabling.",
-					occ_entry.key().0, set_id);
+                //            warn!(target: "sub-libp2p",
+                // "PSM => Connect({}, {:?}): Already pending enabling.",
+                // occ_entry.key().0, set_id);
                 *occ_entry.into_mut() = st;
-                debug_assert!(false);
+                // debug_assert!(false);
             }
             st @ PeerState::Requested { .. } | st @ PeerState::PendingRequest { .. } => {
-                warn!(target: "sub-libp2p",
-					"PSM => Connect({}, {:?}): Duplicate request.",
-					occ_entry.key().0, set_id);
+                //            warn!(target: "sub-libp2p",
+                // "PSM => Connect({}, {:?}): Duplicate request.",
+                // occ_entry.key().0, set_id);
                 *occ_entry.into_mut() = st;
-                debug_assert!(false);
+                //            debug_assert!(false);
             }
 
             PeerState::Poisoned => {
