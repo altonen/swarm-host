@@ -180,9 +180,10 @@ def register_peer(ctx: Context, peer):
     if peer in ctx.pending_peers:
         ctx.pending_peers.remove(peer)
 
-def unregister_peer(ctx, peer):
+def unregister_peer(ctx: Context, peer):
     if peer in ctx.peers:
         del ctx.peers[peer]
+        ctx.known_peers.add(peer)
 
 def discover_peer(ctx: Context, peer):
     if peer in ctx.pending_peers or peer in ctx.peers:
