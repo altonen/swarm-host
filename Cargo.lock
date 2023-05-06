@@ -6048,6 +6048,7 @@ dependencies = [
  "rand 0.8.5",
  "sc-network",
  "sc-network-common",
+ "sc-peerset",
  "serde",
  "serde_cbor",
  "serde_json",

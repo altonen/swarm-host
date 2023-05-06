@@ -202,7 +202,7 @@ impl SubstrateNetwork {
         command_rx: mpsc::Receiver<Command>,
         genesis_hash: Vec<u8>,
         handshake: Option<Vec<u8>>,
-    ) -> Result<(PeerId, Self), Error> {
+    ) -> Result<(PeerId, Self, sc_peerset::PeersetHandle), Error> {
         let key_config = NodeKeyConfig::default();
         let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
@@ -404,6 +404,7 @@ impl SubstrateNetwork {
                 discovered: HashSet::new(),
                 rename: HashSet::new(),
             },
+            peerset_handle,
         ))
     }
 

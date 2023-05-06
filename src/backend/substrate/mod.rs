@@ -255,6 +255,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 
 pub struct InterfaceHandle {
     command_tx: mpsc::Sender<Command>,
+    peerset_handle: sc_peerset::PeersetHandle,
     interface_id: usize,
     peer_id: PeerId,
 }
@@ -273,7 +274,7 @@ impl InterfaceHandle {
         let (command_tx, command_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
         // TODO: create all protocols on substrate side
-        let (peer_id, network) = SubstrateNetwork::new(
+        let (peer_id, network, peerset_handle) = SubstrateNetwork::new(
             NodeType::Masquerade,
             Box::new(move |fut| {
                 tokio::spawn(fut);
@@ -385,6 +386,7 @@ impl InterfaceHandle {
                 interface_id,
                 command_tx,
                 peer_id: PeerId(peer_id),
+                peerset_handle,
             },
             Box::pin(ReceiverStream::new(rx)),
         ))
@@ -406,11 +408,7 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
         &mut self,
         peer: <SubstrateBackend as NetworkBackend>::PeerId,
     ) -> crate::Result<()> {
-        self.command_tx
-            .send(Command::Connect { peer: peer.0 })
-            .await
-            .expect("channel to stay open");
-
+        self.peerset_handle.connect_to_peer(peer.0);
         Ok(())
     }
 

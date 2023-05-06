@@ -14,6 +14,7 @@ pin-project = "1.0.12"
 petgraph = "0.6.3"
 rand = "0.8.5"
 sc-network = { version = "0.10.0-dev", path = "src/backend/substrate/network/" }
+sc-peerset = { version = "4.0.0-dev", path = "src/backend/substrate/network/peerset" }
 sc-network-common = { version = "0.10.0-dev", path = "src/backend/substrate/network/common" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_cbor = "0.11.2"
