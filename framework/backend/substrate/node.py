@@ -9,6 +9,7 @@ import os
 import logging
 import subprocess
 import time
+import random
 
 # TODO: add ability to query rpc and ws ports
 
@@ -24,6 +25,7 @@ class Node():
     """
     def __init__(self, type_registry_preset, default_path):
         self.type_registry_preset = type_registry_preset
+        self.p2p_port = None
         self.path = default_path
         self.exec_arguments = []
 
@@ -79,6 +81,30 @@ class Node():
             self.exec_arguments.append(path)
         else:
             raise InvalidConfiguration("`path` and `tmp` are mutually exclusive")
+        return self
+
+    def with_node_key(self, key):
+        logging.debug("node key: `%s`" % (key))
+        self.exec_arguments.append("--node-key")
+        self.exec_arguments.append(key)
+        return self
+
+    def with_mdns(self, with_mdns):
+        logging.debug("with mDNS: `%s`" % (with_mdns))
+        if with_mdns == False:
+            self.exec_arguments.append("--no-mdns")
+        return self
+
+    def with_bootnode(self, url):
+        logging.debug("bootnode: `%s`" % (url))
+        self.exec_arguments.append("--bootnodes")
+        self.exec_arguments.append(url)
+        return self
+
+    def with_listen_addr(self, addr):
+        logging.debug("listen address: `%s`" % (addr))
+        self.exec_arguments.append("--listen-addr")
+        self.exec_arguments.append(addr)
         return self
 
     """
@@ -152,6 +178,9 @@ class Node():
 
     def build(self):
         logging.info("launch node: path {}, arguments {}".format(self.path, self.exec_arguments))
+
+        if self.p2p_port is None:
+            self.p2p_port = random.random()
 
         self.logfile = open(
             "/tmp/%s-%d-%d" % (
