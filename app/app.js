@@ -14,6 +14,7 @@ class MessageHeuristics {
 class PeerHeuristics {
     constructor() {
         this.protocols = new Map();
+        this.interfaces = new Set();
     }
 
     addProtocol(protocol, messageHeuristics) {
@@ -54,6 +55,10 @@ socket.addEventListener('message', (event) => {
             protocolHeuristics.total_messages_received += peers[peer]["protocols"][protocol].total_messages_received;
             protocolHeuristics.redundant_bytes_sent += peers[peer]["protocols"][protocol].redundant_bytes_sent;
             protocolHeuristics.redundant_bytes_received += peers[peer]["protocols"][protocol].redundant_bytes_received;
+        }
+
+        for (var interface in peers[peer]['interfaces']) {
+            heuristics.interfaces.add(interface);
         }
     }
 
@@ -120,8 +125,15 @@ socket.addEventListener('message', (event) => {
             table.appendChild(row);
         });
 
+        let interfaces = document.createElement("p");
+        value['interfaces'].forEach((value, _key) => {
+            interfaces.textContent += value + ", ";
+        });
+        // interfaces.textContent.substring(0, interfaces.textContent.length - 2);
+
         document.getElementById("heuristics").appendChild(peer_id);
         document.getElementById("heuristics").appendChild(table);
+        document.getElementById("heuristics").appendChild(interfaces);
     });
 });
 
