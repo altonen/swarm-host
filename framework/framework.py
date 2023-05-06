@@ -22,11 +22,12 @@ time.sleep(1)
 context_filter = open("context.py").read()
 block_filter = open("block-announce-filter.py").read()
 sync_filter = open("sup-sync-2.py").read()
+preinit_filter = open("preinit.py").read()
 
 interfaces = []
 
 for i in range(0, 3):
-    iface_id = host.create_interface(rpc_address)
+    iface_id = host.create_interface(rpc_address, preinit_filter)
     host.install_context_filter(iface_id, context_filter)
     host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
     host.install_request_response_filter(iface_id, "/sup/sync/2", sync_filter)

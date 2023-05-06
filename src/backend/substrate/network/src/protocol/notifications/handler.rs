@@ -564,7 +564,7 @@ impl ConnectionHandler for NotifsHandler {
 
                         // Create `handshake_message` on a separate line to be sure that the
                         // lock is released as soon as possible.
-                        let handshake_message = in_substream_open.handshake;
+                        let handshake_message = protocol_info.config.handshake.read().clone();
                         in_substream_open
                             .substream
                             .send_handshake(handshake_message);
