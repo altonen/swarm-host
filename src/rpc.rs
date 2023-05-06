@@ -22,7 +22,11 @@ where
         "starting rpc server"
     );
 
-    let server = ServerBuilder::default().build(address).await.unwrap();
+    let server = ServerBuilder::default()
+        .max_connections(256)
+        .build(address)
+        .await
+        .unwrap();
     let mut module = RpcModule::new(overseer_tx);
 
     module
