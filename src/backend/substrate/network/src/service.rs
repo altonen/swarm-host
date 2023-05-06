@@ -180,6 +180,7 @@ pub struct SubstrateNetwork {
     pending_responses: FuturesUnordered<PendingResponse>,
     cached_responses: HashMap<u64, Vec<u8>>,
     discovered: HashSet<PeerId>,
+    peerset_handle: sc_peerset::PeersetHandle,
     rename: HashSet<PeerId>,
 }
 
@@ -403,6 +404,7 @@ impl SubstrateNetwork {
                 cached_responses: HashMap::new(),
                 discovered: HashSet::new(),
                 rename: HashSet::new(),
+                peerset_handle: peerset_handle.clone(),
             },
             peerset_handle,
         ))
