@@ -6,7 +6,6 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, StreamExt};
 use tokio::sync::mpsc;
 use tracing::Level;
 
@@ -289,9 +288,6 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     /// Heuristics handle.
     heuristics_handle: HeuristicsHandle<T>,
 
-    // Delayed notifications.
-    delayed_notifications: FuturesUnordered<BoxFuture<'static, T::Message>>,
-
     /// Poll interval.
     poll_interval: Duration,
 }
@@ -316,7 +312,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 peers: HashMap::new(),
                 pending_inbound: HashMap::new(),
                 _pending_outbound: HashMap::new(),
-                delayed_notifications: FuturesUnordered::new(),
             },
             FilterHandle::new(tx),
         )
@@ -441,9 +436,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         }
                     }
                 },
-                _notification = self.delayed_notifications.select_next_some(), if !self.delayed_notifications.is_empty() => {
-                    todo!();
-                }
                 _ = tokio::time::sleep(self.poll_interval) => {
                     if let Err(error) = self.poll_filter().await {
                         tracing::error!(
