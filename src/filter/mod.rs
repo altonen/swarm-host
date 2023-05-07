@@ -574,9 +574,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         Ok(())
     }
 
+    /// Poll the installed filter.
     async fn poll_filter(&mut self) -> crate::Result<()> {
-        tracing::trace!(target: LOG_TARGET, "poll filter");
-
         let events = self
             .executor
             .as_mut()

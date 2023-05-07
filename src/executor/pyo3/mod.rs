@@ -127,8 +127,6 @@ where
 
     /// Poll the executor.
     fn poll(&mut self) -> crate::Result<Vec<ExecutorEvent<T>>> {
-        tracing::trace!(target: LOG_TARGET, "poll executor");
-
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
             //
