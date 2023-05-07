@@ -13,6 +13,7 @@ use tracing::Level;
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
+    time::Duration,
 };
 
 #[cfg(test)]
@@ -290,11 +291,15 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 
     // Delayed notifications.
     delayed_notifications: FuturesUnordered<BoxFuture<'static, T::Message>>,
+
+    /// Poll interval.
+    poll_interval: Duration,
 }
 
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
+        poll_interval: Duration,
         event_tx: mpsc::Sender<FilterEvent<T>>,
         heuristics_handle: HeuristicsHandle<T>,
     ) -> (Filter<T, E>, FilterHandle<T>) {
@@ -307,6 +312,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 event_tx,
                 executor: None,
                 heuristics_handle,
+                poll_interval,
                 peers: HashMap::new(),
                 pending_inbound: HashMap::new(),
                 _pending_outbound: HashMap::new(),
@@ -438,6 +444,15 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 _notification = self.delayed_notifications.select_next_some(), if !self.delayed_notifications.is_empty() => {
                     todo!();
                 }
+                _ = tokio::time::sleep(self.poll_interval) => {
+                    if let Err(error) = self.poll_filter().await {
+                        tracing::error!(
+                            target: LOG_TARGET,
+                            ?error,
+                            "failed to poll filter",
+                        );
+                    }
+                },
             }
         }
     }
@@ -565,6 +580,18 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         }
 
         Ok(())
+    }
+
+    async fn poll_filter(&mut self) -> crate::Result<()> {
+        tracing::trace!(target: LOG_TARGET, "poll filter");
+
+        let events = self
+            .executor
+            .as_mut()
+            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
+            .poll()?;
+
+        self.process_events(events).await
     }
 
     /// Register peer to [`Filter`].

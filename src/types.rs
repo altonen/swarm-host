@@ -2,7 +2,7 @@ use crate::backend::NetworkBackend;
 
 use tokio::sync::oneshot;
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 /// Default channel size.
 pub const DEFAULT_CHANNEL_SIZE: usize = 50_000;
@@ -20,6 +20,9 @@ pub enum OverseerEvent<T: NetworkBackend> {
     CreateInterface {
         /// Address where to bind the interface.
         address: SocketAddr,
+
+        /// Poll interval for the installed filter.
+        poll_interval: Duration,
 
         /// Optional executor code that is called to initialize interface parameters.
         preinit: Option<String>,

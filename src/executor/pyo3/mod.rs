@@ -137,7 +137,17 @@ where
             let ctx: &PyAny =
                 unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
 
-            call_executor!(py, self.interface, &self.code, "poll", ctx)
+            let poll = PyModule::from_code(
+                py,
+                &self.code,
+                "",
+                format!("module{}", rand::thread_rng().gen::<u64>()).as_str(),
+            )?
+            .getattr("poll")?;
+
+            poll.call1((ctx,))?
+                .extract::<ExecutorEvents<T>>()
+                .map(|result| result.events)
         })
         .map_err(From::from)
     }

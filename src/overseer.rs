@@ -21,6 +21,7 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     net::SocketAddr,
     pin::Pin,
+    time::Duration,
 };
 
 /// Logging target for the file.
@@ -149,8 +150,8 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         loop {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
-                    OverseerEvent::CreateInterface { address, preinit, result } => {
-                        match self.create_interface(address, preinit).await {
+                    OverseerEvent::CreateInterface { address, poll_interval, preinit, result } => {
+                        match self.create_interface(address, poll_interval, preinit).await {
                             Ok(interface) => result.send(Ok(interface)).expect("channel to stay open"),
                             Err(err) => {
                                 tracing::error!(
@@ -317,6 +318,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     async fn create_interface(
         &mut self,
         address: SocketAddr,
+        poll_interval: Duration,
         preinit: Option<String>,
     ) -> crate::Result<T::InterfaceId> {
         tracing::debug!(
@@ -343,6 +345,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     let node_index = self.links.add_node(interface_id);
                     let (filter, filter_handle) = Filter::<T, E>::new(
                         interface_id,
+                        poll_interval,
                         self.filter_event_tx.clone(),
                         self.heuristics_handle.clone(),
                     );

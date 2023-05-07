@@ -7,7 +7,7 @@ use jsonrpsee::{
 use serde::Serialize;
 use tokio::sync::{mpsc::Sender, oneshot};
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 const LOG_TARGET: &str = "rpc";
 
@@ -37,11 +37,16 @@ where
                 .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?
                 .parse::<SocketAddr>()
                 .map_err(|_| Error::Custom(String::from("Invalid socket address")))?;
+            let poll_interval = params
+                .next::<u64>()
+                .map(|interval| Duration::from_millis(interval))
+                .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?;
             let preinit: Option<String> = params.next().ok();
 
             tracing::debug!(
                 target: LOG_TARGET,
-                address = ?address,
+                ?address,
+                ?poll_interval,
                 "create interface"
             );
 
@@ -49,6 +54,7 @@ where
             match ctx
                 .send(OverseerEvent::CreateInterface {
                     address,
+                    poll_interval,
                     preinit,
                     result: tx,
                 })
