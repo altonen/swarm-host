@@ -35,7 +35,7 @@ use libp2p::{
     },
     Multiaddr,
 };
-use log::{debug, error, trace};
+use log::{debug, error};
 use sc_network_common::utils::interval;
 use smallvec::SmallVec;
 use std::{
@@ -120,7 +120,7 @@ impl PeerInfoBehaviour {
     /// Inserts a ping time in the cache. Has no effect if we don't have any entry for that node,
     /// which shouldn't happen.
     fn handle_ping_report(&mut self, peer_id: &PeerId, ping_time: Duration) {
-        trace!(target: "sub-libp2p", "Ping time with {:?}: {:?}", peer_id, ping_time);
+        // trace!(target: "sub-libp2p", "Ping time with {:?}: {:?}", peer_id, ping_time);
         if let Some(entry) = self.nodes_info.get_mut(peer_id) {
             entry.latest_ping = Some(ping_time);
         } else {
@@ -132,7 +132,7 @@ impl PeerInfoBehaviour {
     /// Inserts an identify record in the cache. Has no effect if we don't have any entry for that
     /// node, which shouldn't happen.
     fn handle_identify_report(&mut self, peer_id: &PeerId, info: &IdentifyInfo) {
-        trace!(target: "sub-libp2p", "Identified {:?} => {:?}", peer_id, info);
+        // trace!(target: "sub-libp2p", "Identified {:?} => {:?}", peer_id, info);
         if let Some(entry) = self.nodes_info.get_mut(peer_id) {
             entry.client_version = Some(info.agent_version.clone());
         } else {
