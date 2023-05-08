@@ -11,7 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 /// Logging target for the file.
@@ -415,6 +415,7 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                 event = self.rx.recv() => {
                     self.handle_event(event.expect("channel to stay open"));
                 }
+                _ = tokio::time::sleep(Duration::from_secs(UPDATE_INTERVAL)) => {}
             }
 
             // update the heuristics front-end every 5 seconds
