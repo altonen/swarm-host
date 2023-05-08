@@ -11,7 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// Logging target for the file.
@@ -408,8 +408,6 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
 
     /// Run the event loop of [`HeuristicsBackend`].
     pub async fn run(mut self) {
-        let mut timer = Instant::now();
-
         loop {
             tokio::select! {
                 event = self.rx.recv() => {
@@ -418,13 +416,8 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                 _ = tokio::time::sleep(Duration::from_secs(UPDATE_INTERVAL)) => {}
             }
 
-            // update the heuristics front-end every 5 seconds
-            if timer.elapsed().as_secs() >= UPDATE_INTERVAL && !self.ws_tx.is_closed() {
-                let json =
-                    serde_json::to_string(&self.peers).expect("`PeerHeuristics` to serialize");
-                let _ = self.ws_tx.send(json);
-                timer = Instant::now();
-            }
+            let json = serde_json::to_string(&self.peers).expect("`PeerHeuristics` to serialize");
+            let _ = self.ws_tx.send(json);
         }
     }
 }
