@@ -61,15 +61,6 @@ pub enum FilterCommand<T: NetworkBackend> {
         peer: T::PeerId,
     },
 
-    /// Install filter.
-    InitializeFilter {
-        /// Filter code.
-        filter: String,
-
-        /// Optional filter context.
-        context: Option<String>,
-    },
-
     /// Install notification filter.
     InstallNotificationFilter {
         /// Protocol.
@@ -166,16 +157,6 @@ impl<T: NetworkBackend> FilterHandle<T> {
             .expect("channel to stay open");
     }
 
-    /// Initialize filter context.
-    ///
-    /// Pass in the initialization code and any additional context, if needed.
-    pub async fn initialize_filter(&self, filter: String, context: Option<String>) {
-        self.tx
-            .send(FilterCommand::InitializeFilter { filter, context })
-            .await
-            .expect("channel to stay open");
-    }
-
     /// Install notification filter.
     pub async fn install_notification_filter(
         &self,
@@ -265,7 +246,7 @@ impl<T: NetworkBackend> FilterHandle<T> {
 /// Message filter.
 pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     /// Executor.
-    executor: Option<E>,
+    executor: E,
 
     /// Interface ID.
     interface: T::InterfaceId,
@@ -295,18 +276,19 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
 impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     pub fn new(
         interface: T::InterfaceId,
+        filter: String,
         poll_interval: Duration,
         event_tx: mpsc::Sender<FilterEvent<T>>,
         heuristics_handle: HeuristicsHandle<T>,
-    ) -> (Filter<T, E>, FilterHandle<T>) {
+    ) -> crate::Result<(Filter<T, E>, FilterHandle<T>)> {
         let (tx, rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-        (
+        Ok((
             Filter::<T, E> {
                 interface,
                 command_rx: rx,
                 event_tx,
-                executor: None,
+                executor: E::new(interface, filter, None)?,
                 heuristics_handle,
                 poll_interval,
                 peers: HashMap::new(),
@@ -314,7 +296,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 _pending_outbound: HashMap::new(),
             },
             FilterHandle::new(tx),
-        )
+        ))
     }
 
     pub async fn run(mut self) {
@@ -348,18 +330,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 ?peer,
                                 ?error,
                                 "failed to unregister peer",
-                            );
-                        }
-                    }
-                    FilterCommand::InitializeFilter {
-                        filter,
-                        context,
-                    } => {
-                        if let Err(error) = self.initialize_filter(self.interface, filter, context) {
-                            tracing::error!(
-                                target: LOG_TARGET,
-                                ?error,
-                                "failed to install filter",
                             );
                         }
                     }
@@ -576,11 +546,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
     /// Poll the installed filter.
     async fn poll_filter(&mut self) -> crate::Result<()> {
-        let events = self
-            .executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .poll()?;
+        let events = self.executor.poll()?;
 
         self.process_events(events).await
     }
@@ -596,11 +562,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         match self.peers.entry(peer) {
             Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
             Entry::Vacant(entry) => {
-                let events = self
-                    .executor
-                    .as_mut()
-                    .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-                    .register_peer(peer)?;
+                let events = self.executor.register_peer(peer)?;
 
                 entry.insert(sink);
                 self.process_events(events).await
@@ -609,13 +571,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     async fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
+        // tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
 
-        let events = self
-            .executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .discover_peer(peer)?;
+        let events = self.executor.discover_peer(peer)?;
 
         self.process_events(events).await
     }
@@ -628,26 +586,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             .peers
             .remove(&peer)
             .map_or(Err(Error::PeerDoesntExist), |_| {
-                self.executor
-                    .as_mut()
-                    .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-                    .unregister_peer(peer)
+                self.executor.unregister_peer(peer)
             })?;
 
         self.process_events(events).await
-    }
-
-    /// Install filter context.
-    fn initialize_filter(
-        &mut self,
-        interface: T::InterfaceId,
-        filter: String,
-        context: Option<String>,
-    ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?interface, "initialize new filter");
-
-        self.executor = Some(E::new(interface, filter, context)?);
-        Ok(())
     }
 
     /// Install notification filter.
@@ -658,10 +600,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     ) -> crate::Result<()> {
         tracing::debug!(target: LOG_TARGET, ?protocol, "install notification filter");
 
-        self.executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .install_notification_filter(protocol, filter)
+        self.executor.install_notification_filter(protocol, filter)
     }
 
     /// Install request-response filter.
@@ -677,8 +616,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         );
 
         self.executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
             .install_request_response_filter(protocol, filter)
     }
 
@@ -701,8 +638,6 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
 
         match self
             .executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
             .inject_notification(protocol.clone(), peer, notification.clone())
         {
             Ok(events) => self.process_events(events).await,
@@ -760,11 +695,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             &request,
         );
 
-        let events = self
-            .executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_request(protocol, peer, request)?;
+        let events = self.executor.inject_request(protocol, peer, request)?;
 
         self.process_events(events).await
     }
@@ -787,12 +718,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             &response,
         );
 
-        let events = self
-            .executor
-            .as_mut()
-            .ok_or(Error::ExecutorError(ExecutorError::ExecutorDoesntExist))?
-            .inject_response(protocol, peer, response)?;
-
+        let events = self.executor.inject_response(protocol, peer, response)?;
         self.process_events(events).await
     }
 }

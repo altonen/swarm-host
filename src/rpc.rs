@@ -37,6 +37,9 @@ where
                 .map_err(|_| Error::Custom(String::from("RPC bind address missing")))?
                 .parse::<SocketAddr>()
                 .map_err(|_| Error::Custom(String::from("Invalid socket address")))?;
+            let filter = params
+                .next::<String>()
+                .map_err(|_| Error::Custom(String::from("Filter missing")))?;
             let poll_interval = params
                 .next::<u64>()
                 .map(|interval| Duration::from_millis(interval))
@@ -54,6 +57,7 @@ where
             match ctx
                 .send(OverseerEvent::CreateInterface {
                     address,
+                    filter,
                     poll_interval,
                     preinit,
                     result: tx,
@@ -130,42 +134,6 @@ where
                 .send(OverseerEvent::UnlinkInterface {
                     first,
                     second,
-                    result: tx,
-                })
-                .await
-            {
-                Ok(_) => rx
-                    .await
-                    .map_err(|_| Error::Custom(String::from("Essential task closed")))?
-                    .map_err(|err| Error::Custom(err.to_string())),
-                Err(_) => {
-                    Result::<_, Error>::Err(Error::Custom(String::from("Essential task closed")))
-                }
-            }
-        })
-        .unwrap();
-
-    module
-        .register_async_method("initialize_filter", |params, ctx| async move {
-            let mut params = params.sequence();
-            let interface: T::InterfaceId = params
-                .next()
-                .map_err(|_| Error::Custom(String::from("Interface ID missing")))?;
-            let code: String = params
-                .next()
-                .map_err(|_| Error::Custom(String::from("Filter code missing")))?;
-            let context: String = params
-                .next()
-                .map_err(|_| Error::Custom(String::from("Filter context missing")))?;
-
-            tracing::debug!(target: LOG_TARGET, ?interface, "initialize filter");
-
-            let (tx, rx) = oneshot::channel();
-            match ctx
-                .send(OverseerEvent::InitializeFilter {
-                    interface,
-                    code,
-                    context,
                     result: tx,
                 })
                 .await

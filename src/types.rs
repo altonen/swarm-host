@@ -21,6 +21,9 @@ pub enum OverseerEvent<T: NetworkBackend> {
         /// Address where to bind the interface.
         address: SocketAddr,
 
+        /// Filter code.
+        filter: String,
+
         /// Poll interval for the installed filter.
         poll_interval: Duration,
 
@@ -56,21 +59,6 @@ pub enum OverseerEvent<T: NetworkBackend> {
 
         /// Second interface.
         second: T::InterfaceId,
-
-        /// Result of the unlink operation.
-        result: oneshot::Sender<crate::Result<()>>,
-    },
-
-    /// Initialize filter.
-    InitializeFilter {
-        /// First interface.
-        interface: T::InterfaceId,
-
-        /// Filter code.
-        code: String,
-
-        /// Filter context
-        context: String,
 
         /// Result of the unlink operation.
         result: oneshot::Sender<crate::Result<()>>,

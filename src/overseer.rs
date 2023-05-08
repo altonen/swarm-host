@@ -150,8 +150,8 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         loop {
             tokio::select! {
                 result = self.overseer_rx.recv() => match result.expect("channel to stay open") {
-                    OverseerEvent::CreateInterface { address, poll_interval, preinit, result } => {
-                        match self.create_interface(address, poll_interval, preinit).await {
+                    OverseerEvent::CreateInterface { address, filter, poll_interval, preinit, result } => {
+                        match self.create_interface(address, filter, poll_interval, preinit).await {
                             Ok(interface) => result.send(Ok(interface)).expect("channel to stay open"),
                             Err(err) => {
                                 tracing::error!(
@@ -169,9 +169,6 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     }
                     OverseerEvent::UnlinkInterface { first, second, result } => {
                         result.send(self.unlink_interfaces(first, second)).expect("channel to stay open");
-                    }
-                    OverseerEvent::InitializeFilter { interface, code, context, result } => {
-                        result.send(self.initialize_filter(interface, code, context).await).expect("channel to stay open");
                     }
                     OverseerEvent::InstallNotificationFilter {
                         interface,
@@ -318,6 +315,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     async fn create_interface(
         &mut self,
         address: SocketAddr,
+        filter: String,
         poll_interval: Duration,
         preinit: Option<String>,
     ) -> crate::Result<T::InterfaceId> {
@@ -345,10 +343,11 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     let node_index = self.links.add_node(interface_id);
                     let (filter, filter_handle) = Filter::<T, E>::new(
                         interface_id,
+                        filter,
                         poll_interval,
                         self.filter_event_tx.clone(),
                         self.heuristics_handle.clone(),
-                    );
+                    )?;
 
                     tracing::trace!(target: LOG_TARGET, interface = ?interface_id, ?node_index, "interface created");
 
@@ -484,25 +483,6 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                     Ok(())
                 }
             },
-        }
-    }
-
-    async fn initialize_filter(
-        &mut self,
-        interface: T::InterfaceId,
-        filter_code: String,
-        context: String,
-    ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?interface, "initialize filter");
-
-        match self.interfaces.get_mut(&interface) {
-            None => Err(Error::InterfaceDoesntExist),
-            Some(info) => {
-                info.filter
-                    .initialize_filter(filter_code, Some(context))
-                    .await;
-                Ok(())
-            }
         }
     }
 

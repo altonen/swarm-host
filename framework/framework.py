@@ -26,9 +26,8 @@ preinit_filter = open("preinit.py").read()
 
 interfaces = []
 
-for i in range(0, 1):
-    iface_id = host.create_interface(rpc_address, preinit = preinit_filter)
-    host.install_context_filter(iface_id, context_filter)
+for i in range(0, 10):
+    iface_id = host.create_interface(rpc_address, context_filter, preinit = preinit_filter)
     host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
     host.install_request_response_filter(iface_id, "/sup/sync/2", sync_filter)
 
