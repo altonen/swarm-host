@@ -873,11 +873,13 @@ impl ConnectionHandler for NotifsHandler {
             // Inbound substreams being closed is always tolerated, except for the
             // `OpenDesiredByRemote` state which might need to be switched back to `Closed`.
             match &mut self.protocols[protocol_index].state {
-                State::Closed { .. }
-                | State::Open {
+                State::Closed { .. } | State::Opening { in_substream: None } => {}
+                State::Open {
                     in_substream: None, ..
+                } => {
+                    let event = NotifsHandlerOut::CloseDesired { protocol_index };
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(event));
                 }
-                | State::Opening { in_substream: None } => {}
 
                 State::Open {
                     in_substream: in_substream @ Some(_),
