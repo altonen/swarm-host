@@ -1463,9 +1463,9 @@ impl NetworkBehaviour for Notifications {
                                     .boxed(),
                                 );
 
-                                *entry.get_mut() = PeerState::Backoff {
-                                    timer: delay_id,
-                                    timer_deadline: Instant::now() + Duration::from_secs(ban_dur),
+                                *entry.get_mut() = PeerState::Disabled {
+                                    connections,
+                                    backoff_until: None,
                                 };
                             } else if !connections.iter().any(|(_, s)| {
                                 matches!(s, ConnectionState::Opening | ConnectionState::Open(_))
