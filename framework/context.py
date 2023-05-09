@@ -201,7 +201,12 @@ def discover_peer(ctx: Context, peer):
         ctx.pending_peers.add(peer)
         ctx.pending_events.append({ 'Connect': peer })
 
+def connectivity_heartbeat(ctx: Context):
+    for peer in ctx.pending_peers:
+        ctx.pending_events.append({ 'Connect': peer })
+
 def poll(ctx: Context):
+    connectivity_heartbeat(ctx)
     pending_events = ctx.pending_events.copy()
     ctx.pending_events.clear()
 
