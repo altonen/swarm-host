@@ -27,7 +27,11 @@ class Node():
         self.type_registry_preset = type_registry_preset
         self.p2p_port = None
         self.path = default_path
-        self.exec_arguments = []
+        self.exec_arguments = [
+            "--in-peers", "5",
+            "--out-peers", "5",
+            "--in-peers-light", "0",
+        ]
 
     """
         Specify P2P port.
@@ -195,7 +199,7 @@ class Node():
             args,
             stdout=self.logfile,
             stderr=subprocess.STDOUT,
-            env={"RUST_LOG": "info,sync=trace"}
+            env={"RUST_LOG": "info,sync=trace,sub-libp2p=trace,peerset=trace"}
         )
 
         return self
