@@ -102,19 +102,35 @@ socket.addEventListener('message', (event) => {
             cell1.style.textAlign = "center";
 
             let cell2 = document.createElement("td");
-            cell2.textContent = data.total_bytes_sent;
+            if (data.total_bytes_sent > 1000 * 1000) {
+                cell2.textContent = ((data.total_bytes_sent / 1000 / 1000).toFixed(2)) + "MB";
+            } else {
+                cell2.textContent = ((data.total_bytes_sent / 1000).toFixed(2)) + "KB";
+            }
             cell2.style.textAlign = "center";
 
             let cell3 = document.createElement("td");
-            cell3.textContent = data.total_bytes_received;
+            if (data.total_bytes_received > 1000 * 1000) {
+                cell3.textContent = ((data.total_bytes_received / 1000 / 1000).toFixed(2)) + "MB";
+            } else {
+                cell3.textContent = ((data.total_bytes_received / 1000).toFixed(2)) + "KB";
+            }
             cell3.style.textAlign = "center";
 
             let cell4 = document.createElement("td");
-            cell4.textContent = data.redundant_bytes_sent;
+            if (data.redundant_bytes_sent > 1000 * 1000) {
+                cell4.textContent = ((data.redundant_bytes_sent / 1000 / 1000).toFixed(2)) + "MB";
+            } else {
+                cell4.textContent = ((data.redundant_bytes_sent / 1000).toFixed(2)) + "KB";
+            }
             cell4.style.textAlign = "center";
 
             let cell5 = document.createElement("td");
-            cell5.textContent = data.redundant_bytes_received;
+            if (data.redundant_bytes_received > 1000 * 1000) {
+                cell5.textContent = ((data.redundant_bytes_received / 1000 / 1000).toFixed(2)) + "MB";
+            } else {
+                cell5.textContent = ((data.redundant_bytes_received / 1000).toFixed(2)) + "KB";
+            }
             cell5.style.textAlign = "center";
 
             row.appendChild(cell1);
