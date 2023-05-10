@@ -41,6 +41,9 @@ struct InterfaceInfo<T: NetworkBackend> {
     /// Interface handle.
     handle: T::InterfaceHandle,
 
+    /// Discovered peers.
+    discovered: HashSet<T::PeerId>,
+
     /// Interface peers.
     peers: HashMap<T::PeerId, PeerInfo<T>>,
 
@@ -67,6 +70,7 @@ impl<T: NetworkBackend> InterfaceInfo<T> {
             _peer,
             handle,
             filter,
+            discovered: HashSet::new(),
             peers: HashMap::new(),
         }
     }
@@ -667,8 +671,10 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             return Ok(());
         }
 
-        for (_, info) in &self.interfaces {
-            info.filter.discover_peer(peer).await;
+        for (_, info) in self.interfaces.iter_mut() {
+            if info.discovered.insert(peer) {
+                info.filter.discover_peer(peer).await;
+            }
         }
 
         Ok(())
