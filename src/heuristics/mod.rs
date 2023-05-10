@@ -59,7 +59,7 @@ enum HeuristicsEvent<T: NetworkBackend> {
     /// Unregister interface
     UnregisterPeer {
         /// Interface ID.
-        _interface: T::InterfaceId,
+        interface: T::InterfaceId,
 
         /// Peer ID.
         peer: T::PeerId,
@@ -139,9 +139,9 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 
     /// Unregister `peer` from `interface`'s known peers.
-    pub fn unregister_peer(&self, _interface: T::InterfaceId, peer: T::PeerId) {
+    pub fn unregister_peer(&self, interface: T::InterfaceId, peer: T::PeerId) {
         self.tx
-            .send(HeuristicsEvent::UnregisterPeer { _interface, peer })
+            .send(HeuristicsEvent::UnregisterPeer { interface, peer })
             .expect("channel to stay open");
     }
 
@@ -373,11 +373,10 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                     .interfaces
                     .insert(interface);
             }
-            HeuristicsEvent::UnregisterPeer {
-                _interface: _,
-                peer,
-            } => {
-                self.peers.remove(&peer);
+            HeuristicsEvent::UnregisterPeer { interface, peer } => {
+                if let Some(info) = self.peers.get_mut(&peer) {
+                    info.interfaces.remove(&interface);
+                }
             }
             HeuristicsEvent::MessageReceived {
                 _interface: _,
