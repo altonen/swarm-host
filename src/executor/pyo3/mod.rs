@@ -9,7 +9,6 @@ use crate::{
 
 use pyo3::{prelude::*, FromPyPointer};
 use rand::Rng;
-use tracing::Level;
 
 use std::collections::HashMap;
 
@@ -100,12 +99,7 @@ where
     where
         Self: Sized,
     {
-        tracing::debug!(
-            target: LOG_TARGET,
-            ?interface,
-            ?interface,
-            "initialize new executor"
-        );
+        tracing::debug!(target: LOG_TARGET, ?interface, "initialize new executor");
         tracing::trace!(target: LOG_TARGET_MSG, ?code, ?context);
 
         let context = Python::with_gil(|py| -> pyo3::PyResult<*mut pyo3::ffi::PyObject> {
@@ -152,7 +146,7 @@ where
 
     /// Register `peer` to filter.
     fn register_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>> {
-        tracing::trace!(target: LOG_TARGET, ?peer, "register peer");
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, "register peer");
 
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
@@ -177,7 +171,7 @@ where
 
     /// Discover `peer`.
     fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>> {
-        tracing::trace!(target: LOG_TARGET, ?peer, "discover peer");
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, "discover peer");
 
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
@@ -202,7 +196,7 @@ where
 
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>> {
-        tracing::trace!(target: LOG_TARGET, ?peer, "unregister peer");
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, "unregister peer");
 
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
@@ -231,7 +225,7 @@ where
         protocol: T::Protocol,
         code: String,
     ) -> crate::Result<()> {
-        tracing::trace!(target: LOG_TARGET, ?protocol, "install notification filter");
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?protocol, "install notification filter");
 
         // verify that `inject_notification()` exists in the code
         Python::with_gil(|py| {
@@ -256,8 +250,8 @@ where
     ) -> crate::Result<()> {
         tracing::trace!(
             target: LOG_TARGET,
-            ?protocol,
             interface = ?self.interface,
+            ?protocol,
             "install request-response filter"
         );
 
@@ -289,9 +283,9 @@ where
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
 
-        tracing::event!(
+        tracing::trace!(
             target: LOG_TARGET,
-            Level::TRACE,
+            interface = ?self.interface,
             ?protocol,
             "inject notification"
         );
@@ -333,7 +327,7 @@ where
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
 
-        tracing::trace!(target: LOG_TARGET, ?protocol, "inject request");
+        tracing::trace!(target: LOG_TARGET, inteface = ?self.interface, ?protocol, "inject request");
 
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands
@@ -372,7 +366,7 @@ where
             .as_ref()
             .ok_or(Error::ExecutorError(ExecutorError::FilterDoesntExist))?;
 
-        tracing::trace!(target: LOG_TARGET, ?protocol, "inject response");
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?protocol, "inject response");
 
         Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
             // get access to types that `PyO3` understands

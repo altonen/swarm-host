@@ -7,7 +7,6 @@ use crate::{
 };
 
 use tokio::sync::mpsc;
-use tracing::Level;
 
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -307,6 +306,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.register_peer(peer, sink).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?peer,
                                 ?error,
                                 "failed to register peer",
@@ -317,6 +317,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.discover_peer(peer).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?peer,
                                 ?error,
                                 "failed to discover peer",
@@ -327,6 +328,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.unregister_peer(peer).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?peer,
                                 ?error,
                                 "failed to unregister peer",
@@ -341,6 +343,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.install_notification_filter(protocol.clone(), filter) {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?protocol,
                                 ?error,
                                 "failed to install notification filter",
@@ -355,6 +358,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.install_request_response_filter(protocol.clone(), filter) {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?protocol,
                                 ?error,
                                 "failed to install request-response filter",
@@ -369,6 +373,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.inject_notification(protocol.clone(), peer, notification).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?protocol,
                                 ?peer,
                                 ?error,
@@ -384,6 +389,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.inject_request(protocol.clone(), peer, request).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?protocol,
                                 ?peer,
                                 ?error,
@@ -399,6 +405,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         if let Err(error) = self.inject_response(protocol.clone(), peer, response).await {
                             tracing::error!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?protocol,
                                 ?error,
                                 "failed to inject response",
@@ -410,6 +417,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     if let Err(error) = self.poll_filter().await {
                         tracing::error!(
                             target: LOG_TARGET,
+                            interface = ?self.interface,
                             ?error,
                             "failed to poll filter",
                         );
@@ -557,7 +565,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         sink: Box<dyn PacketSink<T>>,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?peer, "register peer");
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?peer, "register peer");
 
         match self.peers.entry(peer) {
             Entry::Occupied(_) => Err(Error::PeerAlreadyExists),
@@ -571,16 +579,13 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     }
 
     async fn discover_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
-        // tracing::debug!(target: LOG_TARGET, ?peer, "discover peer");
-
         let events = self.executor.discover_peer(peer)?;
-
         self.process_events(events).await
     }
 
     /// Unregister peer to [`Filter`].
     async fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?peer, "unregister peer");
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?peer, "unregister peer");
 
         let events = self
             .peers
@@ -598,7 +603,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         protocol: T::Protocol,
         filter: String,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?protocol, "install notification filter");
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?protocol, "install notification filter");
 
         self.executor.install_notification_filter(protocol, filter)
     }
@@ -611,6 +616,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
     ) -> crate::Result<()> {
         tracing::debug!(
             target: LOG_TARGET,
+            inteface = ?self.interface,
             ?protocol,
             "install request-response filter"
         );
@@ -626,7 +632,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         notification: T::Message,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?protocol, "inject notification");
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?protocol, "inject notification");
 
         // register the received notification to heuristics backend
         self.heuristics_handle.register_notification_received(
@@ -644,6 +650,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             Err(Error::ExecutorError(ExecutorError::FilterDoesntExist)) => {
                 tracing::trace!(
                     target: LOG_TARGET,
+                    inteface = ?self.interface,
                     ?protocol,
                     "filter does not exist, forward to all peers by default",
                 );
@@ -662,7 +669,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                             );
                         }
                         Err(err) => {
-                            tracing::warn!(target: LOG_TARGET, ?err, "failed to send notification");
+                            tracing::warn!(target: LOG_TARGET, inteface = ?self.interface, ?err, "failed to send notification");
                         }
                     }
                 }
@@ -680,8 +687,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         request: T::Request,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?peer, ?protocol, request_id = ?request.id(), "inject request");
-        tracing::trace!(target: LOG_TARGET_MSG, ?request);
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?peer, ?protocol, request_id = ?request.id(), "inject request");
+        tracing::trace!(target: LOG_TARGET_MSG, interface = ?self.interface, ?request);
 
         // save the id of the received request so later on the response received from the executor
         // can be associated with the correct request.
@@ -707,8 +714,8 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
         peer: T::PeerId,
         response: T::Response,
     ) -> crate::Result<()> {
-        tracing::debug!(target: LOG_TARGET, ?protocol, ?peer, "inject response");
-        tracing::event!(target: LOG_TARGET_MSG, Level::TRACE, ?response);
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?protocol, ?peer, "inject response");
+        tracing::trace!(target: LOG_TARGET_MSG, interface = ?self.interface, ?response);
 
         // register the received response to heuristics backend
         self.heuristics_handle.register_response_received(

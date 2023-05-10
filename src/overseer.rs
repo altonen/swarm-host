@@ -633,9 +633,9 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     ) -> crate::Result<()> {
         tracing::trace!(
             target: LOG_TARGET,
-            interface_id = ?interface,
-            peer_id = ?peer,
-            upgrade = ?upgrade,
+            ?interface,
+            ?peer,
+            ?upgrade,
             "apply upgrade to connection",
         );
 
