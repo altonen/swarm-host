@@ -418,8 +418,8 @@ impl SubstrateNetwork {
             max_notification_size: 8 * 1024 * 1024,
             handshake: handshake.map(|handshake| NotificationHandshake::from_bytes(handshake)),
             set_config: SetConfig {
-                in_peers: 400,
-                out_peers: 400,
+                in_peers: 25,
+                out_peers: 25,
                 reserved_nodes: Vec::new(),
                 non_reserved_mode: NonReservedPeerMode::Deny,
             },
