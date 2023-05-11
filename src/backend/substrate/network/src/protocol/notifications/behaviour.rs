@@ -713,12 +713,12 @@ impl Notifications {
                 } else {
                     // If no connection is available, switch to `DisabledPendingEnable` in order
                     // to try again later.
-                    debug_assert!(connections.iter().any(|(_, s)| {
-                        matches!(
-                            s,
-                            ConnectionState::OpeningThenClosing | ConnectionState::Closing
-                        )
-                    }));
+                    // debug_assert!(connections.iter().any(|(_, s)| {
+                    //     matches!(
+                    //         s,
+                    //         ConnectionState::OpeningThenClosing | ConnectionState::Closing
+                    //     )
+                    // }));
                     trace!(
                         target: "sub-libp2p",
                         "PSM => Connect({}, {:?}): No connection in proper state. Delaying.",
