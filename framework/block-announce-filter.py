@@ -6,8 +6,6 @@ def inject_notification(
     protocol,
     notification
 ):
-    return
-
     if ctx.runtime_config is None:
         ctx.runtime_config = init_runtime_config()
 
