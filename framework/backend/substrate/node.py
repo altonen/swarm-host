@@ -99,6 +99,12 @@ class Node():
             self.exec_arguments.append("--no-mdns")
         return self
 
+    def with_prometheus_port(self, prometheus_port):
+        logging.debug("prometheus port: `%s`" % (prometheus_port))
+        self.exec_arguments.append("--prometheus-port")
+        self.exec_arguments.append(str(prometheus_port))
+        return self
+
     def with_bootnode(self, url):
         logging.debug("bootnode: `%s`" % (url))
         self.exec_arguments.append("--bootnodes")
