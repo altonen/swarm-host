@@ -9,6 +9,9 @@ def inject_notification(
     if ctx.runtime_config is None:
         ctx.runtime_config = init_runtime_config()
 
+    if (datetime.datetime.now() - ctx.started).total_seconds() > 3 * 60:
+        return
+
     try:
         block_announce = BlockAnnounce(ctx.runtime_config, bytes(notification))
         number = block_announce.number()
@@ -24,5 +27,4 @@ def inject_notification(
         if len(forward_table) != 0:
             ctx.forward_notification(protocol, forward_table, notification)
     except Exception as e:
-        print(number)
         print("failed to handle block announce:", e)

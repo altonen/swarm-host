@@ -221,7 +221,7 @@ def connectivity_heartbeat(ctx: Context):
         ctx.pending_events.append({ 'Connect': peer })
 
 def poll(ctx: Context):
-    connectivity_heartbeat(ctx)
+    # connectivity_heartbeat(ctx)
     pending_events = ctx.pending_events.copy()
     ctx.pending_events.clear()
 
