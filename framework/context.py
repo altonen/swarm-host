@@ -27,6 +27,7 @@ class Context():
         self.known_peers = set()
         self.pending_events = []
         self.started = datetime.datetime.now()
+        self.block_announce = None
 
     """
         Map block number to block hash.

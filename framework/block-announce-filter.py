@@ -9,8 +9,15 @@ def inject_notification(
     if ctx.runtime_config is None:
         ctx.runtime_config = init_runtime_config()
 
-    if (datetime.datetime.now() - ctx.started).total_seconds() > 3 * 60:
-        return
+    if ctx.block_announce is None:
+        ctx.block_announce = notification
+
+    forward_table = []
+    if peer not in ctx.peers:
+        forward_table.append(peer)
+
+    ctx.forward_notification(protocol, forward_table, ctx.block_announce)
+    return
 
     try:
         block_announce = BlockAnnounce(ctx.runtime_config, bytes(notification))
