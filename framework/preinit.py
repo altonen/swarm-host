@@ -48,8 +48,8 @@ def initialize_interface():
     encoded = handshake.encode({
         'roles': Roles.FULL,
         'best_number': 0,
-        'best_hash': "0xa6043a4ac16c3f49d679e82afea2838f8f109c21e674bb8c6ed2b50d128e1b78",
-        'genesis_hash': "0xa6043a4ac16c3f49d679e82afea2838f8f109c21e674bb8c6ed2b50d128e1b78",
+        'best_hash': "0x36d171b4279dc05f16e8960afd9ae9e28cd620b610b84d6374949c099231c585",
+        'genesis_hash': "0x36d171b4279dc05f16e8960afd9ae9e28cd620b610b84d6374949c099231c585",
     })
 
     return bytearray.fromhex(encoded.to_hex()[2:])
