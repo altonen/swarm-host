@@ -4,9 +4,14 @@ from backend.substrate.block_response import BlockResponse
 from backend.substrate.block_request import Direction
 
 import redis
+import time
+import datetime
 
 # maximum peers each interface can have
-MAX_PEERS = 400
+MAX_PEERS = 50
+
+# number of seconds to wait between connection retries
+RETRY_TIMEOUT = 2
 
 class Context():
     def __init__(self):
@@ -18,9 +23,10 @@ class Context():
         self.cached_requests = {}
         self.pending_requests = {}
         self.runtime_config = None
-        self.pending_peers = set()
+        self.pending_peers = {}
         self.known_peers = set()
         self.pending_events = []
+        self.started = datetime.datetime.now()
 
     """
         Map block number to block hash.
@@ -178,7 +184,7 @@ def register_peer(ctx: Context, peer):
     ctx.peers[peer] = PeerContext()
 
     if peer in ctx.pending_peers:
-        ctx.pending_peers.remove(peer)
+        del ctx.pending_peers[peer]
 
 def unregister_peer(ctx: Context, peer):
     if peer in ctx.peers:
@@ -198,11 +204,20 @@ def discover_peer(ctx: Context, peer):
     npeers = min(needed_peers, len(ctx.known_peers))
     for peer in list(ctx.known_peers)[:npeers]:
         ctx.known_peers.remove(peer)
-        ctx.pending_peers.add(peer)
+        ctx.pending_peers[peer] = datetime.datetime.now()
         ctx.pending_events.append({ 'Connect': peer })
 
 def connectivity_heartbeat(ctx: Context):
+    if len(ctx.peers) >= MAX_PEERS:
+        return
+
     for peer in ctx.pending_peers:
+        if (datetime.datetime.now() - ctx.pending_peers[peer]).total_seconds() > RETRY_TIMEOUT:
+            ctx.pending_peers[peer] = datetime.datetime.now()
+            ctx.pending_events.append({ 'Connect': peer })
+
+    for peer in ctx.known_peers:
+        ctx.pending_peers[peer] = datetime.datetime.now()
         ctx.pending_events.append({ 'Connect': peer })
 
 def poll(ctx: Context):
