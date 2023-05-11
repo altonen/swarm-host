@@ -751,12 +751,12 @@ impl SubstrateNetwork {
                 }
             }
             BehaviourOut::NotificationStreamReplaced {
-                remote: _,
-                protocol: _,
-                notifications_sink: _,
+                remote,
+                protocol,
+                notifications_sink,
             } => {
-                // TODO: zzzz
-                todo!("implement this maybe");
+                self.notification_sinks
+                    .insert((remote, protocol.clone()), notifications_sink);
             }
             BehaviourOut::NotificationStreamClosed { remote, protocol } => {
                 self.notification_sinks.remove(&(remote, protocol.clone()));
