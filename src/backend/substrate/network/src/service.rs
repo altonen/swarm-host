@@ -761,13 +761,20 @@ impl SubstrateNetwork {
             BehaviourOut::NotificationStreamClosed { remote, protocol } => {
                 self.notification_sinks.remove(&(remote, protocol.clone()));
 
-                self.event_tx
-                    .send(SubstrateNetworkEvent::ProtocolClosed {
-                        peer: remote,
-                        protocol,
-                    })
-                    .await
-                    .expect("channel to stay open");
+                if protocol == String::from("/sup/block-announces/1").into() {
+                    self.event_tx
+                        .send(SubstrateNetworkEvent::PeerDisconnected { peer: remote })
+                        .await
+                        .expect("channel to stay open");
+                } else {
+                    self.event_tx
+                        .send(SubstrateNetworkEvent::ProtocolClosed {
+                            peer: remote,
+                            protocol,
+                        })
+                        .await
+                        .expect("channel to stay open");
+                }
             }
             BehaviourOut::NotificationsReceived { remote, messages } => {
                 log::trace!(target: "sub-libp2p", "notification received");
