@@ -1,3 +1,4 @@
+
 from backend.substrate.block_announce import BlockAnnounce, init_runtime_config
 
 def inject_notification(
@@ -13,11 +14,17 @@ def inject_notification(
         ctx.block_announce = notification
 
     forward_table = []
-    if peer not in ctx.peers:
+    for peer in ctx.peers:
         forward_table.append(peer)
 
     ctx.forward_notification(protocol, forward_table, ctx.block_announce)
     return
+    # if (datetime.datetime.now() - ctx.started).total_seconds() > 3 * 60:
+    #     if hash not in ctx.peers[peer].known_blocks:
+    #         ctx.forward_notification(protocol, forward_table, ctx.block_announce)
+    #     return
+
+    # ctx.block_announce = notification
 
     try:
         block_announce = BlockAnnounce(ctx.runtime_config, bytes(notification))

@@ -30,6 +30,20 @@ nodes.append(NodeTemplate()\
 
 time.sleep(1)
 
+context_filter = open("context.py").read()
+block_filter = open("block-announce-filter.py").read()
+sync_filter = open("sup-sync-2.py").read()
+preinit_filter = open("preinit.py").read()
+
+interfaces = []
+
+for i in range(0, 40):
+    iface_id = host.create_interface(rpc_address, context_filter, preinit = preinit_filter)
+    host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
+    host.install_request_response_filter(iface_id, "/sup/sync/2", sync_filter)
+
+time.sleep(10)
+
 nodes.append(NodeTemplate()\
     .with_p2p_port(7777)
     .with_prometheus_port(9101)\
@@ -54,20 +68,6 @@ for i in range(0, 10):
         .with_binary_path("/home/altonen/node-template")\
         .build()
     )
-
-time.sleep(3 * 60)
-
-context_filter = open("context.py").read()
-block_filter = open("block-announce-filter.py").read()
-sync_filter = open("sup-sync-2.py").read()
-preinit_filter = open("preinit.py").read()
-
-interfaces = []
-
-for i in range(0, 40):
-    iface_id = host.create_interface(rpc_address, context_filter, preinit = preinit_filter)
-    host.install_notification_filter(iface_id, "/sup/block-announces/1", block_filter)
-    host.install_request_response_filter(iface_id, "/sup/sync/2", sync_filter)
 
 while True:
     time.sleep(200)
