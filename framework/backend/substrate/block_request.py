@@ -28,6 +28,25 @@ class BlockRequest():
         self.request = proto.BlockRequest()
         self.request.ParseFromString(request)
 
+    def new(attributes: int, direction, hash = None, number = None, max_blocks = None):
+        if (hash == None and number == None) or (number is not None and hash is not None):
+            raise Exception("must provide either hash or number but not both")
+
+        request = proto.BlockRequest()
+        request.fields = int.from_bytes(struct.pack('>I', attributes), byteorder='little')
+
+        if hash is not None:
+            request.hash = hash
+        else:
+            request.number = number
+
+        if max_blocks is not None:
+            request.max_blocks = max_blocks
+
+        request.direction = direction
+
+        return request.SerializeToString()
+
     """
         Get the original encoded request
     """
