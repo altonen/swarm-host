@@ -138,6 +138,20 @@ pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Unregister `peer` from filter.
     fn unregister_peer(&mut self, peer: T::PeerId) -> crate::Result<Vec<ExecutorEvent<T>>>;
 
+    /// Protocol opened.
+    fn protocol_opened(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<Vec<ExecutorEvent<T>>>;
+
+    /// Protocol closed.
+    fn protocol_closed(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<Vec<ExecutorEvent<T>>>;
+
     /// Install notification filter for `protocol`.
     fn install_notification_filter(
         &mut self,

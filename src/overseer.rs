@@ -31,6 +31,7 @@ const LOG_TARGET: &str = "overseer";
 const LOG_TARGET_MSG: &str = "overseer::msg";
 
 /// Peer-related information.
+#[allow(unused)]
 struct PeerInfo<T: NetworkBackend> {
     /// Supported protocols.
     protocols: HashSet<T::Protocol>,
@@ -271,7 +272,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                         }
                     },
                     Some(InterfaceEvent::ConnectionUpgraded { interface, peer, upgrade }) => {
-                        if let Err(error) = self.apply_connection_upgrade(interface, peer, upgrade) {
+                        if let Err(error) = self.apply_connection_upgrade(interface, peer, upgrade).await {
                             tracing::error!(
                                 target: LOG_TARGET,
                                 ?interface,
@@ -625,7 +626,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     }
 
     /// Apply connection upgrade for an active peer.
-    fn apply_connection_upgrade(
+    async fn apply_connection_upgrade(
         &mut self,
         interface: T::InterfaceId,
         peer: T::PeerId,
@@ -639,21 +640,22 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
             "apply upgrade to connection",
         );
 
-        let peer_info = self
+        let iface_info = self
             .interfaces
             .get_mut(&interface)
-            .expect("interface to exist")
-            .peers
-            .get_mut(&peer)
-            .ok_or(Error::PeerDoesntExist)?;
+            .expect("interface to exist");
 
         match upgrade {
             ConnectionUpgrade::ProtocolOpened { protocols } => {
-                peer_info.protocols.extend(protocols)
+                for protocol in protocols {
+                    iface_info.filter.protocol_opened(peer, protocol).await;
+                }
             }
-            ConnectionUpgrade::ProtocolClosed { protocols } => peer_info
-                .protocols
-                .retain(|protocol| !protocols.contains(protocol)),
+            ConnectionUpgrade::ProtocolClosed { protocols } => {
+                for protocol in protocols {
+                    iface_info.filter.protocol_closed(peer, protocol).await;
+                }
+            }
         }
 
         Ok(())

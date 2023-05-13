@@ -208,6 +208,12 @@ def discover_peer(ctx: Context, peer):
         ctx.pending_peers[peer] = datetime.datetime.now()
         ctx.pending_events.append({ 'Connect': peer })
 
+def protocol_opened(ctx, peer, protocol):
+    print("protocol %s opened for %s" % (protocol, peer))
+
+def protocol_closed(ctx, peer, protocol):
+    print("protocol %s closed for %s" % (protocol, peer))
+
 def connectivity_heartbeat(ctx: Context):
     if len(ctx.peers) >= MAX_PEERS:
         return

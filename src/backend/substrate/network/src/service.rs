@@ -363,7 +363,7 @@ impl SubstrateNetwork {
             let builder = builder
                 .connection_limits(
                     ConnectionLimits::default()
-                        .with_max_established_per_peer(Some(crate::MAX_CONNECTIONS_PER_PEER as u32))
+                        .with_max_established_per_peer(Some(1u32))
                         .with_max_established_incoming(Some(
                             crate::MAX_CONNECTIONS_ESTABLISHED_INCOMING,
                         )),
@@ -735,20 +735,13 @@ impl SubstrateNetwork {
                 self.notification_sinks
                     .insert((remote, protocol.clone()), notifications_sink);
 
-                if protocol == String::from("/sup/block-announces/1").into() {
-                    self.event_tx
-                        .send(SubstrateNetworkEvent::PeerConnected { peer: remote })
-                        .await
-                        .expect("channel to stay open");
-                } else {
-                    self.event_tx
-                        .send(SubstrateNetworkEvent::ProtocolOpened {
-                            peer: remote,
-                            protocol,
-                        })
-                        .await
-                        .expect("channel to stay open");
-                }
+                self.event_tx
+                    .send(SubstrateNetworkEvent::ProtocolOpened {
+                        peer: remote,
+                        protocol,
+                    })
+                    .await
+                    .expect("channel to stay open");
             }
             BehaviourOut::NotificationStreamReplaced {
                 remote,
@@ -761,20 +754,13 @@ impl SubstrateNetwork {
             BehaviourOut::NotificationStreamClosed { remote, protocol } => {
                 self.notification_sinks.remove(&(remote, protocol.clone()));
 
-                if protocol == String::from("/sup/block-announces/1").into() {
-                    self.event_tx
-                        .send(SubstrateNetworkEvent::PeerDisconnected { peer: remote })
-                        .await
-                        .expect("channel to stay open");
-                } else {
-                    self.event_tx
-                        .send(SubstrateNetworkEvent::ProtocolClosed {
-                            peer: remote,
-                            protocol,
-                        })
-                        .await
-                        .expect("channel to stay open");
-                }
+                self.event_tx
+                    .send(SubstrateNetworkEvent::ProtocolClosed {
+                        peer: remote,
+                        protocol,
+                    })
+                    .await
+                    .expect("channel to stay open");
             }
             BehaviourOut::NotificationsReceived { remote, messages } => {
                 log::trace!(target: "sub-libp2p", "notification received");
@@ -873,6 +859,11 @@ impl SubstrateNetwork {
                         num_established: _,
                         concurrent_dial_errors,
                     } => {
+                        self.event_tx
+                            .send(SubstrateNetworkEvent::PeerConnected { peer: peer_id })
+                            .await
+                            .expect("channel to stay open");
+
                         if let Some(errors) = concurrent_dial_errors {
                             debug!(
                                 target: "sub-libp2p",
@@ -890,6 +881,11 @@ impl SubstrateNetwork {
                         endpoint: _,
                         num_established: _,
                     } => {
+                        self.event_tx
+                            .send(SubstrateNetworkEvent::PeerDisconnected { peer: peer_id })
+                            .await
+                            .expect("channel to stay open");
+
                         debug!(
                             target: "sub-libp2p",
                             "Libp2p => Disconnected({:?}, {:?})",

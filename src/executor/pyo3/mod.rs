@@ -219,6 +219,68 @@ where
         .map_err(From::from)
     }
 
+    /// Protocol opened.
+    fn protocol_opened(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<Vec<ExecutorEvent<T>>> {
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, "protocol opened");
+
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let protocol_py = protocol.into_executor_object(py);
+
+            call_executor!(
+                py,
+                self.interface,
+                &self.code,
+                "protocol_opened",
+                ctx,
+                peer_py,
+                protocol_py
+            )
+        })
+        .map_err(From::from)
+    }
+
+    /// Protocol closed.
+    fn protocol_closed(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<Vec<ExecutorEvent<T>>> {
+        tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, ?protocol, "protocol closed");
+
+        Python::with_gil(|py| -> pyo3::PyResult<Vec<ExecutorEvent<T>>> {
+            // get access to types that `PyO3` understands
+            //
+            // SAFETY: each filter has its own context and it has the same lifetime as
+            // the filter itself so it is safe to convert it to a borrowed pointer.
+            let ctx: &PyAny =
+                unsafe { FromPyPointer::from_borrowed_ptr_or_panic(py, self.context.0) };
+            let peer_py = peer.into_executor_object(py);
+            let protocol_py = protocol.into_executor_object(py);
+
+            call_executor!(
+                py,
+                self.interface,
+                &self.code,
+                "protocol_closed",
+                ctx,
+                peer_py,
+                protocol_py
+            )
+        })
+        .map_err(From::from)
+    }
+
     /// Install notification filter for `protocol`.
     fn install_notification_filter(
         &mut self,

@@ -9,7 +9,7 @@ use crate::{
 use tokio::sync::mpsc;
 
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt::Debug,
     time::Duration,
 };
@@ -58,6 +58,24 @@ pub enum FilterCommand<T: NetworkBackend> {
     UnregisterPeer {
         /// Peer ID.
         peer: T::PeerId,
+    },
+
+    /// Peer opened a protocol.
+    ProtocolOpened {
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+    },
+
+    /// Peer closed a protocol.
+    ProtocolClosed {
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Protocol.
+        protocol: T::Protocol,
     },
 
     /// Install notification filter.
@@ -156,6 +174,22 @@ impl<T: NetworkBackend> FilterHandle<T> {
             .expect("channel to stay open");
     }
 
+    /// Protocol opened.
+    pub async fn protocol_opened(&mut self, peer: T::PeerId, protocol: T::Protocol) {
+        self.tx
+            .send(FilterCommand::ProtocolOpened { peer, protocol })
+            .await
+            .expect("channel to stay open");
+    }
+
+    /// Protocol closed.
+    pub async fn protocol_closed(&mut self, peer: T::PeerId, protocol: T::Protocol) {
+        self.tx
+            .send(FilterCommand::ProtocolClosed { peer, protocol })
+            .await
+            .expect("channel to stay open");
+    }
+
     /// Install notification filter.
     pub async fn install_notification_filter(
         &self,
@@ -242,6 +276,15 @@ impl<T: NetworkBackend> FilterHandle<T> {
     }
 }
 
+/// Peer information.
+struct PeerInfo<T: NetworkBackend> {
+    /// Packet sink.
+    sink: Box<dyn PacketSink<T>>,
+
+    /// Open protocols.
+    protocols: HashSet<T::Protocol>,
+}
+
 /// Message filter.
 pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     /// Executor.
@@ -257,7 +300,7 @@ pub struct Filter<T: NetworkBackend, E: Executor<T>> {
     event_tx: mpsc::Sender<FilterEvent<T>>,
 
     /// Registered peers.
-    peers: HashMap<T::PeerId, Box<dyn PacketSink<T>>>,
+    peers: HashMap<T::PeerId, PeerInfo<T>>,
 
     // Pending inbound requests.
     pending_inbound: HashMap<T::PeerId, T::RequestId>,
@@ -332,6 +375,30 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 ?peer,
                                 ?error,
                                 "failed to unregister peer",
+                            );
+                        }
+                    }
+                    FilterCommand::ProtocolOpened { peer, protocol } => {
+                        if let Err(error) = self.protocol_opened(peer, protocol.clone()).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                interface = ?self.interface,
+                                ?peer,
+                                ?protocol,
+                                ?error,
+                                "failed to register protocol opened event",
+                            );
+                        }
+                    }
+                    FilterCommand::ProtocolClosed { peer, protocol } => {
+                        if let Err(error) = self.protocol_closed(peer, protocol.clone()).await {
+                            tracing::error!(
+                                target: LOG_TARGET,
+                                interface = ?self.interface,
+                                ?peer,
+                                ?protocol,
+                                ?error,
+                                "failed to register protocol closed event",
                             );
                         }
                     }
@@ -444,13 +511,20 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     protocol,
                     notification,
                 } => {
+                    tracing::info!(
+                        target: LOG_TARGET,
+                        "{:?}: send notification to {peers:?}",
+                        self.interface
+                    );
+
                     for peer in peers {
-                        let Some(sink) = self.peers.get_mut(&peer) else {
+                        let Some(info) = self.peers.get_mut(&peer) else {
                             tracing::debug!(target: LOG_TARGET, ?peer, "peer doesn't exist");
                             continue;
                         };
 
-                        match sink
+                        match info
+                            .sink
                             .send_packet(Some(protocol.clone()), &notification)
                             .await
                         {
@@ -477,7 +551,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     peer,
                     payload,
                 } => {
-                    tracing::trace!(target: LOG_TARGET, ?peer, "send request");
+                    tracing::trace!(target: LOG_TARGET, interface = ?self.interface, ?peer, "send request");
                     tracing::trace!(target: LOG_TARGET_MSG, ?payload);
 
                     // TODO: insert into `self.pending_outbound` maybe?
@@ -486,6 +560,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         .peers
                         .get_mut(&peer)
                         .ok_or(Error::PeerDoesntExist)?
+                        .sink
                         .send_request(protocol.clone(), payload)
                         .await
                         .map(|_| ())
@@ -504,6 +579,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                         Some(request_id) => {
                             tracing::trace!(
                                 target: LOG_TARGET,
+                                interface = ?self.interface,
                                 ?peer,
                                 ?request_id,
                                 "send response"
@@ -514,6 +590,7 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                                 .peers
                                 .get_mut(&peer)
                                 .ok_or(Error::PeerDoesntExist)?
+                                .sink
                                 .send_response(request_id, payload)
                                 .await
                             {
@@ -572,7 +649,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
             Entry::Vacant(entry) => {
                 let events = self.executor.register_peer(peer)?;
 
-                entry.insert(sink);
+                entry.insert(PeerInfo {
+                    sink,
+                    protocols: HashSet::new(),
+                });
                 self.process_events(events).await
             }
         }
@@ -594,6 +674,40 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 self.executor.unregister_peer(peer)
             })?;
 
+        self.process_events(events).await
+    }
+
+    /// Register protocol opened event to executor.
+    async fn protocol_opened(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?peer, ?protocol, "protocol opened");
+
+        let Some(info) = self.peers.get_mut(&peer) else {
+            return Err(Error::PeerDoesntExist);
+        };
+
+        info.protocols.insert(protocol.clone());
+        let events = self.executor.protocol_opened(peer, protocol)?;
+        self.process_events(events).await
+    }
+
+    /// Register protocol closed event to executor.
+    async fn protocol_closed(
+        &mut self,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) -> crate::Result<()> {
+        tracing::debug!(target: LOG_TARGET, inteface = ?self.interface, ?peer, ?protocol, "protocol closed");
+
+        let Some(info) = self.peers.get_mut(&peer) else {
+            return Err(Error::PeerDoesntExist);
+        };
+
+        info.protocols.insert(protocol.clone());
+        let events = self.executor.protocol_closed(peer, protocol)?;
         self.process_events(events).await
     }
 
@@ -655,8 +769,9 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                     "filter does not exist, forward to all peers by default",
                 );
 
-                for (peer, sink) in self.peers.iter_mut() {
-                    match sink
+                for (peer, info) in self.peers.iter_mut() {
+                    match info
+                        .sink
                         .send_packet(Some(protocol.clone()), &notification)
                         .await
                     {
