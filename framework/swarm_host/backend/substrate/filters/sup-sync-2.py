@@ -6,8 +6,8 @@ from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import symbol_database as _symbol_database
 
-from backend.substrate.block_request import BlockRequest, Attributes
-from backend.substrate.block_response import BlockResponse
+from swarm_host.backend.substrate.primitives.block_request import BlockRequest, Attributes
+from swarm_host.backend.substrate.primitives.block_response import BlockResponse
 
 from enum import IntFlag, Enum
 

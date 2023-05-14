@@ -1,9 +1,7 @@
 from scalecodec.base import RuntimeConfiguration
 
-from backend.substrate.block_response import BlockResponse
-from backend.substrate.block_request import Direction
-
-# from swarm_host.filter import Filter
+from swarm_host.backend.substrate.primitives.block_response import BlockResponse
+from swarm_host.backend.substrate.primitives.block_request import Direction
 
 import redis
 import time
