@@ -119,12 +119,12 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
 impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     /// Create new [`Overseer`].
     pub fn new(
-        ws_address: Option<SocketAddr>,
+        disable_heuristics: bool,
         parameters: T::NetworkParameters,
     ) -> (Self, Sender<OverseerEvent<T>>) {
         let (overseer_tx, overseer_rx) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
         let (filter_event_tx, filter_events) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
-        let (backend, heuristics_handle) = HeuristicsBackend::new(ws_address);
+        let (backend, heuristics_handle) = HeuristicsBackend::new(disable_heuristics);
 
         // start running the heuristics backend in the background
         tokio::spawn(backend.run());

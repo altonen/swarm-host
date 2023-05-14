@@ -10,7 +10,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use std::{
     collections::{HashMap, HashSet},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     time::{Duration, Instant},
 };
 
@@ -19,6 +19,10 @@ const LOG_TARGET: &str = "heuristics";
 
 /// Update heuristics front-end every 3 seconds.
 const UPDATE_INTERVAL: u64 = 3u64;
+
+/// Heuristics backend WebSocket port.
+const HEURISTICS_ADDRESS: SocketAddr =
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8885);
 
 /// Events sent by the [`HeuristicsHandle`] to [`HeuristicsBackend`].
 #[derive(Debug, Clone)]
@@ -330,13 +334,13 @@ pub struct HeuristicsBackend<T: NetworkBackend> {
 
 impl<T: NetworkBackend> HeuristicsBackend<T> {
     /// Create new [`HeuristicsBackend`].
-    pub fn new(address: Option<SocketAddr>) -> (Self, HeuristicsHandle<T>) {
+    pub fn new(disable_heuristics: bool) -> (Self, HeuristicsHandle<T>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let (ws_tx, ws_rx) = mpsc::unbounded_channel();
 
         // start event loop for a WebSocket server if user provided an address for it
-        if let Some(address) = address {
-            tokio::spawn(heuristics_server(ws_rx, address));
+        if !disable_heuristics {
+            tokio::spawn(heuristics_server(ws_rx, HEURISTICS_ADDRESS));
         }
 
         (

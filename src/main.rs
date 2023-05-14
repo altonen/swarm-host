@@ -40,9 +40,9 @@ struct Flags {
     #[clap(long)]
     rpc_port: u16,
 
-    /// WebSocket port.
+    /// Disable heuristics.
     #[clap(long)]
-    ws_port: Option<u16>,
+    disable_heuristics: Option<bool>,
 
     /// Network backend type.
     #[command(subcommand)]
@@ -59,19 +59,21 @@ enum Backend {
     },
 }
 
-async fn run_substrate_backend(rpc_port: u16, ws_port: Option<u16>, genesis_hash: &String) {
-    let ws_address = ws_port.map(|port| {
-        format!("127.0.0.1:{}", port)
-            .parse::<SocketAddr>()
-            .expect("valid address")
-    });
+async fn run_substrate_backend(
+    rpc_port: u16,
+    disable_heuristics: Option<bool>,
+    genesis_hash: &String,
+) {
+    let disable_heuristics = disable_heuristics.unwrap_or(false);
 
     let parameters = SubstrateParameters {
         genesis_hash: hex::decode(&genesis_hash[2..]).expect("valid genesis hash"),
     };
 
-    let (overseer, tx) =
-        Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(ws_address, parameters);
+    let (overseer, tx) = Overseer::<SubstrateBackend, PyO3Executor<SubstrateBackend>>::new(
+        disable_heuristics,
+        parameters,
+    );
     tokio::spawn(async move { overseer.run().await });
 
     run_server(
@@ -102,7 +104,7 @@ async fn main() {
 
     match flags.backend {
         Backend::Substrate { ref genesis_hash } => {
-            run_substrate_backend(flags.rpc_port, flags.ws_port, &genesis_hash).await
+            run_substrate_backend(flags.rpc_port, flags.disable_heuristics, &genesis_hash).await
         }
     }
 }
