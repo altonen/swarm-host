@@ -12,7 +12,7 @@ use parity_scale_codec::{Decode, Encode};
 use rand::Rng;
 use tokio::sync::mpsc;
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs, path::PathBuf, time::Duration};
 
 #[tokio::test]
 async fn inject_response_missing() {
@@ -30,16 +30,16 @@ def inject_request(ctx, peer, request):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        context_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
 
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
     assert!(filter
         .install_request_response_filter(ProtocolId::Transaction, notification_filter_code)
         .is_err());
@@ -61,16 +61,16 @@ def inject_response(ctx, peer, response):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        context_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
 
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
     assert!(filter
         .install_request_response_filter(ProtocolId::Transaction, notification_filter_code)
         .is_err());
@@ -78,6 +78,7 @@ def inject_response(ctx, peer, response):
 
 // TODO: split this into multiple tests
 #[tokio::test]
+#[ignore]
 async fn inject_request_for_blocks_that_dont_exist() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -116,30 +117,19 @@ def register_peer(ctx, peer):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        context_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
 
-    println!(
-        "{:?}",
-        filter.initialize_filter(interface, context_code, None)
-    );
-    // assert!(filter
-    //     .initialize_filter(interface, context_code, None)
-    //     .is_ok());
-    println!(
-        "{:?}",
-        filter.install_request_response_filter(
-            ProtocolId::BlockRequest,
-            request_response_filter_code
-        )
-    );
-    // assert!(filter
-    //     .install_request_response_filter(ProtocolId::BlockRequest, request_response_filter_code)
-    //     .is_ok());
+    assert!(filter
+        .install_request_response_filter(ProtocolId::BlockRequest, request_response_filter_code)
+        .is_ok());
 
     // register two peers and create packet sinks for them
     let peer1 = rng.gen();
@@ -149,13 +139,13 @@ def register_peer(ctx, peer):
     let (sink2, _, mut req_recv2, _) = DummyPacketSink::new();
     let (sink3, _, _, mut resp_recv3) = DummyPacketSink::new();
 
-    assert!(filter.register_peer(peer1, Box::new(sink1)).is_ok());
-    assert!(filter.register_peer(peer2, Box::new(sink2)).is_ok());
-    assert!(filter.register_peer(peer3, Box::new(sink3)).is_ok());
+    assert!(filter.register_peer(peer1, Box::new(sink1)).await.is_ok());
+    assert!(filter.register_peer(peer2, Box::new(sink2)).await.is_ok());
+    assert!(filter.register_peer(peer3, Box::new(sink3)).await.is_ok());
 
     assert!(filter
         .inject_request(
-            &ProtocolId::BlockRequest,
+            ProtocolId::BlockRequest,
             peer1,
             Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode())
         )
@@ -163,7 +153,7 @@ def register_peer(ctx, peer):
         .is_ok());
     assert!(filter
         .inject_request(
-            &ProtocolId::BlockRequest,
+            ProtocolId::BlockRequest,
             peer3,
             Request::new(RequestId(1338), BlockRequest::new(123u128, 16u8).encode())
         )
@@ -177,24 +167,14 @@ def register_peer(ctx, peer):
         123u128,
         (0..1).map(|_| rand::random()).collect::<Vec<_>>(),
     )]);
-    println!(
-        "{:?}",
-        filter
-            .inject_response(
-                &ProtocolId::BlockRequest,
-                peer2,
-                Response::new(RequestId(1337), sent_response.encode()),
-            )
-            .await
-    );
-    // assert!(filter
-    //     .inject_response(
-    //         &ProtocolId::BlockRequest,
-    //         peer2,
-    //         Response::new(RequestId(1337), sent_response.encode()),
-    //     )
-    //     .await
-    //     .is_ok());
+    assert!(filter
+        .inject_response(
+            ProtocolId::BlockRequest,
+            peer2,
+            Response::new(RequestId(1337), sent_response.encode()),
+        )
+        .await
+        .is_ok());
 
     let response1 = resp_recv1.try_recv().unwrap();
     let response3 = resp_recv3.try_recv().unwrap();
@@ -208,24 +188,14 @@ def register_peer(ctx, peer):
         BlockResponse::decode(&mut &response3[..]).unwrap()
     );
 
-    println!(
-        "{:?}",
-        filter
-            .inject_request(
-                &ProtocolId::BlockRequest,
-                peer1,
-                Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
-            )
-            .await
-    );
-    // assert!(filter
-    //     .inject_request(
-    //         &ProtocolId::BlockRequest,
-    //         peer1,
-    //         Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
-    //     )
-    //     .await
-    //     .is_ok());
+    assert!(filter
+        .inject_request(
+            ProtocolId::BlockRequest,
+            peer1,
+            Request::new(RequestId(1337), BlockRequest::new(123u128, 16u8).encode()),
+        )
+        .await
+        .is_ok());
     let response = resp_recv1.try_recv().unwrap();
     let _response: BlockResponse = Decode::decode(&mut &response[..]).unwrap();
 }

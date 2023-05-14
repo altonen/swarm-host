@@ -42,6 +42,7 @@ struct DummyPacketSink<T: NetworkBackend> {
 }
 
 impl DummyPacketSink<MockchainBackend> {
+    #[allow(unused)]
     pub fn new() -> (
         Self,
         mpsc::Receiver<<MockchainBackend as NetworkBackend>::Message>,

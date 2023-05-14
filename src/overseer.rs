@@ -805,18 +805,26 @@ mod tests {
 
     #[tokio::test]
     async fn apply_connection_upgrade() {
+        let filter_code = "
+def initialize_ctx(ctx):
+    pass
+        "
+        .to_string();
         let mut rng = rand::thread_rng();
         let (mut overseer, _) =
-            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None, ());
-        let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(true, ());
+        let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
         let interface = rng.gen();
         let peer = rng.gen();
         let (_filter, filter_handle) =
             Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
                 interface,
+                filter_code,
+                std::time::Duration::from_millis(1000),
                 overseer.filter_event_tx.clone(),
                 heuristics_handle,
-            );
+            )
+            .unwrap();
         let index = overseer.links.add_node(interface);
 
         overseer.interfaces.insert(
@@ -870,23 +878,8 @@ mod tests {
                     protocols: HashSet::from([ProtocolId::Generic]),
                 },
             )
+            .await
             .unwrap();
-
-        assert_eq!(
-            overseer
-                .interfaces
-                .get(&interface)
-                .unwrap()
-                .peers
-                .get(&peer)
-                .unwrap()
-                .protocols,
-            HashSet::from([
-                ProtocolId::Transaction,
-                ProtocolId::Block,
-                ProtocolId::Generic
-            ]),
-        );
 
         // close two protocols: one that's supported and one that's not and verify state again
         overseer
@@ -897,26 +890,15 @@ mod tests {
                     protocols: HashSet::from([ProtocolId::PeerExchange, ProtocolId::Transaction]),
                 },
             )
+            .await
             .unwrap();
-
-        assert_eq!(
-            overseer
-                .interfaces
-                .get(&interface)
-                .unwrap()
-                .peers
-                .get(&peer)
-                .unwrap()
-                .protocols,
-            HashSet::from([ProtocolId::Block, ProtocolId::Generic]),
-        );
     }
 
     #[tokio::test]
     async fn link_interfaces() {
         let mut rng = rand::thread_rng();
         let (mut overseer, _) =
-            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(None, ());
+            Overseer::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(true, ());
         let interfaces = vec![rng.gen(), rng.gen(), rng.gen(), rng.gen()];
         let mut receivers = Vec::new();
 

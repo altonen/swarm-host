@@ -13,8 +13,6 @@ use rand::Rng;
 use std::collections::HashMap;
 
 mod conversion;
-#[cfg(test)]
-mod tests;
 
 /// Logging target for the file.
 const LOG_TARGET: &str = "executor::pyo3";

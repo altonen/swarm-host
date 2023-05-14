@@ -8,6 +8,8 @@ use crate::{
 use rand::Rng;
 use tokio::sync::mpsc;
 
+use std::time::Duration;
+
 #[test]
 fn initialize_filter() {
     let filter_code = "
@@ -19,16 +21,15 @@ def initialize_ctx(ctx):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
+    let (_, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        filter_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
-
-    assert!(filter
-        .initialize_filter(interface, filter_code, None)
-        .is_ok());
+    )
+    .unwrap();
 }
 
 #[test]
@@ -42,16 +43,16 @@ def invalid_name_for_context_initialization_function(ctx):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
-    let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
+    let result = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        filter_code,
+        Duration::from_secs(1000),
         tx,
         heuristics_handle,
     );
 
-    assert!(filter
-        .initialize_filter(interface, filter_code, None)
-        .is_err());
+    assert!(result.is_err());
 }
 
 #[test]
@@ -70,16 +71,16 @@ def inject_notification(ctx, peer, notification):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        context_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
 
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
     assert!(filter
         .install_notification_filter(ProtocolId::Transaction, notification_filter_code)
         .is_ok());
@@ -101,23 +102,23 @@ def __filter_notification__(ctx):
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        context_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
 
-    assert!(filter
-        .initialize_filter(interface, context_code, None)
-        .is_ok());
     assert!(filter
         .install_notification_filter(ProtocolId::Transaction, filter_code)
         .is_err());
 }
 
-#[test]
-fn register_peer() {
+#[tokio::test]
+async fn register_peer() {
     let filter_code = "
 class Context():
     def __init__(self):
@@ -129,28 +130,31 @@ def initialize_ctx(ctx):
 def register_peer(ctx, peer):
     print('register peer %d to filter' % (peer))
     ctx.peers[peer] = peer
+
+def poll(ctx):
+    pass
     "
     .to_owned();
 
     let mut rng = rand::thread_rng();
     let (tx, _rx) = mpsc::channel(64);
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        filter_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
     let mock_sink = Box::new(MockPacketSink::new());
 
-    assert!(filter
-        .initialize_filter(interface, filter_code, None)
-        .is_ok());
-    assert!(filter.register_peer(rng.gen(), mock_sink).is_ok());
+    assert!(filter.register_peer(rng.gen(), mock_sink).await.is_ok());
 }
 
-#[test]
-fn unregister_peer() {
+#[tokio::test]
+async fn unregister_peer() {
     let filter_code = "
 class Context():
     def __init__(self):
@@ -169,6 +173,9 @@ def unregister_peer(ctx, peer):
         del ctx.peers[peer]
     else:
         print('peer does not exist')
+
+def poll(ctx):
+    pass
     "
     .to_owned();
 
@@ -176,18 +183,18 @@ def unregister_peer(ctx, peer):
     let (tx, _rx) = mpsc::channel(64);
     let peer = rng.gen();
     let interface = rng.gen();
-    let (_backend, heuristics_handle) = HeuristicsBackend::new(None);
+    let (_backend, heuristics_handle) = HeuristicsBackend::new(true);
     let (mut filter, _) = Filter::<MockchainBackend, PyO3Executor<MockchainBackend>>::new(
         interface,
+        filter_code,
+        Duration::from_millis(1000),
         tx,
         heuristics_handle,
-    );
+    )
+    .unwrap();
     let mock_sink = Box::new(MockPacketSink::new());
 
-    assert!(filter
-        .initialize_filter(interface, filter_code, None)
-        .is_ok());
-    assert!(filter.register_peer(peer, mock_sink).is_ok());
-    assert!(filter.unregister_peer(peer).is_ok());
-    assert!(filter.unregister_peer(peer).is_err());
+    assert!(filter.register_peer(peer, mock_sink).await.is_ok());
+    assert!(filter.unregister_peer(peer).await.is_ok());
+    assert!(filter.unregister_peer(peer).await.is_err());
 }
