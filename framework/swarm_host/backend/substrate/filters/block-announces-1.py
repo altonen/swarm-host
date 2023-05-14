@@ -1,5 +1,4 @@
-
-from backend.substrate.block_announce import BlockAnnounce, init_runtime_config
+from swarm_host.backend.substrate.primitives.block_announce import BlockAnnounce, init_runtime_config
 
 def inject_notification(
     ctx,
