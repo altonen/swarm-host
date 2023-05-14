@@ -19,7 +19,7 @@
 //! Network packet message types. These get serialized and put into the lower level protocol
 //! payload.
 
-use crate::protocol::role::Roles;
+use crate::backend::substrate::network::common::protocol::role::Roles;
 
 use bitflags::bitflags;
 use codec::{Decode, Encode, Error, Input, Output};
@@ -126,7 +126,7 @@ impl<H: HeaderT> BlockAnnounce<H> {
 /// Generic types.
 pub mod generic {
     use super::{BlockAttributes, BlockState, Direction};
-    use crate::message::RequestId;
+    use crate::backend::substrate::network::common::message::RequestId;
     use codec::{Decode, Encode, Input, Output};
     use sp_runtime::{EncodedJustification, Justifications};
 

@@ -17,7 +17,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![allow(unused)]
-use crate::{
+use crate::backend::substrate::network::{
     discovery::{DiscoveryBehaviour, DiscoveryConfig, DiscoveryOut},
     peer_info,
     protocol::{CustomMessageOutcome, NotificationsSink, Protocol},
@@ -33,7 +33,7 @@ use libp2p::{
     swarm::NetworkBehaviour,
 };
 
-use sc_network_common::{
+use crate::backend::substrate::network::common::{
     protocol::{
         event::DhtEvent,
         role::{ObservedRole, Roles},
@@ -41,11 +41,13 @@ use sc_network_common::{
     },
     request_responses::{IfDisconnected, ProtocolConfig, RequestFailure},
 };
-use sc_peerset::{PeersetHandle, ReputationChange};
+use crate::backend::substrate::network::peerset::{PeersetHandle, ReputationChange};
 use sp_runtime::traits::Block as BlockT;
 use std::{collections::HashSet, time::Duration};
 
-pub use crate::request_responses::{InboundFailure, OutboundFailure, RequestId, ResponseFailure};
+pub use crate::backend::substrate::network::request_responses::{
+    InboundFailure, OutboundFailure, RequestId, ResponseFailure,
+};
 
 /// General behaviour of the network. Combines all protocols together.
 #[derive(NetworkBehaviour)]

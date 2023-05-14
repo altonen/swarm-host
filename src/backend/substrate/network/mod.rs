@@ -17,10 +17,13 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![warn(unused_extern_crates)]
+#![allow(unused)]
 
 mod behaviour;
+pub mod common;
 mod discovery;
 mod peer_info;
+pub mod peerset;
 mod protocol;
 mod request_responses;
 mod service;
@@ -29,9 +32,7 @@ mod transport;
 pub mod config;
 pub mod network_state;
 
-#[doc(inline)]
-pub use libp2p::{multiaddr, Multiaddr, PeerId};
-pub use sc_network_common::{
+pub use crate::backend::substrate::network::common::{
     protocol::{
         event::{DhtEvent, Event},
         role::ObservedRole,
@@ -48,12 +49,14 @@ pub use sc_network_common::{
         StateDownloadProgress, SyncState,
     },
 };
+#[doc(inline)]
+pub use libp2p::{multiaddr, Multiaddr, PeerId};
 pub use service::{
     Command, DecodingError, Keypair, NodeType, OutboundFailure, PublicKey, SubstrateNetwork,
     SubstrateNetworkEvent,
 };
 
-pub use sc_peerset::ReputationChange;
+pub use crate::backend::substrate::network::peerset::ReputationChange;
 
 /// The maximum allowed number of established connections per peer.
 ///

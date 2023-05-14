@@ -43,7 +43,7 @@ pub enum Error {
     RequestDoesntExist,
 
     #[error("Substrate error: `{0}`")]
-    Substrate(sc_network_common::error::Error),
+    Substrate(crate::backend::substrate::network::common::error::Error),
 
     #[error("Custom error: `{0}`")]
     Custom(String),
@@ -91,8 +91,8 @@ impl From<serde_cbor::Error> for Error {
     }
 }
 
-impl From<sc_network_common::error::Error> for Error {
-    fn from(error: sc_network_common::error::Error) -> Self {
+impl From<crate::backend::substrate::network::common::error::Error> for Error {
+    fn from(error: crate::backend::substrate::network::common::error::Error) -> Self {
         Error::Substrate(error)
     }
 }

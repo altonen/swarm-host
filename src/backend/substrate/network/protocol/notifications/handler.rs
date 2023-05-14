@@ -58,11 +58,12 @@
 //! [`NotifsHandlerIn::Open`] has gotten an answer.
 
 #![allow(unused)]
-use crate::protocol::notifications::upgrade::{
+use crate::backend::substrate::network::protocol::notifications::upgrade::{
     NotificationsIn, NotificationsInSubstream, NotificationsOut, NotificationsOutSubstream,
     UpgradeCollec,
 };
 
+use crate::backend::substrate::network::common::protocol::ProtocolName;
 use bytes::BytesMut;
 use futures::{
     channel::mpsc,
@@ -78,7 +79,6 @@ use libp2p::{
 };
 use log::error;
 use parking_lot::{Mutex, RwLock};
-use sc_network_common::protocol::ProtocolName;
 use std::{
     collections::VecDeque,
     mem,

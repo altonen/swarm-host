@@ -19,8 +19,8 @@
 //! Network event types. These are are not the part of the protocol, but rather
 //! events that happen on the network like DHT get/put results received.
 
-use super::ProtocolName;
-use crate::protocol::role::ObservedRole;
+use crate::backend::substrate::network::common::protocol::role::ObservedRole;
+use crate::backend::substrate::network::common::protocol::ProtocolName;
 use bytes::Bytes;
 use libp2p::{core::PeerId, kad::record::Key};
 

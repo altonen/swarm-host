@@ -1,5 +1,9 @@
 use crate::{
     backend::{
+        substrate::network::{
+            Command, Multiaddr, NodeType, PeerId as SubstratePeerId,
+            ProtocolName as SubstrateProtocolName, SubstrateNetwork, SubstrateNetworkEvent,
+        },
         ConnectionUpgrade, Idable, Interface, InterfaceEvent, InterfaceEventStream, InterfaceType,
         NetworkBackend, PacketSink, WithMessageInfo,
     },
@@ -16,11 +20,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 
-use sc_network::{
-    Command, Multiaddr, NodeType, PeerId as SubstratePeerId, ProtocolName as SubstrateProtocolName,
-    SubstrateNetwork, SubstrateNetworkEvent,
-};
-
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     hash::Hasher,
@@ -32,6 +31,8 @@ use std::{
 
 #[cfg(test)]
 mod tests;
+
+pub mod network;
 
 const LOG_TARGET: &str = "substrate";
 
@@ -255,7 +256,7 @@ impl PacketSink<SubstrateBackend> for SubstratePacketSink {
 
 pub struct InterfaceHandle {
     command_tx: mpsc::Sender<Command>,
-    peerset_handle: sc_peerset::PeersetHandle,
+    peerset_handle: crate::backend::substrate::network::peerset::PeersetHandle,
     interface_id: usize,
     peer_id: PeerId,
 }

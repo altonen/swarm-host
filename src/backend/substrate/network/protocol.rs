@@ -16,8 +16,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::config;
+use crate::backend::substrate::network::config;
 
+use crate::backend::substrate::network::common::{
+    config::NonReservedPeerMode,
+    error,
+    protocol::{role::Roles, ProtocolName},
+};
 use bytes::Bytes;
 use codec::Encode;
 use libp2p::{
@@ -29,11 +34,6 @@ use libp2p::{
     Multiaddr, PeerId,
 };
 use notifications::{Notifications, NotificationsOut};
-use sc_network_common::{
-    config::NonReservedPeerMode,
-    error,
-    protocol::{role::Roles, ProtocolName},
-};
 
 use std::{
     collections::{HashSet, VecDeque},
@@ -56,14 +56,15 @@ pub(crate) const BLOCK_ANNOUNCES_TRANSACTIONS_SUBSTREAM_SIZE: u64 = 16 * 1024 * 
 const NUM_HARDCODED_PEERSETS: usize = 1;
 
 /// Harcoded peerset id for syncing.
-pub(crate) const HARDCODED_PEERSETS_SYNC: sc_peerset::SetId = sc_peerset::SetId::from(0);
+pub(crate) const HARDCODED_PEERSETS_SYNC: crate::backend::substrate::network::peerset::SetId =
+    crate::backend::substrate::network::peerset::SetId::from(0);
 
 // Lock must always be taken in order declared here.
 pub struct Protocol {
     /// Pending list of messages to return from `poll` as a priority.
     pending_messages: VecDeque<CustomMessageOutcome>,
     /// Used to report reputation changes.
-    peerset_handle: sc_peerset::PeersetHandle,
+    peerset_handle: crate::backend::substrate::network::peerset::PeersetHandle,
     /// Handles opening the unique substream and sending and receiving raw messages.
     behaviour: Notifications,
     /// List of notifications protocols that have been registered.
@@ -75,8 +76,12 @@ impl Protocol {
     pub fn new(
         roles: Roles,
         network_config: &config::NetworkConfiguration,
-        block_announces_protocol: sc_network_common::config::NonDefaultSetConfig,
-    ) -> error::Result<(Self, sc_peerset::PeersetHandle, Vec<(PeerId, Multiaddr)>)> {
+        block_announces_protocol: crate::backend::substrate::network::common::config::NonDefaultSetConfig,
+    ) -> error::Result<(
+        Self,
+        crate::backend::substrate::network::peerset::PeersetHandle,
+        Vec<(PeerId, Multiaddr)>,
+    )> {
         let mut known_addresses = Vec::new();
 
         let (peerset, peerset_handle) = {
@@ -98,7 +103,7 @@ impl Protocol {
             }
 
             // Set number 0 is used for block announces.
-            sets.push(sc_peerset::SetConfig {
+            sets.push(crate::backend::substrate::network::peerset::SetConfig {
                 in_peers: network_config.default_peers_set.in_peers,
                 out_peers: network_config.default_peers_set.out_peers,
                 bootnodes,
@@ -117,7 +122,7 @@ impl Protocol {
                 let reserved_only =
                     set_cfg.set_config.non_reserved_mode == NonReservedPeerMode::Deny;
 
-                sets.push(sc_peerset::SetConfig {
+                sets.push(crate::backend::substrate::network::peerset::SetConfig {
                     in_peers: set_cfg.set_config.in_peers,
                     out_peers: set_cfg.set_config.out_peers,
                     bootnodes: Vec::new(),
@@ -126,7 +131,9 @@ impl Protocol {
                 });
             }
 
-            sc_peerset::Peerset::from_config(sc_peerset::PeersetConfig { sets })
+            crate::backend::substrate::network::peerset::Peerset::from_config(
+                crate::backend::substrate::network::peerset::PeersetConfig { sets },
+            )
         };
 
         let behaviour = {
@@ -176,13 +183,23 @@ impl Protocol {
     }
 
     /// Disconnects the given peer if we are connected to it.
-    pub fn disconnect_peer(&mut self, peer_id: &PeerId, set: sc_peerset::SetId) {
-        self.behaviour
-            .disconnect_peer(peer_id, sc_peerset::SetId::from(set.into()));
+    pub fn disconnect_peer(
+        &mut self,
+        peer_id: &PeerId,
+        set: crate::backend::substrate::network::peerset::SetId,
+    ) {
+        self.behaviour.disconnect_peer(
+            peer_id,
+            crate::backend::substrate::network::peerset::SetId::from(set.into()),
+        );
     }
 
     /// Adjusts the reputation of a node.
-    pub fn report_peer(&self, who: PeerId, reputation: sc_peerset::ReputationChange) {
+    pub fn report_peer(
+        &self,
+        who: PeerId,
+        reputation: crate::backend::substrate::network::peerset::ReputationChange,
+    ) {
         self.peerset_handle.report_peer(who, reputation)
     }
 

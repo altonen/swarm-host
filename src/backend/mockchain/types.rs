@@ -3,7 +3,7 @@ use crate::{
     executor::{FromExecutorObject, IntoExecutorObject},
 };
 
-use parity_scale_codec::{Decode, Encode};
+use codec::{Decode, Encode};
 use pyo3::{
     prelude::*,
     types::{PyDict, PyList, PyString},

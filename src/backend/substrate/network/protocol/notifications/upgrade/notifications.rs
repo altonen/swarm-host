@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::backend::substrate::network::common::protocol::ProtocolName;
 use asynchronous_codec::Framed;
 /// Notifications protocol.
 ///
@@ -39,7 +40,6 @@ use bytes::BytesMut;
 use futures::prelude::*;
 use libp2p::core::{upgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::{error, warn};
-use sc_network_common::protocol::ProtocolName;
 use std::{
     convert::Infallible,
     io, mem,

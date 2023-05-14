@@ -15,21 +15,78 @@ jsonrpsee = { version = "0.16.2", features = ["full"] }
 pin-project = "1.0.12"
 petgraph = "0.6.3"
 rand = "0.8.5"
-sc-network = { version = "0.10.0-dev", path = "src/backend/substrate/network/" }
-sc-peerset = { version = "4.0.0-dev", path = "src/backend/substrate/network/peerset" }
-sc-network-common = { version = "0.10.0-dev", path = "src/backend/substrate/network/common" }
+# sc-peerset = { version = "4.0.0-dev", path = "src/backend/substrate/network/peerset" }
+# sc-network-common = { version = "0.10.0-dev", path = "src/backend/substrate/network/common" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_cbor = "0.11.2"
-sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
 thiserror = "1.0.38"
 tokio = { version = "1.23.0", features = ["full"] }
 tokio-stream = "0.1.11"
+
 tokio-util = "0.7.4"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["tracing-log", "env-filter"] }
 pyo3 = { version = "0.18.1", features = ["auto-initialize"] }
 mockall = "0.11.4"
-parity-scale-codec = { version = "3.4.0", features = ["derive"] }
+# parity-scale-codec = { version = "3.4.0", features = ["derive"] }
 tokio-tungstenite = "0.18.0"
 serde_json = "1.0.96"
 hex = "0.4.3"
+
+# Substrate dependencies
+# array-bytes = "4.1"
+# async-stream = "0.3.4"
+# async-trait = "0.1"
+asynchronous-codec = "0.6"
+backtrace = "0.3.67"
+bytes = "1"
+codec = { package = "parity-scale-codec", version = "3.2.2", features = ["derive"] }
+either = "1.5.3"
+fnv = "1.0.6"
+# futures = "0.3.21"
+futures-timer = "3.0.2"
+ip_network = "0.4.1"
+libp2p = { version = "0.50.0", features = ["dns", "identify", "kad", "macros", "mdns", "mplex", "noise", "ping", "tcp",  "tokio", "yamux", "websocket", "request-response"] }
+# tokio = { version = "1.22.0", features = ["macros"] }
+# tokio-stream = "0.1.12"
+log = "0.4.17"
+lru = "0.8.1"
+# mockall = "0.11.3"
+parking_lot = "0.12.1"
+# pin-project = "1.0.12"
+# rand = "0.8.5"
+# serde = { version = "1.0.136", features = ["derive"] }
+# serde_json = "1.0.85"
+smallvec = "1.8.0"
+# thiserror = "1.0"
+unsigned-varint = { version = "0.7.1", features = ["futures", "asynchronous_codec"] }
+zeroize = "1.4.3"
+
+sc-block-builder = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-client-api = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sc-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+# sc-utils = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
+sc-utils = "7.0.0"
+sp-arithmetic = { version = "6.0.0", git = "https://github.com/paritytech/substrate" }
+sp-blockchain = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-consensus = { version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-core = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
+sp-runtime = { version = "7.0.0", git = "https://github.com/paritytech/substrate" }
+
+# sc-network-common = { version = "0.10.0-dev", path = "common" }
+# sc-peerset = { version = "4.0.0-dev", path = "peerset" }
+
+
+bitflags = "1.3.2"
+# bytes = "1"
+# codec = { package = "parity-scale-codec", version = "3.2.2", features = [
+# 	"derive",
+# ] }
+# futures = "0.3.21"
+# futures-timer = "3.0.2"
+# libp2p = { version = "0.50.0", features = ["request-response", "kad"] }
+linked_hash_set = "0.1.3"
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", version = "0.10.0-dev", git = "https://github.com/paritytech/substrate" }
+# sc-utils = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+sp-consensus-grandpa = { version = "4.0.0-dev", git = "https://github.com/paritytech/substrate" }
+wasm-timer = "0.2"

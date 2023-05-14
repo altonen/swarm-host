@@ -16,6 +16,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
+use crate::backend::substrate::network::MAX_CONNECTIONS_PER_PEER;
+
+use crate::backend::substrate::network::common::utils::interval;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use libp2p::{
@@ -36,7 +39,6 @@ use libp2p::{
     Multiaddr,
 };
 use log::{debug, error};
-use sc_network_common::utils::interval;
 use smallvec::SmallVec;
 use std::{
     collections::hash_map::Entry,
@@ -69,7 +71,7 @@ struct NodeInfo {
     /// to the node.
     info_expire: Option<Instant>,
     /// Non-empty list of connected endpoints, one per connection.
-    endpoints: SmallVec<[ConnectedPoint; crate::MAX_CONNECTIONS_PER_PEER]>,
+    endpoints: SmallVec<[ConnectedPoint; MAX_CONNECTIONS_PER_PEER]>,
     /// Version reported by the remote, or `None` if unknown.
     client_version: Option<String>,
     /// Latest ping time with this node.

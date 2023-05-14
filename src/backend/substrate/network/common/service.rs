@@ -18,15 +18,15 @@
 //
 // If you read this, you are very thorough, congratulations.
 
-use crate::{
+use crate::backend::substrate::network::common::{
     config::MultiaddrWithPeerId,
     protocol::{event::Event, ProtocolName},
     request_responses::{IfDisconnected, RequestFailure},
 };
+use crate::backend::substrate::network::peerset::ReputationChange;
 use futures::{channel::oneshot, Stream};
 pub use libp2p::{identity::error::SigningError, kad::record::Key as KademliaKey};
 use libp2p::{Multiaddr, PeerId};
-use sc_peerset::ReputationChange;
 pub use signature::Signature;
 use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc};
 

@@ -27,24 +27,15 @@
 // TODO: implement very simple block request handling?
 // TODO: relay only the first `ConnectionEstablished` to `overseer`
 
-use crate::{
+use crate::backend::substrate::network::{
     behaviour::{self, Behaviour, BehaviourOut},
     config::{self, NetworkConfiguration, NodeKeyConfig, Secret},
     discovery::DiscoveryConfig,
     protocol::{self, NotificationsSink, Protocol, HARDCODED_PEERSETS_SYNC},
-    transport,
+    transport, MAX_CONNECTIONS_ESTABLISHED_INCOMING, MAX_CONNECTIONS_PER_PEER,
 };
 
-use futures::{channel, prelude::*, stream::FuturesUnordered, FutureExt, Stream, StreamExt};
-use libp2p::{
-    core::upgrade,
-    identify::Info as IdentifyInfo,
-    identity::ed25519,
-    swarm::{AddressScore, ConnectionLimits, Executor, Swarm, SwarmBuilder, SwarmEvent},
-    PeerId,
-};
-use log::{debug, error, info, trace, warn};
-use sc_network_common::{
+use crate::backend::substrate::network::common::{
     config::{
         NonDefaultSetConfig, NonReservedPeerMode, NotificationHandshake, ProtocolId, SetConfig,
         TransportConfig,
@@ -55,6 +46,15 @@ use sc_network_common::{
         IfDisconnected, IncomingRequest, OutgoingResponse, ProtocolConfig, RequestFailure,
     },
 };
+use futures::{channel, prelude::*, stream::FuturesUnordered, FutureExt, Stream, StreamExt};
+use libp2p::{
+    core::upgrade,
+    identify::Info as IdentifyInfo,
+    identity::ed25519,
+    swarm::{AddressScore, ConnectionLimits, Executor, Swarm, SwarmBuilder, SwarmEvent},
+    PeerId,
+};
+use log::{debug, error, info, trace, warn};
 use sp_core::H256;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, StreamMap};
@@ -180,7 +180,7 @@ pub struct SubstrateNetwork {
     pending_responses: FuturesUnordered<PendingResponse>,
     cached_responses: HashMap<u64, Vec<u8>>,
     discovered: HashSet<PeerId>,
-    peerset_handle: sc_peerset::PeersetHandle,
+    peerset_handle: crate::backend::substrate::network::peerset::PeersetHandle,
     rename: HashSet<PeerId>,
 }
 
@@ -203,7 +203,14 @@ impl SubstrateNetwork {
         command_rx: mpsc::Receiver<Command>,
         genesis_hash: Vec<u8>,
         handshake: Option<Vec<u8>>,
-    ) -> Result<(PeerId, Self, sc_peerset::PeersetHandle), Error> {
+    ) -> Result<
+        (
+            PeerId,
+            Self,
+            crate::backend::substrate::network::peerset::PeersetHandle,
+        ),
+        Error,
+    > {
         let key_config = NodeKeyConfig::default();
         let mut network_config = NetworkConfiguration::with_key(key_config);
         let mut map = StreamMap::new();
@@ -329,21 +336,15 @@ impl SubstrateNetwork {
             };
 
             let behaviour = {
-                let result = Behaviour::new(
+                Behaviour::new(
                     protocol,
                     user_agent,
                     local_public,
                     discovery_config,
                     network_config.request_response_protocols.clone(),
                     peerset_handle.clone(),
-                );
-
-                match result {
-                    Ok(b) => b,
-                    Err(crate::request_responses::RegisterError::DuplicateProtocol(proto)) => {
-                        return Err(Error::DuplicateRequestResponseProtocol { protocol: proto })
-                    }
-                }
+                )
+                .unwrap()
             };
 
             let builder = {
@@ -364,9 +365,7 @@ impl SubstrateNetwork {
                 .connection_limits(
                     ConnectionLimits::default()
                         .with_max_established_per_peer(Some(1u32))
-                        .with_max_established_incoming(Some(
-                            crate::MAX_CONNECTIONS_ESTABLISHED_INCOMING,
-                        )),
+                        .with_max_established_incoming(Some(MAX_CONNECTIONS_ESTABLISHED_INCOMING)),
                 )
                 .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
                 .notify_handler_buffer_size(NonZeroUsize::new(32).expect("32 != 0; qed"))

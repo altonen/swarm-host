@@ -22,7 +22,7 @@ use rand::{
     distributions::{Distribution, Uniform, WeightedIndex},
     seq::IteratorRandom,
 };
-use sc_peerset::{
+use crate::backend::substrate::network::peerset::{
     DropReason, IncomingIndex, Message, Peerset, PeersetConfig, ReputationChange, SetConfig, SetId,
 };
 use std::{

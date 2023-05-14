@@ -22,14 +22,12 @@ pub mod message;
 pub mod metrics;
 pub mod warp;
 
-use crate::protocol::role::Roles;
+use crate::backend::substrate::network::common::protocol::role::Roles;
 use futures::Stream;
 
 use libp2p::PeerId;
 
 use message::{BlockAnnounce, BlockData, BlockRequest, BlockResponse};
-use sc_consensus::{import_queue::RuntimeOrigin, IncomingBlock};
-use sp_consensus::BlockOrigin;
 use sp_runtime::{
     traits::{Block as BlockT, NumberFor},
     Justifications,
@@ -104,7 +102,10 @@ pub struct SyncStatus<Block: BlockT> {
 
 /// A peer did not behave as expected and should be reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BadPeer(pub PeerId, pub sc_peerset::ReputationChange);
+pub struct BadPeer(
+    pub PeerId,
+    pub crate::backend::substrate::network::peerset::ReputationChange,
+);
 
 impl fmt::Display for BadPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -114,16 +115,16 @@ impl fmt::Display for BadPeer {
 
 impl std::error::Error for BadPeer {}
 
-/// Result of [`ChainSync::on_block_data`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OnBlockData<Block: BlockT> {
-    /// The block should be imported.
-    Import(BlockOrigin, Vec<IncomingBlock<Block>>),
-    /// A new block request needs to be made to the given peer.
-    Request(PeerId, BlockRequest<Block>),
-    /// Continue processing events.
-    Continue,
-}
+// /// Result of [`ChainSync::on_block_data`].
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum OnBlockData<Block: BlockT> {
+//     /// The block should be imported.
+//     Import(BlockOrigin, Vec<IncomingBlock<Block>>),
+//     /// A new block request needs to be made to the given peer.
+//     Request(PeerId, BlockRequest<Block>),
+//     /// Continue processing events.
+//     Continue,
+// }
 
 /// Result of [`ChainSync::on_block_justification`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,28 +140,28 @@ pub enum OnBlockJustification<Block: BlockT> {
     },
 }
 
-/// Result of `ChainSync::on_state_data`.
-#[derive(Debug)]
-pub enum OnStateData<Block: BlockT> {
-    /// The block and state that should be imported.
-    Import(BlockOrigin, IncomingBlock<Block>),
-    /// A new state request needs to be made to the given peer.
-    Continue,
-}
+// /// Result of `ChainSync::on_state_data`.
+// #[derive(Debug)]
+// pub enum OnStateData<Block: BlockT> {
+//     /// The block and state that should be imported.
+//     Import(BlockOrigin, IncomingBlock<Block>),
+//     /// A new state request needs to be made to the given peer.
+//     Continue,
+// }
 
-/// Block or justification request polled from `ChainSync`
-#[derive(Debug)]
-pub enum ImportResult<B: BlockT> {
-    BlockImport(BlockOrigin, Vec<IncomingBlock<B>>),
-    JustificationImport(RuntimeOrigin, B::Hash, NumberFor<B>, Justifications),
-}
+// /// Block or justification request polled from `ChainSync`
+// #[derive(Debug)]
+// pub enum ImportResult<B: BlockT> {
+//     BlockImport(BlockOrigin, Vec<IncomingBlock<B>>),
+//     JustificationImport(RuntimeOrigin, B::Hash, NumberFor<B>, Justifications),
+// }
 
-/// Value polled from `ChainSync`
-#[derive(Debug)]
-pub enum PollResult<B: BlockT> {
-    Import(ImportResult<B>),
-    Announce(PollBlockAnnounceValidation<B::Header>),
-}
+// /// Value polled from `ChainSync`
+// #[derive(Debug)]
+// pub enum PollResult<B: BlockT> {
+//     Import(ImportResult<B>),
+//     Announce(PollBlockAnnounceValidation<B::Header>),
+// }
 
 /// Result of [`ChainSync::poll_block_announce_validation`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -361,26 +362,6 @@ pub trait ChainSync<Block: BlockT>: Send {
         peers: Vec<PeerId>,
         hash: &Block::Hash,
         number: NumberFor<Block>,
-    );
-
-    /// Handle a response from the remote to a block request that we made.
-    ///
-    /// `request` must be the original request that triggered `response`.
-    /// or `None` if data comes from the block announcement.
-    ///
-    /// If this corresponds to a valid block, this outputs the block that
-    /// must be imported in the import queue.
-    fn on_block_data(
-        &mut self,
-        who: &PeerId,
-        request: Option<BlockRequest<Block>>,
-        response: BlockResponse<Block>,
-    ) -> Result<OnBlockData<Block>, BadPeer>;
-
-    /// Procss received block data.
-    fn process_block_response_data(
-        &mut self,
-        blocks_to_import: Result<OnBlockData<Block>, BadPeer>,
     );
 
     /// Handle a response from the remote to a justification request that we made.

@@ -74,23 +74,25 @@ fn build_nodes() -> (Swarm<CustomProtoWithAddr>, Swarm<CustomProtoWithAddr>) {
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        let (peerset, _) = sc_peerset::Peerset::from_config(sc_peerset::PeersetConfig {
-            sets: vec![sc_peerset::SetConfig {
-                in_peers: 25,
-                out_peers: 25,
-                bootnodes: if index == 0 {
-                    keypairs
-                        .iter()
-                        .skip(1)
-                        .map(|keypair| keypair.public().to_peer_id())
-                        .collect()
-                } else {
-                    vec![]
-                },
-                reserved_nodes: Default::default(),
-                reserved_only: false,
-            }],
-        });
+        let (peerset, _) = crate::backend::substrate::network::peerset::Peerset::from_config(
+            crate::backend::substrate::network::peerset::PeersetConfig {
+                sets: vec![crate::backend::substrate::network::peerset::SetConfig {
+                    in_peers: 25,
+                    out_peers: 25,
+                    bootnodes: if index == 0 {
+                        keypairs
+                            .iter()
+                            .skip(1)
+                            .map(|keypair| keypair.public().to_peer_id())
+                            .collect()
+                    } else {
+                        vec![]
+                    },
+                    reserved_nodes: Default::default(),
+                    reserved_only: false,
+                }],
+            },
+        );
 
         let behaviour = CustomProtoWithAddr {
             inner: Notifications::new(
@@ -235,7 +237,7 @@ fn reconnect_after_disconnect() {
                         if service2_state == ServiceState::FirstConnec {
                             service1.behaviour_mut().disconnect_peer(
                                 Swarm::local_peer_id(&service2),
-                                sc_peerset::SetId::from(0),
+                                crate::backend::substrate::network::peerset::SetId::from(0),
                             );
                         }
                     }
@@ -258,7 +260,7 @@ fn reconnect_after_disconnect() {
                         if service1_state == ServiceState::FirstConnec {
                             service1.behaviour_mut().disconnect_peer(
                                 Swarm::local_peer_id(&service2),
-                                sc_peerset::SetId::from(0),
+                                crate::backend::substrate::network::peerset::SetId::from(0),
                             );
                         }
                     }

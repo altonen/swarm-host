@@ -18,10 +18,10 @@
 
 //! Collection of generic data structures for request-response protocols.
 
-use crate::protocol::ProtocolName;
+use crate::backend::substrate::network::common::protocol::ProtocolName;
+use crate::backend::substrate::network::peerset::ReputationChange;
 use futures::channel::{mpsc, oneshot};
 use libp2p::{request_response::OutboundFailure, PeerId};
-use sc_peerset::ReputationChange;
 use std::time::Duration;
 
 /// Configuration for a single request-response protocol.

@@ -17,10 +17,15 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 #![allow(unused)]
-use crate::protocol::notifications::handler::{
-    self, NotificationsSink, NotifsHandlerIn, NotifsHandlerOut, NotifsHandlerProto,
+use crate::backend::substrate::network::{
+    protocol::notifications::handler::{
+        self, NotificationsSink, NotifsHandlerIn, NotifsHandlerOut, NotifsHandlerProto,
+    },
+    MAX_CONNECTIONS_PER_PEER,
 };
 
+use crate::backend::substrate::network::common::protocol::ProtocolName;
+use crate::backend::substrate::network::peerset::DropReason;
 use bytes::BytesMut;
 use fnv::FnvHashMap;
 use futures::prelude::*;
@@ -36,8 +41,6 @@ use libp2p::{
 use log::{error, trace, warn};
 use parking_lot::RwLock;
 use rand::distributions::{Distribution as _, Uniform};
-use sc_network_common::protocol::ProtocolName;
-use sc_peerset::DropReason;
 use smallvec::SmallVec;
 use std::{
     cmp,
@@ -107,10 +110,10 @@ pub struct Notifications {
     notif_protocols: Vec<handler::ProtocolConfig>,
 
     /// Receiver for instructions about who to connect to or disconnect from.
-    peerset: sc_peerset::Peerset,
+    peerset: crate::backend::substrate::network::peerset::Peerset,
 
     /// List of peers in our state.
-    peers: FnvHashMap<(PeerId, sc_peerset::SetId), PeerState>,
+    peers: FnvHashMap<(PeerId, crate::backend::substrate::network::peerset::SetId), PeerState>,
 
     /// The elements in `peers` occasionally contain `Delay` objects that we would normally have
     /// to be polled one by one. In order to avoid doing so, as an optimization, every `Delay` is
@@ -120,7 +123,17 @@ pub struct Notifications {
     /// By design, we never remove elements from this list. Elements are removed only when the
     /// `Delay` triggers. As such, this stream may produce obsolete elements.
     delays: stream::FuturesUnordered<
-        Pin<Box<dyn Future<Output = (DelayId, PeerId, sc_peerset::SetId)> + Send>>,
+        Pin<
+            Box<
+                dyn Future<
+                        Output = (
+                            DelayId,
+                            PeerId,
+                            crate::backend::substrate::network::peerset::SetId,
+                        ),
+                    > + Send,
+            >,
+        >,
     >,
 
     /// [`DelayId`] to assign to the next delay.
@@ -132,7 +145,7 @@ pub struct Notifications {
 
     /// We generate indices to identify incoming connections. This is the next value for the index
     /// to use when a connection is incoming.
-    next_incoming_index: sc_peerset::IncomingIndex,
+    next_incoming_index: crate::backend::substrate::network::peerset::IncomingIndex,
 
     /// Events to produce from `poll()`.
     events: VecDeque<NetworkBehaviourAction<NotificationsOut, NotifsHandlerProto>>,
@@ -201,7 +214,7 @@ enum PeerState {
         backoff_until: Option<Instant>,
 
         /// List of connections with this peer, and their state.
-        connections: SmallVec<[(ConnectionId, ConnectionState); crate::MAX_CONNECTIONS_PER_PEER]>,
+        connections: SmallVec<[(ConnectionId, ConnectionState); MAX_CONNECTIONS_PER_PEER]>,
     },
 
     /// We are connected to this peer. The peerset has requested a connection to this peer, but
@@ -219,13 +232,13 @@ enum PeerState {
         timer_deadline: Instant,
 
         /// List of connections with this peer, and their state.
-        connections: SmallVec<[(ConnectionId, ConnectionState); crate::MAX_CONNECTIONS_PER_PEER]>,
+        connections: SmallVec<[(ConnectionId, ConnectionState); MAX_CONNECTIONS_PER_PEER]>,
     },
 
     /// We are connected to this peer and the peerset has accepted it.
     Enabled {
         /// List of connections with this peer, and their state.
-        connections: SmallVec<[(ConnectionId, ConnectionState); crate::MAX_CONNECTIONS_PER_PEER]>,
+        connections: SmallVec<[(ConnectionId, ConnectionState); MAX_CONNECTIONS_PER_PEER]>,
     },
 
     /// We are connected to this peer. We have received an `OpenDesiredByRemote` from one of the
@@ -237,7 +250,7 @@ enum PeerState {
         backoff_until: Option<Instant>,
 
         /// List of connections with this peer, and their state.
-        connections: SmallVec<[(ConnectionId, ConnectionState); crate::MAX_CONNECTIONS_PER_PEER]>,
+        connections: SmallVec<[(ConnectionId, ConnectionState); MAX_CONNECTIONS_PER_PEER]>,
     },
 }
 
@@ -298,12 +311,12 @@ struct IncomingPeer {
     /// Id of the remote peer of the incoming substream.
     peer_id: PeerId,
     /// Id of the set the incoming substream would belong to.
-    set_id: sc_peerset::SetId,
+    set_id: crate::backend::substrate::network::peerset::SetId,
     /// If true, this "incoming" still corresponds to an actual connection. If false, then the
     /// connection corresponding to it has been closed or replaced already.
     alive: bool,
     /// Id that the we sent to the peerset.
-    incoming_id: sc_peerset::IncomingIndex,
+    incoming_id: crate::backend::substrate::network::peerset::IncomingIndex,
 }
 
 /// Event that can be emitted by the `Notifications`.
@@ -314,7 +327,7 @@ pub enum NotificationsOut {
         /// Id of the peer we are connected to.
         peer_id: PeerId,
         /// Peerset set ID the substream is tied to.
-        set_id: sc_peerset::SetId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
         /// If `Some`, a fallback protocol name has been used rather the main protocol name.
         /// Always matches one of the fallback names passed at initialization.
         negotiated_fallback: Option<ProtocolName>,
@@ -334,7 +347,7 @@ pub enum NotificationsOut {
         /// Id of the peer we are connected to.
         peer_id: PeerId,
         /// Peerset set ID the substream is tied to.
-        set_id: sc_peerset::SetId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
         /// Replacement for the previous [`NotificationsSink`].
         notifications_sink: NotificationsSink,
     },
@@ -345,7 +358,7 @@ pub enum NotificationsOut {
         /// Id of the peer we were connected to.
         peer_id: PeerId,
         /// Peerset set ID the substream was tied to.
-        set_id: sc_peerset::SetId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
     },
 
     /// Receives a message on a custom protocol substream.
@@ -355,7 +368,7 @@ pub enum NotificationsOut {
         /// Id of the peer the message came from.
         peer_id: PeerId,
         /// Peerset set ID the substream is tied to.
-        set_id: sc_peerset::SetId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
         /// Message that has been received.
         message: BytesMut,
     },
@@ -364,7 +377,7 @@ pub enum NotificationsOut {
 impl Notifications {
     /// Creates a `CustomProtos`.
     pub fn new(
-        peerset: sc_peerset::Peerset,
+        peerset: crate::backend::substrate::network::peerset::Peerset,
         notif_protocols: impl Iterator<Item = ProtocolConfig>,
     ) -> Self {
         let notif_protocols = notif_protocols
@@ -385,7 +398,7 @@ impl Notifications {
             delays: Default::default(),
             next_delay_id: DelayId(0),
             incoming: SmallVec::new(),
-            next_incoming_index: sc_peerset::IncomingIndex(0),
+            next_incoming_index: crate::backend::substrate::network::peerset::IncomingIndex(0),
             events: VecDeque::new(),
             supported_protocols: HashMap::new(),
         }
@@ -405,7 +418,11 @@ impl Notifications {
     }
 
     /// Returns true if we have an open substream to the given peer.
-    pub fn is_open(&self, peer_id: &PeerId, set_id: sc_peerset::SetId) -> bool {
+    pub fn is_open(
+        &self,
+        peer_id: &PeerId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
+    ) -> bool {
         self.peers
             .get(&(*peer_id, set_id))
             .map(|p| p.is_open())
@@ -413,7 +430,11 @@ impl Notifications {
     }
 
     /// Disconnects the given peer if we are connected to it.
-    pub fn disconnect_peer(&mut self, peer_id: &PeerId, set_id: sc_peerset::SetId) {
+    pub fn disconnect_peer(
+        &mut self,
+        peer_id: &PeerId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
+    ) {
         trace!(target: "sub-libp2p", "External API => Disconnect({}, {:?})", peer_id, set_id);
         self.disconnect_peer_inner(peer_id, set_id, None);
     }
@@ -423,7 +444,7 @@ impl Notifications {
     fn disconnect_peer_inner(
         &mut self,
         peer_id: &PeerId,
-        set_id: sc_peerset::SetId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
         ban: Option<Duration>,
     ) {
         let mut entry = if let Entry::Occupied(entry) = self.peers.entry((*peer_id, set_id)) {
@@ -590,7 +611,11 @@ impl Notifications {
     }
 
     /// Function that is called when the peerset wants us to connect to a peer.
-    fn peerset_report_connect(&mut self, peer_id: PeerId, set_id: sc_peerset::SetId) {
+    fn peerset_report_connect(
+        &mut self,
+        peer_id: PeerId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
+    ) {
         // If `PeerId` is unknown to us, insert an entry, start dialing, and return early.
         let handler = self.new_handler();
         let mut occ_entry = match self.peers.entry((peer_id, set_id)) {
@@ -823,7 +848,11 @@ impl Notifications {
     }
 
     /// Function that is called when the peerset wants us to disconnect from a peer.
-    fn peerset_report_disconnect(&mut self, peer_id: PeerId, set_id: sc_peerset::SetId) {
+    fn peerset_report_disconnect(
+        &mut self,
+        peer_id: PeerId,
+        set_id: crate::backend::substrate::network::peerset::SetId,
+    ) {
         let mut entry = match self.peers.entry((peer_id, set_id)) {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(entry) => {
@@ -958,7 +987,10 @@ impl Notifications {
 
     /// Function that is called when the peerset wants us to accept a connection
     /// request from a peer.
-    fn peerset_report_accept(&mut self, index: sc_peerset::IncomingIndex) {
+    fn peerset_report_accept(
+        &mut self,
+        index: crate::backend::substrate::network::peerset::IncomingIndex,
+    ) {
         let incoming = if let Some(pos) = self.incoming.iter().position(|i| i.incoming_id == index)
         {
             self.incoming.remove(pos)
@@ -1033,7 +1065,10 @@ impl Notifications {
     }
 
     /// Function that is called when the peerset wants us to reject an incoming peer.
-    fn peerset_report_reject(&mut self, index: sc_peerset::IncomingIndex) {
+    fn peerset_report_reject(
+        &mut self,
+        index: crate::backend::substrate::network::peerset::IncomingIndex,
+    ) {
         let incoming = if let Some(pos) = self.incoming.iter().position(|i| i.incoming_id == index)
         {
             self.incoming.remove(pos)
@@ -1129,7 +1164,9 @@ impl NetworkBehaviour for Notifications {
                 connection_id,
                 ..
             }) => {
-                for set_id in (0..self.notif_protocols.len()).map(sc_peerset::SetId::from) {
+                for set_id in (0..self.notif_protocols.len())
+                    .map(crate::backend::substrate::network::peerset::SetId::from)
+                {
                     match self
                         .peers
                         .entry((peer_id, set_id))
@@ -1197,7 +1234,9 @@ impl NetworkBehaviour for Notifications {
                 connection_id,
                 ..
             }) => {
-                for set_id in (0..self.notif_protocols.len()).map(sc_peerset::SetId::from) {
+                for set_id in (0..self.notif_protocols.len())
+                    .map(crate::backend::substrate::network::peerset::SetId::from)
+                {
                     let mut entry = if let Entry::Occupied(entry) =
                         self.peers.entry((peer_id, set_id))
                     {
@@ -1508,7 +1547,9 @@ impl NetworkBehaviour for Notifications {
                 if let Some(peer_id) = peer_id {
                     trace!(target: "sub-libp2p", "Libp2p => Dial failure for {:?}", peer_id);
 
-                    for set_id in (0..self.notif_protocols.len()).map(sc_peerset::SetId::from) {
+                    for set_id in (0..self.notif_protocols.len())
+                        .map(crate::backend::substrate::network::peerset::SetId::from)
+                    {
                         if let Entry::Occupied(mut entry) = self.peers.entry((peer_id, set_id)) {
                             match mem::replace(entry.get_mut(), PeerState::Poisoned) {
                                 // The peer is not in our list.
@@ -1590,7 +1631,8 @@ impl NetworkBehaviour for Notifications {
     ) {
         match event {
             NotifsHandlerOut::OpenDesiredByRemote { protocol_index } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
 
                 trace!(target: "sub-libp2p",
 					"Handler({:?}, {:?}]) => OpenDesiredByRemote({:?})",
@@ -1800,7 +1842,8 @@ impl NetworkBehaviour for Notifications {
             }
 
             NotifsHandlerOut::CloseDesired { protocol_index } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
 
                 trace!(target: "sub-libp2p",
 					"Handler({}, {:?}) => CloseDesired({:?})",
@@ -1912,7 +1955,8 @@ impl NetworkBehaviour for Notifications {
             }
 
             NotifsHandlerOut::CloseResult { protocol_index } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
 
                 trace!(target: "sub-libp2p",
 					"Handler({}, {:?}) => CloseResult({:?})",
@@ -1951,7 +1995,8 @@ impl NetworkBehaviour for Notifications {
                 notifications_sink,
                 ..
             } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
                 trace!(target: "sub-libp2p",
 					"Handler({}, {:?}) => OpenResultOk({:?})",
 					peer_id, connection_id, set_id);
@@ -2020,7 +2065,8 @@ impl NetworkBehaviour for Notifications {
             }
 
             NotifsHandlerOut::OpenResultErr { protocol_index } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
                 trace!(target: "sub-libp2p",
 					"Handler({:?}, {:?}) => OpenResultErr({:?})",
 					peer_id, connection_id, set_id);
@@ -2114,7 +2160,8 @@ impl NetworkBehaviour for Notifications {
                 protocol_index,
                 message,
             } => {
-                let set_id = sc_peerset::SetId::from(protocol_index);
+                let set_id =
+                    crate::backend::substrate::network::peerset::SetId::from(protocol_index);
                 if self.is_open(&peer_id, set_id) {
                     trace!(
                         target: "sub-libp2p",
@@ -2165,19 +2212,29 @@ impl NetworkBehaviour for Notifications {
         // Note that the peerset is a *best effort* crate, and we have to use defensive programming.
         loop {
             match futures::Stream::poll_next(Pin::new(&mut self.peerset), cx) {
-                Poll::Ready(Some(sc_peerset::Message::Accept(index))) => {
+                Poll::Ready(Some(
+                    crate::backend::substrate::network::peerset::Message::Accept(index),
+                )) => {
                     self.peerset_report_accept(index);
                 }
-                Poll::Ready(Some(sc_peerset::Message::Reject(index))) => {
+                Poll::Ready(Some(
+                    crate::backend::substrate::network::peerset::Message::Reject(index),
+                )) => {
                     self.peerset_report_reject(index);
                 }
-                Poll::Ready(Some(sc_peerset::Message::Connect {
-                    peer_id, set_id, ..
-                })) => {
+                Poll::Ready(Some(
+                    crate::backend::substrate::network::peerset::Message::Connect {
+                        peer_id,
+                        set_id,
+                        ..
+                    },
+                )) => {
                     self.peerset_report_connect(peer_id, set_id);
                 }
-                Poll::Ready(Some(sc_peerset::Message::Drop {
-                    peer_id, set_id, ..
+                Poll::Ready(Some(crate::backend::substrate::network::peerset::Message::Drop {
+                    peer_id,
+                    set_id,
+                    ..
                 })) => {
                     self.peerset_report_disconnect(peer_id, set_id);
                 }
@@ -2322,11 +2379,14 @@ mod tests {
         }
     }
 
-    fn development_notifs() -> (Notifications, sc_peerset::PeersetHandle) {
+    fn development_notifs() -> (
+        Notifications,
+        crate::backend::substrate::network::peerset::PeersetHandle,
+    ) {
         let (peerset, peerset_handle) = {
             let mut sets = Vec::with_capacity(1);
 
-            sets.push(sc_peerset::SetConfig {
+            sets.push(crate::backend::substrate::network::peerset::SetConfig {
                 in_peers: 25,
                 out_peers: 25,
                 bootnodes: Vec::new(),
@@ -2334,7 +2394,9 @@ mod tests {
                 reserved_only: false,
             });
 
-            sc_peerset::Peerset::from_config(sc_peerset::PeersetConfig { sets })
+            crate::backend::substrate::network::peerset::Peerset::from_config(
+                crate::backend::substrate::network::peerset::PeersetConfig { sets },
+            )
         };
 
         (
@@ -2519,7 +2581,7 @@ mod tests {
             notif.incoming.pop(),
             Some(IncomingPeer {
                 alive: true,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             }),
         ));
@@ -2566,7 +2628,7 @@ mod tests {
     #[test]
     fn peerset_report_connect_backoff() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -2641,7 +2703,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -2679,7 +2741,7 @@ mod tests {
     #[test]
     fn peerset_disconnect_disable_pending_enable() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -2736,7 +2798,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -2775,7 +2837,7 @@ mod tests {
     fn peerset_disconnect_requested() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
 
         // Set peer into `Requested` state.
         notif.peerset_report_connect(peer, set_id);
@@ -2792,7 +2854,7 @@ mod tests {
     #[test]
     fn peerset_disconnect_pending_request() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -2861,7 +2923,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -2896,7 +2958,7 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: true,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
@@ -2910,12 +2972,14 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: false,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
 
-        notif.peerset_report_accept(sc_peerset::IncomingIndex(0));
+        notif.peerset_report_accept(crate::backend::substrate::network::peerset::IncomingIndex(
+            0,
+        ));
         assert_eq!(notif.incoming.len(), 0);
         assert!(std::matches!(
             notif.peers.get(&(peer, set_id)),
@@ -2929,7 +2993,7 @@ mod tests {
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -2992,7 +3056,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3029,7 +3093,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3073,7 +3137,7 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: false,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
@@ -3085,7 +3149,7 @@ mod tests {
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let conn1 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3164,7 +3228,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3232,7 +3296,7 @@ mod tests {
         let peer = PeerId::random();
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3341,7 +3405,7 @@ mod tests {
     fn dial_failure_for_requested_peer() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
 
         // Set peer into `Requested` state.
         notif.peerset_report_connect(peer, set_id);
@@ -3370,7 +3434,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3423,7 +3487,7 @@ mod tests {
     #[test]
     fn peerset_report_connect_backoff_expired() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -3480,7 +3544,7 @@ mod tests {
     fn peerset_report_disconnect_disabled() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
@@ -3511,7 +3575,7 @@ mod tests {
     #[test]
     fn peerset_report_disconnect_backoff() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -3568,7 +3632,7 @@ mod tests {
     #[test]
     fn peer_is_backed_off_if_both_connections_get_closed_while_peer_is_disabled_with_back_off() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(0usize);
@@ -3653,7 +3717,7 @@ mod tests {
     fn inject_connection_closed_incoming_with_backoff() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
@@ -3717,7 +3781,7 @@ mod tests {
         let peer = PeerId::random();
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3778,7 +3842,7 @@ mod tests {
         let peer = PeerId::random();
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3842,7 +3906,7 @@ mod tests {
         let peer = PeerId::random();
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -3916,7 +3980,7 @@ mod tests {
     #[test]
     fn inject_dial_failure_for_pending_request() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -3994,7 +4058,7 @@ mod tests {
     fn peerstate_incoming_open_desired_by_remote() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let conn1 = ConnectionId::new(0usize);
         let conn2 = ConnectionId::new(1usize);
         let connected = ConnectedPoint::Listener {
@@ -4062,7 +4126,7 @@ mod tests {
     async fn remove_backoff_peer_after_timeout() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
@@ -4149,7 +4213,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4291,7 +4355,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4355,7 +4419,7 @@ mod tests {
     #[cfg(debug_assertions)]
     fn peerset_report_connect_with_disabled_pending_enable_peer() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -4406,7 +4470,7 @@ mod tests {
     fn peerset_report_connect_with_requested_peer() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
 
         // Set peer into `Requested` state.
         notif.peerset_report_connect(peer, set_id);
@@ -4423,7 +4487,7 @@ mod tests {
     #[cfg(debug_assertions)]
     fn peerset_report_connect_with_pending_requested() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -4488,7 +4552,7 @@ mod tests {
     fn peerset_report_disconnect_with_incoming_peer() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
@@ -4531,7 +4595,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4566,13 +4630,15 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: true,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
 
         notif.peers.remove(&(peer, set_id));
-        notif.peerset_report_accept(sc_peerset::IncomingIndex(0));
+        notif.peerset_report_accept(crate::backend::substrate::network::peerset::IncomingIndex(
+            0,
+        ));
     }
 
     #[test]
@@ -4582,7 +4648,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4618,7 +4684,7 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: true,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
@@ -4637,7 +4703,9 @@ mod tests {
             Some(&PeerState::Enabled { .. })
         ));
         notif.incoming[0].alive = true;
-        notif.peerset_report_accept(sc_peerset::IncomingIndex(0));
+        notif.peerset_report_accept(crate::backend::substrate::network::peerset::IncomingIndex(
+            0,
+        ));
     }
 
     #[test]
@@ -4666,7 +4734,7 @@ mod tests {
     fn disconnect_non_existent_peer() {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
 
         notif.peerset_report_disconnect(peer, set_id);
 
@@ -4699,7 +4767,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4746,7 +4814,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4780,7 +4848,7 @@ mod tests {
             notif.incoming[0],
             IncomingPeer {
                 alive: true,
-                incoming_id: sc_peerset::IncomingIndex(0),
+                incoming_id: crate::backend::substrate::network::peerset::IncomingIndex(0),
                 ..
             },
         ));
@@ -4796,7 +4864,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4843,7 +4911,7 @@ mod tests {
     #[cfg(debug_assertions)]
     fn inject_non_existent_connection_closed_for_disabled_peer() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -4881,7 +4949,7 @@ mod tests {
     #[cfg(debug_assertions)]
     fn inject_non_existent_connection_closed_for_disabled_pending_enable() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
@@ -4942,7 +5010,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -4992,7 +5060,7 @@ mod tests {
         let (mut notif, _peerset) = development_notifs();
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let connected = ConnectedPoint::Listener {
             local_addr: Multiaddr::empty(),
             send_back_addr: Multiaddr::empty(),
@@ -5046,7 +5114,7 @@ mod tests {
     #[cfg(debug_assertions)]
     fn inject_connection_closed_for_backoff_peer() {
         let (mut notif, _peerset) = development_notifs();
-        let set_id = sc_peerset::SetId::from(0);
+        let set_id = crate::backend::substrate::network::peerset::SetId::from(0);
         let peer = PeerId::random();
         let conn = ConnectionId::new(0usize);
         let connected = ConnectedPoint::Listener {
