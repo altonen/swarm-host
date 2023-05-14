@@ -8,21 +8,26 @@ import time
 EXECUTABLE = "../target/debug/swarm-host"
 
 class SwarmHost:
-    def __init__(self, rpc_port, backend):
+    def __init__(self, rpc_port, backend, genesis_hash):
         self.logfile = open("/tmp/swarm-host-%d-%d" % (rpc_port, int(time.time())), "w")
         self.rpc_port = rpc_port
         args = [
             EXECUTABLE,
             "--rpc-port", str(rpc_port),
-            "--backend", backend,
+            backend,
+            "--genesis-hash", genesis_hash
         ]
 
         self.process = subprocess.Popen(
             args,
             stdout = self.logfile,
             stderr = subprocess.STDOUT,
-            env = {"RUST_LOG": "overseer,mockchain,rpc,filter=trace,sub-libp2p=debug,filter::msg=off"}
+            env = {
+                "RUST_LOG": "overseer,mockchain,rpc,filter,executor::pyo3=trace,sub-libp2p=debug,filter::msg=OFF,executor::pyo3::msg=OFF",
+                "PYTHONPATH": "/home/altonen/code/rust/swarm-host/framework",
+            }
         )
+        time.sleep(2)
 
     def __del__(self):
         self.process.terminate()
@@ -34,7 +39,7 @@ class SwarmHost:
             "http://localhost:%d/" % (self.rpc_port),
             json=request(
                 "create_interface",
-                params=[address, filter, poll_interval, preinit],
+                params=["127.0.0.1:%d" % address, filter, poll_interval, preinit],
             )
         )
         if "result" in response.json():
@@ -88,10 +93,8 @@ class SwarmHost:
             )
         )
         if "result" in response.json():
-            print("success %s" % (response.json()["result"]))
             return response.json()["result"]
         elif "error" in response.json():
-            print("failure %s" % (response.json()["error"]))
             return response.json()["error"]
 
     """
