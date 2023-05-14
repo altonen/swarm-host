@@ -513,8 +513,10 @@ impl<T: NetworkBackend, E: Executor<T>> Filter<T, E> {
                 } => {
                     tracing::info!(
                         target: LOG_TARGET,
-                        "{:?}: send notification to {peers:?}",
-                        self.interface
+                        interface = ?self.interface,
+                        ?protocol,
+                        ?peers,
+                        "forward notification",
                     );
 
                     for peer in peers {
