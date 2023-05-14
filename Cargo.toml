@@ -1,5 +1,7 @@
 [package]
 name = "swarm-host"
+description = "Tool for protocol simulation"
+license = "GPL-2.0"
 version = "0.1.0"
 edition = "2021"
 
