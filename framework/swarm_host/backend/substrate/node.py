@@ -19,6 +19,28 @@ class InvalidConfiguration(Exception):
 class RpcQueryError(Exception):
     pass
 
+class SubstrateNode():
+    def __init__(self, flags):
+        self.logfile = open(
+            "/tmp/%s-%d-%d" % (
+                "substrate-node",
+                random.randint(1, 65536),
+                int(time.time())
+            ),
+            "w"
+        )
+
+        args = ["/usr/local/bin/node-template"] + flags
+        self.process = subprocess.Popen(
+            args,
+            stdout = self.logfile,
+            stderr = subprocess.STDOUT,
+            env = {"RUST_LOG": "info,sync=trace,sub-libp2p=trace,peerset=trace"}
+        )
+
+    def __del__(self):
+        self.process.terminate()
+
 class Node():
     """
         Start a generic Substrate node.
