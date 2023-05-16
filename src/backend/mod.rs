@@ -266,7 +266,7 @@ pub trait NetworkBackend: Clone + Debug + Serialize + 'static {
         Self: Sized;
 
     /// Parameters passed from `Overseer` to the backend when it's constructed.
-    type NetworkParameters: Debug;
+    type NetworkParameters: Debug + Clone + IntoExecutorObject;
 
     /// Parameters received from the provided preinit executor code.
     type InterfaceParameters: Debug + Clone + FromExecutorObject;

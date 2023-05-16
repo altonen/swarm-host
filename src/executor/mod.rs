@@ -119,7 +119,10 @@ pub trait FromExecutorObject {
 
 pub trait Executor<T: NetworkBackend>: Send + 'static {
     /// Function that can be used to initialize interface parameters before the interface is created.
-    fn initialize_interface(code: String) -> crate::Result<T::InterfaceParameters>;
+    fn initialize_interface(
+        code: String,
+        parameters: T::NetworkParameters,
+    ) -> crate::Result<T::InterfaceParameters>;
 
     /// Create new [`Executor`].
     fn new(interface: T::InterfaceId, code: String, context: Option<String>) -> crate::Result<Self>

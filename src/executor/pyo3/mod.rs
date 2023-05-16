@@ -67,6 +67,8 @@ where
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::Protocol:
         IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
+    for<'a> <T as NetworkBackend>::NetworkParameters:
+        IntoExecutorObject<Context<'a> = pyo3::marker::Python<'a>, NativeType = pyo3::PyObject>,
     for<'a> <T as NetworkBackend>::InterfaceParameters:
         FromExecutorObject<ExecutorType<'a> = &'a PyAny>,
     for<'a> RequestHandlingResult<T>: pyo3::FromPyObject<'a>,
@@ -74,9 +76,12 @@ where
     for<'a> ExecutorEvents<T>: pyo3::FromPyObject<'a>,
 {
     /// Function that can be used to initialize interface parameters before the interface is created.
-    fn initialize_interface(code: String) -> crate::Result<T::InterfaceParameters> {
+    fn initialize_interface(
+        code: String,
+        parameters: T::NetworkParameters,
+    ) -> crate::Result<T::InterfaceParameters> {
         tracing::debug!(target: LOG_TARGET, "initialize interface parameters");
-        tracing::trace!(target: LOG_TARGET_MSG, ?code);
+        tracing::trace!(target: LOG_TARGET_MSG, ?code, ?parameters);
 
         Python::with_gil(|py| -> pyo3::PyResult<T::InterfaceParameters> {
             let fun = PyModule::from_code(
@@ -86,8 +91,12 @@ where
                 format!("module{}", rand::thread_rng().gen::<u64>()).as_str(),
             )?
             .getattr("initialize_interface")?;
+            let parameters_py = parameters.into_executor_object(py);
+            let interface_parameters = fun.call1((parameters_py,))?;
 
-            Ok(T::InterfaceParameters::from_executor_object(&fun.call0()?))
+            Ok(T::InterfaceParameters::from_executor_object(
+                &interface_parameters,
+            ))
         })
         .map_err(From::from)
     }

@@ -13,7 +13,7 @@ class Roles(IntFlag):
 	# Act as an authority
 	AUTHORITY = 3
 
-def initialize_interface():
+def initialize_interface(parameters):
     runtime_config = RuntimeConfiguration()
     runtime_config.update_type_registry(load_type_registry_preset("legacy"))
     runtime_config.update_type_registry({
@@ -42,14 +42,15 @@ def initialize_interface():
         }
     })
 
+    genesis_hash = "0x" + "".join([hex(num)[2:].zfill(2) for num in parameters['genesis_hash']])
     handshake = runtime_config.create_scale_object(
         'BlockAnnouncesHandshake',
     )
     encoded = handshake.encode({
         'roles': Roles.FULL,
         'best_number': 0,
-        'best_hash': "0x36d171b4279dc05f16e8960afd9ae9e28cd620b610b84d6374949c099231c585",
-        'genesis_hash': "0x36d171b4279dc05f16e8960afd9ae9e28cd620b610b84d6374949c099231c585",
+        'best_hash': genesis_hash,
+        'genesis_hash': genesis_hash,
     })
 
     return bytearray.fromhex(encoded.to_hex()[2:])

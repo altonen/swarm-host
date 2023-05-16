@@ -562,10 +562,24 @@ impl WithMessageInfo for Message {
 
 /// Parameters received from the command that are passed to [`SubstrateBackend`]
 /// when it's constructed.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SubstrateParameters {
     /// Genesis hash.
     pub genesis_hash: Vec<u8>,
+}
+
+impl IntoExecutorObject for <SubstrateBackend as NetworkBackend>::NetworkParameters {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        let parameters = PyDict::new(context);
+        parameters
+            .set_item("genesis_hash", self.genesis_hash.into_py(context))
+            .expect("to succeed");
+
+        parameters.into()
+    }
 }
 
 #[derive(Debug, Clone)]

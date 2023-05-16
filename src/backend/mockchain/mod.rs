@@ -7,9 +7,11 @@ use crate::{
     },
     ensure,
     error::Error,
+    executor::IntoExecutorObject,
     types::DEFAULT_CHANNEL_SIZE,
 };
 
+use pyo3::types::PyDict;
 use serde::Serialize;
 use tokio::{net::TcpListener, sync::mpsc};
 use tokio_stream::wrappers::ReceiverStream;
@@ -112,6 +114,18 @@ impl MockchainBackend {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MockchainParameters {}
+
+impl IntoExecutorObject for <MockchainBackend as NetworkBackend>::NetworkParameters {
+    type NativeType = pyo3::PyObject;
+    type Context<'a> = pyo3::marker::Python<'a>;
+
+    fn into_executor_object(self, context: Self::Context<'_>) -> Self::NativeType {
+        PyDict::new(context).into()
+    }
+}
+
 #[async_trait::async_trait]
 impl NetworkBackend for MockchainBackend {
     type PeerId = PeerId;
@@ -122,7 +136,7 @@ impl NetworkBackend for MockchainBackend {
     type Request = Request;
     type Response = Response;
     type InterfaceHandle = MockchainHandle;
-    type NetworkParameters = ();
+    type NetworkParameters = MockchainParameters;
     type InterfaceParameters = usize;
 
     /// Create new [`MockchainBackend`].

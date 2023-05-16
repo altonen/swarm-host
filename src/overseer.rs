@@ -112,6 +112,9 @@ pub struct Overseer<T: NetworkBackend, E: Executor<T>> {
     /// Handle to heuristics backend.
     heuristics_handle: HeuristicsHandle<T>,
 
+    /// Network parameters.
+    parameters: T::NetworkParameters,
+
     // Executor
     _marker: std::marker::PhantomData<E>,
 }
@@ -131,7 +134,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
 
         (
             Self {
-                backend: T::new(parameters),
+                backend: T::new(parameters.clone()),
                 overseer_rx,
                 event_streams: SelectAll::new(),
                 _overseer_tx: overseer_tx.clone(),
@@ -142,6 +145,7 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
                 filter_events,
                 filter_event_tx,
                 heuristics_handle,
+                parameters,
                 _marker: Default::default(),
             },
             overseer_tx,
@@ -326,13 +330,14 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
     ) -> crate::Result<T::InterfaceId> {
         tracing::debug!(
             target: LOG_TARGET,
-            address = ?address,
+            ?address,
+            ?poll_interval,
             "create new interface",
         );
 
         // initialize interface parameters by calling the preinit code if it was provided
         let parameters = match preinit {
-            Some(code) => Some(E::initialize_interface(code)?),
+            Some(code) => Some(E::initialize_interface(code, self.parameters.clone())?),
             None => None,
         };
 
