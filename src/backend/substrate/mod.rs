@@ -426,7 +426,7 @@ impl Interface<SubstrateBackend> for InterfaceHandle {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SubstrateBackend {
     next_iface_id: usize,
     genesis_hash: Vec<u8>,

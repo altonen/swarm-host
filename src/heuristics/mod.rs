@@ -104,6 +104,30 @@ enum HeuristicsEvent<T: NetworkBackend> {
         /// Notification size.
         size: usize,
     },
+
+    /// Protocol was opened with peer.
+    OpenProtocol {
+        /// Interface ID.
+        interface: T::InterfaceId,
+
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+    },
+
+    /// Protocol was closed with peer.
+    CloseProtocol {
+        /// Interface ID.
+        interface: T::InterfaceId,
+
+        /// Peer ID.
+        peer: T::PeerId,
+
+        /// Protocol.
+        protocol: T::Protocol,
+    },
 }
 
 /// Handle to registers events to [`HeuristicsBackend`].
@@ -146,6 +170,38 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     pub fn unregister_peer(&self, interface: T::InterfaceId, peer: T::PeerId) {
         self.tx
             .send(HeuristicsEvent::UnregisterPeer { interface, peer })
+            .expect("channel to stay open");
+    }
+
+    /// Register opened `protocol` for peer.
+    pub fn register_protocol_opened(
+        &self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) {
+        self.tx
+            .send(HeuristicsEvent::OpenProtocol {
+                interface,
+                peer,
+                protocol,
+            })
+            .expect("channel to stay open");
+    }
+
+    /// Register closed `protocol` for peer.
+    pub fn register_protocol_closed(
+        &self,
+        interface: T::InterfaceId,
+        peer: T::PeerId,
+        protocol: T::Protocol,
+    ) {
+        self.tx
+            .send(HeuristicsEvent::CloseProtocol {
+                interface,
+                peer,
+                protocol,
+            })
             .expect("channel to stay open");
     }
 
@@ -265,8 +321,8 @@ impl<T: NetworkBackend> HeuristicsHandle<T> {
     }
 }
 
-#[derive(Debug, Serialize, Default)]
-struct MessageHeuristics {
+#[derive(Debug, Serialize)]
+struct MessageHeuristics<T: NetworkBackend> {
     total_bytes_sent: usize,
     total_messages_sent: usize,
     total_bytes_received: usize,
@@ -275,6 +331,23 @@ struct MessageHeuristics {
     redundant_bytes_received: usize,
     unique_messages_sent: HashSet<u64>,
     unique_messages_received: HashSet<u64>,
+    interfaces: HashSet<T::InterfaceId>,
+}
+
+impl<T: NetworkBackend> MessageHeuristics<T> {
+    pub fn new() -> Self {
+        Self {
+            total_bytes_sent: 0usize,
+            total_messages_sent: 0usize,
+            total_bytes_received: 0usize,
+            total_messages_received: 0usize,
+            redundant_bytes_sent: 0usize,
+            redundant_bytes_received: 0usize,
+            unique_messages_sent: HashSet::new(),
+            unique_messages_received: HashSet::new(),
+            interfaces: HashSet::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -283,7 +356,7 @@ struct PeerHeuristics<T: NetworkBackend> {
     interfaces: HashSet<T::InterfaceId>,
 
     /// Message heuristics.
-    protocols: HashMap<T::Protocol, MessageHeuristics>,
+    protocols: HashMap<T::Protocol, MessageHeuristics<T>>,
 }
 
 impl<T: NetworkBackend> Default for PeerHeuristics<T> {
@@ -297,7 +370,10 @@ impl<T: NetworkBackend> Default for PeerHeuristics<T> {
 
 impl<T: NetworkBackend> PeerHeuristics<T> {
     pub fn register_message_received(&mut self, protocol: &T::Protocol, hash: u64, size: usize) {
-        let mut entry = self.protocols.entry(protocol.to_owned()).or_default();
+        let mut entry = self
+            .protocols
+            .entry(protocol.to_owned())
+            .or_insert(MessageHeuristics::new());
 
         entry.total_bytes_received += size;
         entry.total_messages_received += 1;
@@ -309,7 +385,10 @@ impl<T: NetworkBackend> PeerHeuristics<T> {
 
     /// Register that a message was sent to `peer`.
     pub fn register_message_sent(&mut self, protocol: &T::Protocol, hash: u64, size: usize) {
-        let mut entry = self.protocols.entry(protocol.to_owned()).or_default();
+        let mut entry = self
+            .protocols
+            .entry(protocol.to_owned())
+            .or_insert(MessageHeuristics::new());
 
         entry.total_bytes_sent += size;
         entry.total_messages_sent += 1;
@@ -403,6 +482,28 @@ impl<T: NetworkBackend> HeuristicsBackend<T> {
                 for peer in peers {
                     if let Some(info) = self.peers.get_mut(&peer) {
                         info.register_message_sent(&protocol, hash, size)
+                    }
+                }
+            }
+            HeuristicsEvent::OpenProtocol {
+                interface,
+                peer,
+                protocol,
+            } => {
+                if let Some(info) = self.peers.get_mut(&peer) {
+                    if let Some(info) = info.protocols.get_mut(&protocol) {
+                        info.interfaces.insert(interface);
+                    }
+                }
+            }
+            HeuristicsEvent::CloseProtocol {
+                interface,
+                peer,
+                protocol,
+            } => {
+                if let Some(info) = self.peers.get_mut(&peer) {
+                    if let Some(info) = info.protocols.get_mut(&protocol) {
+                        info.interfaces.remove(&interface);
                     }
                 }
             }

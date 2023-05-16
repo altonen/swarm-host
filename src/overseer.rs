@@ -648,12 +648,28 @@ impl<T: NetworkBackend, E: Executor<T>> Overseer<T, E> {
         match upgrade {
             ConnectionUpgrade::ProtocolOpened { protocols } => {
                 for protocol in protocols {
-                    iface_info.filter.protocol_opened(peer, protocol).await;
+                    iface_info
+                        .filter
+                        .protocol_opened(peer, protocol.clone())
+                        .await;
+                    self.heuristics_handle.register_protocol_opened(
+                        interface,
+                        peer,
+                        protocol.clone(),
+                    );
                 }
             }
             ConnectionUpgrade::ProtocolClosed { protocols } => {
                 for protocol in protocols {
-                    iface_info.filter.protocol_closed(peer, protocol).await;
+                    iface_info
+                        .filter
+                        .protocol_closed(peer, protocol.clone())
+                        .await;
+                    self.heuristics_handle.register_protocol_closed(
+                        interface,
+                        peer,
+                        protocol.clone(),
+                    );
                 }
             }
         }

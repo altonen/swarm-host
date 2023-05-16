@@ -10,6 +10,7 @@ use crate::{
     types::DEFAULT_CHANNEL_SIZE,
 };
 
+use serde::Serialize;
 use tokio::{net::TcpListener, sync::mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -88,7 +89,7 @@ impl Interface<MockchainBackend> for MockchainHandle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MockchainBackend {
     next_iface_id: usize,
     interfaces: HashMap<SocketAddr, InterfaceId>,

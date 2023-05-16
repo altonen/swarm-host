@@ -8,6 +8,7 @@ class MessageHeuristics {
         this.redundant_bytes_received = 0;
         this.unique_messages_sent = new Set();
         this.unique_messages_received = new Set();
+        this.interfaces = new Set();
     }
 }
 
@@ -55,6 +56,7 @@ socket.addEventListener('message', (event) => {
             protocolHeuristics.total_messages_received += peers[peer]["protocols"][protocol].total_messages_received;
             protocolHeuristics.redundant_bytes_sent += peers[peer]["protocols"][protocol].redundant_bytes_sent;
             protocolHeuristics.redundant_bytes_received += peers[peer]["protocols"][protocol].redundant_bytes_received;
+            protocolHeuristics.interfaces = peers[peer]["protocols"][protocol].interfaces;
         }
 
         for (var interface in peers[peer]['interfaces']) {
@@ -87,11 +89,15 @@ socket.addEventListener('message', (event) => {
         let headerCell5 = document.createElement("th");
         headerCell5.textContent = "Redundant received";
 
+        let headerCell6 = document.createElement("th");
+        headerCell6.textContent = "Interfaces";
+
         headerRow.appendChild(headerCell1);
         headerRow.appendChild(headerCell2);
         headerRow.appendChild(headerCell3);
         headerRow.appendChild(headerCell4);
         headerRow.appendChild(headerCell5);
+        headerRow.appendChild(headerCell6);
         table.appendChild(headerRow);
 
         value["protocols"].forEach((data, protocol) => {
@@ -133,11 +139,18 @@ socket.addEventListener('message', (event) => {
             }
             cell5.style.textAlign = "center";
 
+            let cell6 = document.createElement("td");
+            for (var interface in data.interfaces) {
+                cell6.textContent = interface + ", ";
+            }
+            cell6.style.textAlign = "center";
+
             row.appendChild(cell1);
             row.appendChild(cell2);
             row.appendChild(cell3);
             row.appendChild(cell4);
             row.appendChild(cell5);
+            row.appendChild(cell6);
             table.appendChild(row);
         });
 
@@ -145,7 +158,6 @@ socket.addEventListener('message', (event) => {
         value['interfaces'].forEach((value, _key) => {
             interfaces.textContent += value + ", ";
         });
-        // interfaces.textContent.substring(0, interfaces.textContent.length - 2);
 
         document.getElementById("heuristics").appendChild(peer_id);
         document.getElementById("heuristics").appendChild(table);
