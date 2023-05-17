@@ -6,6 +6,7 @@ import subprocess
 import time
 
 EXECUTABLE = "../target/debug/swarm-host"
+import os
 
 class SwarmHost:
     def __init__(self, rpc_port, backend, genesis_hash):
@@ -18,13 +19,16 @@ class SwarmHost:
             "--genesis-hash", genesis_hash
         ]
 
+        if "PYTHONPATH" not in os.environ:
+            raise "`PYTHONPATH` must be defined"
+
         self.process = subprocess.Popen(
             args,
             stdout = self.logfile,
             stderr = subprocess.STDOUT,
             env = {
                 "RUST_LOG": "overseer,mockchain,rpc,filter,executor::pyo3=trace,sub-libp2p=debug,filter::msg=OFF,executor::pyo3::msg=OFF",
-                "PYTHONPATH": "/home/altonen/code/rust/swarm-host/framework",
+                "PYTHONPATH": os.environ["PYTHONPATH"],
             }
         )
         time.sleep(2)
