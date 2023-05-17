@@ -4,8 +4,6 @@ import requests
 import logging
 import subprocess
 import time
-
-EXECUTABLE = "../target/debug/swarm-host"
 import os
 
 class SwarmHost:
@@ -13,7 +11,7 @@ class SwarmHost:
         self.logfile = open("/tmp/swarm-host-%d-%d" % (rpc_port, int(time.time())), "w")
         self.rpc_port = rpc_port
         args = [
-            EXECUTABLE,
+            self.find_executable(),
             "--rpc-port", str(rpc_port),
             backend,
             "--genesis-hash", genesis_hash
@@ -35,6 +33,22 @@ class SwarmHost:
 
     def __del__(self):
         self.process.terminate()
+
+    def find_executable(self):
+        if "SWARM_HOST_EXECUTABLE" in os.environ:
+            return os.environ["SWARM_HOST_EXECUTABLE"]
+
+        hardcoded = [
+            "../target/debug/swarm-host",
+            "../target/release/swarm-host",
+            "/usr/local/bin/swarm-host",
+        ]
+
+        for path in hardcoded:
+            if os.path.exists(path):
+                return path
+
+        raise "Cannot find `swarm-host` executable"
 
     def create_interface(self, address, filter, preinit = None, poll_interval = 1000):
         logging.info("create interface %s" % (address))
