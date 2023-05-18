@@ -33,17 +33,19 @@ class SubstrateSwarmHost(SwarmHost):
         self.id = super().create_interface(port, context, preinit)
 
         # install block announces filter
-        filter = open(swarm_host_path + "swarm_host/backend/substrate/filters/block-announces-1.py").read()
+        if block_announce_filter is None:
+            block_announce_filter = open(swarm_host_path + "swarm_host/backend/substrate/filters/block-announces-1.py").read()
         super().install_notification_filter(
             self.id,
             "/sup/block-announces/1",
-            filter,
+            block_announce_filter,
         )
 
         # install sync filter
-        filter = open(swarm_host_path + "swarm_host/backend/substrate/filters/sup-sync-2.py").read()
+        if sync_filter is None:
+            sync_filter = open(swarm_host_path + "swarm_host/backend/substrate/filters/sup-sync-2.py").read()
         super().install_request_response_filter(
             self.id,
             "/sup/sync/2",
-            filter,
+            sync_filter,
         )
